@@ -30,3 +30,13 @@ externalPort = 80
 [[ports]]
 localPort = 23422
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+VITE_FIREBASE_API_KEY = "AIzaSyC4Do0gnzDX2fKnePcwjNu5DjWRw0_icDM"
+VITE_FIREBASE_AUTH_DOMAIN = "spektrum-5c7cc.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID = "spektrum-5c7cc"
+VITE_FIREBASE_STORAGE_BUCKET = "spektrum-5c7cc.firebasestorage.app"
+VITE_FIREBASE_MESSAGING_SENDER_ID = "898562015762"
+VITE_FIREBASE_APP_ID = "1:898562015762:web:667eb1e607a3aeb2e40ecb"

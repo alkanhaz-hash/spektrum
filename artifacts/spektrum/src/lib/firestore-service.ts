@@ -1,0 +1,301 @@
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  serverTimestamp,
+  increment,
+  arrayUnion,
+  arrayRemove,
+  Timestamp,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData,
+} from "firebase/firestore";
+import { db } from "./firebase";
+
+// ─── TYPES ───────────────────────────────────────────────────────────────────
+
+export interface Story {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  title: string;
+  summary: string;
+  coverUrl: string;
+  genre: string;
+  tags: string[];
+  chapterCount: number;
+  readCount: number;
+  likeCount: number;
+  commentCount: number;
+  status: "published" | "draft" | "completed";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Chapter {
+  id: string;
+  storyId: string;
+  title: string;
+  content: string;
+  order: number;
+  wordCount: number;
+  readCount: number;
+  status: "published" | "pending_review" | "draft" | "rejected";
+  moderationCategories?: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface InlineComment {
+  id: string;
+  storyId: string;
+  chapterId: string;
+  paragraphIndex: number;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  text: string;
+  likeCount: number;
+  likedBy: string[];
+  createdAt: Timestamp;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  text: string;
+  mediaUrl?: string;
+  mediaType?: "image" | "gif";
+  createdAt: Timestamp;
+}
+
+export interface Conversation {
+  id: string;
+  participants: string[];
+  participantNames: Record<string, string>;
+  participantAvatars: Record<string, string>;
+  lastMessage: string;
+  lastMessageAt: Timestamp;
+  unreadCount: Record<string, number>;
+}
+
+export interface TalentPortfolio {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  storyId: string;
+  title: string;
+  coverDesigns: string[];
+  style: string;
+  bio: string;
+  contactInfo: string;
+  likeCount: number;
+  createdAt: Timestamp;
+}
+
+// ─── STORIES ─────────────────────────────────────────────────────────────────
+
+export async function createStory(data: Omit<Story, "id" | "createdAt" | "updatedAt" | "readCount" | "likeCount" | "commentCount" | "chapterCount">) {
+  const ref = await addDoc(collection(db, "stories"), {
+    ...data,
+    readCount: 0,
+    likeCount: 0,
+    commentCount: 0,
+    chapterCount: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function getStory(id: string): Promise<Story | null> {
+  const snap = await getDoc(doc(db, "stories", id));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Story;
+}
+
+export async function getStoriesByAuthor(authorId: string): Promise<Story[]> {
+  const q = query(collection(db, "stories"), where("authorId", "==", authorId), orderBy("updatedAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+}
+
+export async function getPublishedStories(pageSize = 20, lastDoc?: QueryDocumentSnapshot<DocumentData>): Promise<Story[]> {
+  let q = query(
+    collection(db, "stories"),
+    where("status", "==", "published"),
+    orderBy("updatedAt", "desc"),
+    limit(pageSize)
+  );
+  if (lastDoc) q = query(q, startAfter(lastDoc));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+}
+
+export async function updateStory(id: string, data: Partial<Story>) {
+  await updateDoc(doc(db, "stories", id), { ...data, updatedAt: serverTimestamp() });
+}
+
+export async function likeStory(storyId: string, userId: string) {
+  await updateDoc(doc(db, "stories", storyId), { likeCount: increment(1) });
+  await addDoc(collection(db, "storyLikes"), { storyId, userId, createdAt: serverTimestamp() });
+}
+
+// ─── CHAPTERS ────────────────────────────────────────────────────────────────
+
+export async function createChapter(data: Omit<Chapter, "id" | "createdAt" | "updatedAt" | "readCount">) {
+  const ref = await addDoc(collection(db, "chapters"), {
+    ...data,
+    readCount: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, "stories", data.storyId), {
+    chapterCount: increment(1),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function getChaptersByStory(storyId: string): Promise<Chapter[]> {
+  const q = query(collection(db, "chapters"), where("storyId", "==", storyId), orderBy("order", "asc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+}
+
+export async function getChapter(id: string): Promise<Chapter | null> {
+  const snap = await getDoc(doc(db, "chapters", id));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Chapter;
+}
+
+export async function updateChapterStatus(id: string, status: Chapter["status"], categories?: string[]) {
+  await updateDoc(doc(db, "chapters", id), {
+    status,
+    ...(categories ? { moderationCategories: categories } : {}),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function getPendingChapters(): Promise<(Chapter & { storyTitle?: string })[]> {
+  const q = query(collection(db, "chapters"), where("status", "==", "pending_review"), orderBy("createdAt", "asc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+}
+
+// ─── INLINE COMMENTS ─────────────────────────────────────────────────────────
+
+export async function addInlineComment(data: Omit<InlineComment, "id" | "createdAt" | "likeCount" | "likedBy">) {
+  const ref = await addDoc(collection(db, "inlineComments"), {
+    ...data,
+    likeCount: 0,
+    likedBy: [],
+    createdAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, "stories", data.storyId), { commentCount: increment(1) });
+  return ref.id;
+}
+
+export async function getInlineComments(chapterId: string): Promise<InlineComment[]> {
+  const q = query(collection(db, "inlineComments"), where("chapterId", "==", chapterId), orderBy("createdAt", "asc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as InlineComment));
+}
+
+export async function likeInlineComment(commentId: string, userId: string, liked: boolean) {
+  await updateDoc(doc(db, "inlineComments", commentId), {
+    likeCount: increment(liked ? 1 : -1),
+    likedBy: liked ? arrayUnion(userId) : arrayRemove(userId),
+  });
+}
+
+// ─── CONVERSATIONS & MESSAGES ─────────────────────────────────────────────────
+
+export async function getOrCreateConversation(uid1: string, uid2: string, names: Record<string, string>, avatars: Record<string, string>): Promise<string> {
+  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid1));
+  const snap = await getDocs(q);
+  const existing = snap.docs.find(d => d.data().participants.includes(uid2));
+  if (existing) return existing.id;
+  const ref = await addDoc(collection(db, "conversations"), {
+    participants: [uid1, uid2],
+    participantNames: names,
+    participantAvatars: avatars,
+    lastMessage: "",
+    lastMessageAt: serverTimestamp(),
+    unreadCount: { [uid1]: 0, [uid2]: 0 },
+  });
+  return ref.id;
+}
+
+export function getConversations(uid: string, callback: (convs: Conversation[]) => void) {
+  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid), orderBy("lastMessageAt", "desc"));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
+  });
+}
+
+export async function sendMessage(data: Omit<Message, "id" | "createdAt">) {
+  const ref = await addDoc(collection(db, "messages"), { ...data, createdAt: serverTimestamp() });
+  await updateDoc(doc(db, "conversations", data.conversationId), {
+    lastMessage: data.text || (data.mediaType === "image" ? "📷 Fotoğraf" : "GIF"),
+    lastMessageAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export function listenMessages(conversationId: string, callback: (msgs: Message[]) => void) {
+  const q = query(collection(db, "messages"), where("conversationId", "==", conversationId), orderBy("createdAt", "asc"), limit(100));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
+  });
+}
+
+// ─── TALENT PORTFOLIOS ────────────────────────────────────────────────────────
+
+export async function createTalentPortfolio(data: Omit<TalentPortfolio, "id" | "createdAt" | "likeCount">) {
+  const ref = await addDoc(collection(db, "talentPortfolios"), { ...data, likeCount: 0, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function getTalentPortfoliosByStory(storyId: string): Promise<TalentPortfolio[]> {
+  const q = query(collection(db, "talentPortfolios"), where("storyId", "==", storyId), orderBy("likeCount", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as TalentPortfolio));
+}
+
+// ─── DISCOVER FEED ────────────────────────────────────────────────────────────
+
+export async function getDiscoverFeed(): Promise<Story[]> {
+  // Stories with high engagement in the last 24h
+  const yesterday = new Date();
+  yesterday.setHours(yesterday.getHours() - 24);
+  const q = query(
+    collection(db, "stories"),
+    where("status", "==", "published"),
+    orderBy("commentCount", "desc"),
+    limit(20)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+}
+
+export const GENRES = [
+  "Fantastik", "Romantik", "Gizem", "Korku", "Bilim Kurgu",
+  "Macera", "Dram", "Psikolojik", "Tarihi", "Gençlik",
+  "Gerilim", "Komedi", "Şiir", "Deneme"
+];
