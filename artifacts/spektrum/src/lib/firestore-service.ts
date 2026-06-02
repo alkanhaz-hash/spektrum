@@ -193,6 +193,13 @@ export async function updateChapterStatus(id: string, status: Chapter["status"],
   });
 }
 
+export async function updateChapter(id: string, data: { title: string; content: string; status: Chapter["status"]; wordCount?: number; moderationCategories?: string[] }) {
+  await updateDoc(doc(db, "chapters", id), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function getPendingChapters(): Promise<(Chapter & { storyTitle?: string })[]> {
   const q = query(collection(db, "chapters"), where("status", "==", "pending_review"));
   const snap = await getDocs(q);

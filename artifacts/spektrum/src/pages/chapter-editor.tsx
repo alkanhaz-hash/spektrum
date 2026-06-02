@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import { createChapter, getChapter, updateChapterStatus, getChaptersByStory, Chapter } from "@/lib/firestore-service";
+import { createChapter, getChapter, updateChapter, updateChapterStatus, getChaptersByStory, Chapter } from "@/lib/firestore-service";
 import { moderateText } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -69,7 +69,7 @@ export default function ChapterEditorPage() {
         toast({ title: "Taslak kaydedildi" });
         setLocation(`/write/${storyId}/chapter/${ref.id}`);
       } else {
-        await updateChapterStatus(chapterId, "draft");
+        await updateChapter(chapterId, { title: data.title, content: data.content, status: "draft", wordCount });
         toast({ title: "Taslak güncellendi" });
       }
     } catch {
@@ -86,24 +86,25 @@ export default function ChapterEditorPage() {
 
     try {
       const result = await moderateText(data.content, "tr");
+      const chapterStatus = result.action === "approved" ? "published" : result.action;
       setModerationStatus(result.action);
       setModerationReason(result.reason);
 
-      const chId = chapterId === "new"
-        ? await (async () => {
-            const ref = await addDoc(collection(db, "chapters"), {
-              storyId, title: data.title, content: data.content, order: nextOrder,
-              wordCount, readCount: 0, status: result.action,
-              ...(result.categories.length ? { moderationCategories: result.categories } : {}),
-              createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-            });
-            return ref.id;
-          })()
-        : chapterId;
-
-      if (chapterId !== "new") {
-        const chapterStatus = result.action === "approved" ? "published" : result.action;
-      await updateChapterStatus(chId, chapterStatus, result.categories.length ? result.categories : undefined);
+      if (chapterId === "new") {
+        await addDoc(collection(db, "chapters"), {
+          storyId, title: data.title, content: data.content, order: nextOrder,
+          wordCount, readCount: 0, status: chapterStatus,
+          ...(result.categories.length ? { moderationCategories: result.categories } : {}),
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        });
+      } else {
+        await updateChapter(chapterId, {
+          title: data.title,
+          content: data.content,
+          status: chapterStatus,
+          wordCount,
+          ...(result.categories.length ? { moderationCategories: result.categories } : {}),
+        });
       }
 
       if (result.action === "approved") {

@@ -4,6 +4,8 @@ import {
   signOut,
   updateProfile,
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  sendEmailVerification,
   User,
   GoogleAuthProvider,
   signInWithPopup,
@@ -46,8 +48,14 @@ export async function registerUser(
     storyCount: 0,
     createdAt: serverTimestamp(),
     role: "user",
+    emailVerified: false,
   });
+  await sendEmailVerification(credential.user);
   return credential.user;
+}
+
+export async function resetPassword(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email);
 }
 
 export async function loginUser(email: string, password: string): Promise<User> {
