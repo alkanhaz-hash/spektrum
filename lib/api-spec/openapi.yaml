@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SPEKTRUM API - AI content moderation and platform utilities
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: moderation
+    description: AI-powered content moderation
 paths:
   /healthz:
     get:
@@ -24,6 +26,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /moderation/text:
+    post:
+      operationId: moderateText
+      tags: [moderation]
+      summary: Moderate text content
+      description: AI-powered text moderation for stories and chapters. Returns flagged status and categories.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TextModerationInput"
+      responses:
+        "200":
+          description: Moderation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModerationResult"
+  /moderation/media:
+    post:
+      operationId: moderateMedia
+      tags: [moderation]
+      summary: Moderate image or video content
+      description: AI-powered visual content moderation. Checks images and videos for violence, sexual content, etc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaModerationInput"
+      responses:
+        "200":
+          description: Moderation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModerationResult"
+  /discover/trending:
+    get:
+      operationId: getTrendingStories
+      tags: [moderation]
+      summary: Get trending stories
+      description: Returns stories trending in last 24h by inline comment velocity and engagement rate
+      responses:
+        "200":
+          description: Trending stories list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrendingStory"
+
 components:
   schemas:
     HealthStatus:
@@ -33,4 +89,88 @@ components:
           type: string
       required:
         - status
-
+    TextModerationInput:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: The text content to moderate
+        language:
+          type: string
+          default: "tr"
+          description: Language of the content (tr for Turkish, en for English)
+    MediaModerationInput:
+      type: object
+      required:
+        - url
+        - mediaType
+      properties:
+        url:
+          type: string
+          description: Public URL of the image or video to moderate
+        mediaType:
+          type: string
+          enum: [image, video, gif]
+          description: Type of media being moderated
+    ModerationResult:
+      type: object
+      required:
+        - safe
+        - action
+        - categories
+        - score
+      properties:
+        safe:
+          type: boolean
+          description: Whether the content is safe to publish
+        action:
+          type: string
+          enum: [approved, pending_review, rejected]
+          description: Action to take with the content
+        categories:
+          type: array
+          items:
+            type: string
+          description: List of detected content categories (violence, sexual, drugs, suicide, child_safety, weapons)
+        score:
+          type: number
+          description: Overall toxicity score 0-1
+        reason:
+          type: ["string", "null"]
+          description: Human-readable reason for rejection
+    TrendingStory:
+      type: object
+      required:
+        - storyId
+        - title
+        - authorId
+        - authorName
+        - coverUrl
+        - commentCount
+        - readCount
+        - engagementScore
+        - genre
+        - trendingRank
+      properties:
+        storyId:
+          type: string
+        title:
+          type: string
+        authorId:
+          type: string
+        authorName:
+          type: string
+        coverUrl:
+          type: ["string", "null"]
+        commentCount:
+          type: integer
+        readCount:
+          type: integer
+        engagementScore:
+          type: number
+        genre:
+          type: string
+        trendingRank:
+          type: integer
