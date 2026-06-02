@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,7 +15,6 @@ import { createStory, getStory, getChaptersByStory, updateStory, Story, Chapter,
 import { uploadStoryCover } from "@/lib/storage-service";
 import { moderateMedia } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
 
 const schema = z.object({
   title: z.string().min(1, "Başlık zorunlu").max(120),
@@ -70,7 +69,6 @@ export default function WritePage() {
       let coverUrl = story?.coverUrl ?? "";
 
       if (coverFile) {
-        // Upload first to get URL for moderation
         const tempId = storyId || `temp-${Date.now()}`;
         coverUrl = await uploadStoryCover(tempId, coverFile);
         const modResult = await moderateMedia(coverUrl, "image");
@@ -88,8 +86,15 @@ export default function WritePage() {
         toast({ title: "Hikaye güncellendi" });
       } else {
         const newId = await createStory({
-          authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl,
-          title: data.title, summary: data.summary, genre: data.genre, tags, coverUrl, status: "draft",
+          authorId: user.uid,
+          authorName: profile.displayName,
+          authorAvatar: profile.avatarUrl,
+          title: data.title,
+          summary: data.summary,
+          genre: data.genre,
+          tags,
+          coverUrl,
+          status: "draft",
         });
         toast({ title: "Hikaye oluşturuldu!" });
         setLocation(`/write/${newId}`);
@@ -101,7 +106,15 @@ export default function WritePage() {
     }
   };
 
-  if (loading) return <AppLayout><div className="container mx-auto px-4 py-10 max-w-2xl space-y-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div></AppLayout>;
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto px-4 py-10 max-w-2xl space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -110,25 +123,35 @@ export default function WritePage() {
           <h1 className="text-3xl font-bold font-serif mb-2">{storyId ? "Hikayeni Düzenle" : "Yeni Hikaye"}</h1>
           <p className="text-muted-foreground mb-8">Hikayen için temel bilgileri doldur, sonra bölümler ekle.</p>
 
-          {/* Cover upload */}
-          <div className="flex gap-6 mb-8">
-            <label className="cursor-pointer group">
-              <div className="w-32 h-44 rounded-2xl border-2 border-dashed border-border group-hover:border-primary/50 bg-card flex flex-col items-center justify-center gap-2 transition-colors overflow-hidden">
-                {coverPreview
-                  ? <img src={coverPreview} alt="Kapak" className="w-full h-full object-cover" />
-                  : (<><Upload className="w-6 h-6 text-muted-foreground" /><span className="text-xs text-muted-foreground">Kapak Yükle</span><span className="text-xs text-muted-foreground">WebP'ye dönüştürülür</span></>)
-                }
-              </div>
-              <input type="file" accept="image/*" className="hidden" onChange={handleCoverChange} data-testid="input-cover" />
-            </label>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Cover + title/genre row */}
+              <div className="flex gap-6">
+                {/* Cover upload */}
+                <label className="cursor-pointer group shrink-0">
+                  <div className="w-32 h-44 rounded-2xl border-2 border-dashed border-border group-hover:border-primary/50 bg-card flex flex-col items-center justify-center gap-2 transition-colors overflow-hidden">
+                    {coverPreview
+                      ? <img src={coverPreview} alt="Kapak" className="w-full h-full object-cover" />
+                      : (
+                        <>
+                          <Upload className="w-6 h-6 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground text-center px-2">Kapak Yükle</span>
+                          <span className="text-xs text-muted-foreground text-center px-2">WebP'ye dönüştürülür</span>
+                        </>
+                      )
+                    }
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleCoverChange} data-testid="input-cover" />
+                </label>
 
-            <div className="flex-1">
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Title + genre */}
+                <div className="flex-1 space-y-4">
                   <FormField control={form.control} name="title" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Hikaye Adı</FormLabel>
-                      <FormControl><Input placeholder="Hikayenin adı..." {...field} data-testid="input-title" /></FormControl>
+                      <FormControl>
+                        <Input placeholder="Hikayenin adı..." {...field} data-testid="input-title" />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -148,40 +171,51 @@ export default function WritePage() {
                       <FormMessage />
                     </FormItem>
                   )} />
+                </div>
+              </div>
 
-                  <button type="submit" disabled={saving}
-                    className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.3)] disabled:opacity-60"
-                    data-testid="button-save-story">
-                    {saving ? "Kaydediliyor..." : storyId ? "Güncelle" : "Hikayeyi Oluştur"}
-                  </button>
-                </form>
-              </Form>
-            </div>
-          </div>
+              {/* Summary */}
+              <FormField control={form.control} name="summary" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Özet</FormLabel>
+                  <FormControl>
+                    <textarea
+                      {...field}
+                      rows={4}
+                      placeholder="Hikayenden kısa bir özet..."
+                      className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                      data-testid="input-summary"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-          <FormField control={form.control} name="summary" render={({ field }) => (
-            <FormItem className="mb-6">
-              <FormLabel>Özet</FormLabel>
-              <FormControl>
-                <textarea {...field} rows={4} placeholder="Hikayenden kısa bir özet..."
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                  data-testid="input-summary" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+              {/* Tags */}
+              <FormField control={form.control} name="tags" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Etiketler (virgülle ayır)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="fantastik, ejderha, savaş..." {...field} data-testid="input-tags" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-          <FormField control={form.control} name="tags" render={({ field }) => (
-            <FormItem className="mb-8">
-              <FormLabel>Etiketler (virgülle ayır)</FormLabel>
-              <FormControl><Input placeholder="fantastik, ejderha, savaş..." {...field} data-testid="input-tags" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.3)] disabled:opacity-60"
+                data-testid="button-save-story"
+              >
+                {saving ? "Kaydediliyor..." : storyId ? "Güncelle" : "Hikayeyi Oluştur"}
+              </button>
+            </form>
+          </Form>
 
           {/* Chapters list */}
           {storyId && (
-            <div>
+            <div className="mt-10">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold font-serif">Bölümler</h2>
                 <Link href={`/write/${storyId}/chapter/new`}>
@@ -203,8 +237,14 @@ export default function WritePage() {
                       <div>
                         <span className="text-xs text-muted-foreground">Bölüm {ch.order}</span>
                         <h3 className="font-semibold">{ch.title}</h3>
-                        <Badge variant={ch.status === "published" ? "default" : ch.status === "pending_review" ? "secondary" : "outline"} className="text-xs mt-1">
-                          {ch.status === "published" ? "Yayınlandı" : ch.status === "pending_review" ? "İnceleniyor" : ch.status === "rejected" ? "Reddedildi" : "Taslak"}
+                        <Badge
+                          variant={ch.status === "published" ? "default" : ch.status === "pending_review" ? "secondary" : "outline"}
+                          className="text-xs mt-1"
+                        >
+                          {ch.status === "published" ? "Yayınlandı"
+                            : ch.status === "pending_review" ? "İnceleniyor"
+                            : ch.status === "rejected" ? "Reddedildi"
+                            : "Taslak"}
                         </Badge>
                       </div>
                       <Link href={`/write/${storyId}/chapter/${ch.id}`}>
