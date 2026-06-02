@@ -57,6 +57,13 @@ export async function uploadUserAvatar(uid: string, file: File): Promise<string>
   return getDownloadURL(storageRef);
 }
 
+export async function uploadUserCover(uid: string, file: File): Promise<string> {
+  const webpBlob = await convertToWebP(file);
+  const storageRef = ref(storage, `covers/users/${uid}/cover.webp`);
+  await uploadBytes(storageRef, webpBlob, { contentType: "image/webp" });
+  return getDownloadURL(storageRef);
+}
+
 export async function uploadTalentWork(userId: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);
   const storageRef = ref(storage, `talent/${userId}/${Date.now()}.webp`);

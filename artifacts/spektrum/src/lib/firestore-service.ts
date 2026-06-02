@@ -313,6 +313,62 @@ export async function getDiscoverFeed(): Promise<Story[]> {
     .slice(0, 20);
 }
 
+// ─── ANONYMOUS QUESTIONS ──────────────────────────────────────────────────────
+
+export interface AnonymousQuestion {
+  id: string;
+  targetUid: string;
+  question: string;
+  answer?: string;
+  isAnswered: boolean;
+  createdAt: Timestamp;
+  answeredAt?: Timestamp;
+}
+
+export async function sendAnonymousQuestion(targetUid: string, question: string): Promise<string> {
+  const ref = await addDoc(collection(db, "anonymousQuestions"), {
+    targetUid,
+    question,
+    isAnswered: false,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function getAnsweredQuestions(targetUid: string): Promise<AnonymousQuestion[]> {
+  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", true));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
+    .sort((a, b) => (b.answeredAt?.seconds ?? 0) - (a.answeredAt?.seconds ?? 0));
+}
+
+export async function getUnansweredQuestions(targetUid: string): Promise<AnonymousQuestion[]> {
+  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", false));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+}
+
+export async function answerQuestion(questionId: string, answer: string): Promise<void> {
+  await updateDoc(doc(db, "anonymousQuestions", questionId), {
+    answer,
+    isAnswered: true,
+    answeredAt: serverTimestamp(),
+  });
+}
+
+export async function deleteQuestion(questionId: string): Promise<void> {
+  await deleteDoc(doc(db, "anonymousQuestions", questionId));
+}
+
+// ─── USER PROFILE UPDATE ──────────────────────────────────────────────────────
+
+export async function incrementUserReadCount(uid: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { readCount: increment(1) });
+}
+
 export const GENRES = [
   "Fantastik", "Romantik", "Gizem", "Korku", "Bilim Kurgu",
   "Macera", "Dram", "Psikolojik", "Tarihi", "Gençlik",

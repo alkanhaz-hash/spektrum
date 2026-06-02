@@ -203,7 +203,7 @@ export default function AuthPage() {
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="reg-name">Kullanıcı Adı</Label>
-                      <Input id="reg-name" type="text" value={regName} onChange={e => setRegName(e.target.value)} required placeholder="Yazar Adınız" className="bg-background/50" />
+                      <Input id="reg-name" type="text" value={regName} onChange={e => setRegName(e.target.value)} required placeholder="kullanici_adi" className="bg-background/50" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-email">E-posta</Label>

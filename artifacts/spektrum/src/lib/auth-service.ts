@@ -10,7 +10,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 export interface UserProfile {
@@ -24,8 +24,13 @@ export interface UserProfile {
   followerCount: number;
   followingCount: number;
   storyCount: number;
+  readCount: number;
   createdAt: unknown;
   role: "user" | "moderator" | "admin";
+  status?: string;
+  instagram?: string;
+  tiktok?: string;
+  website?: string;
 }
 
 export async function registerUser(
@@ -46,6 +51,7 @@ export async function registerUser(
     followerCount: 0,
     followingCount: 0,
     storyCount: 0,
+    readCount: 0,
     createdAt: serverTimestamp(),
     role: "user",
     emailVerified: false,
@@ -65,7 +71,7 @@ export async function loginUser(email: string, password: string): Promise<User> 
   if (!snap.exists()) {
     await setDoc(userRef, {
       uid: credential.user.uid,
-      displayName: credential.user.displayName || credential.user.email?.split("@")[0] || "Yazar",
+      displayName: credential.user.displayName || credential.user.email?.split("@")[0] || "Kullanıcı",
       email: credential.user.email,
       bio: "",
       avatarUrl: credential.user.photoURL || "",
@@ -74,6 +80,7 @@ export async function loginUser(email: string, password: string): Promise<User> 
       followerCount: 0,
       followingCount: 0,
       storyCount: 0,
+      readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
     });
@@ -89,7 +96,7 @@ export async function loginWithGoogle(): Promise<User> {
   if (!snap.exists()) {
     await setDoc(userRef, {
       uid: credential.user.uid,
-      displayName: credential.user.displayName || "Yazar",
+      displayName: credential.user.displayName || "Kullanıcı",
       email: credential.user.email,
       bio: "",
       avatarUrl: credential.user.photoURL || "",
@@ -98,6 +105,7 @@ export async function loginWithGoogle(): Promise<User> {
       followerCount: 0,
       followingCount: 0,
       storyCount: 0,
+      readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
     });
@@ -121,7 +129,7 @@ export async function ensureUserProfile(user: import("firebase/auth").User): Pro
   if (!snap.exists()) {
     const data: UserProfile = {
       uid: user.uid,
-      displayName: user.displayName || user.email?.split("@")[0] || "Yazar",
+      displayName: user.displayName || user.email?.split("@")[0] || "Kullanıcı",
       email: user.email || "",
       bio: "",
       avatarUrl: user.photoURL || "",
@@ -130,6 +138,7 @@ export async function ensureUserProfile(user: import("firebase/auth").User): Pro
       followerCount: 0,
       followingCount: 0,
       storyCount: 0,
+      readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
     };
@@ -137,6 +146,13 @@ export async function ensureUserProfile(user: import("firebase/auth").User): Pro
     return data;
   }
   return snap.data() as UserProfile;
+}
+
+export async function updateUserProfile(
+  uid: string,
+  data: Partial<Pick<UserProfile, "displayName" | "bio" | "genre" | "status" | "instagram" | "tiktok" | "website" | "avatarUrl" | "coverUrl">>
+): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { ...data });
 }
 
 export function onAuthChange(callback: (user: User | null) => void) {
