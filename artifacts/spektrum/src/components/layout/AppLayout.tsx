@@ -1,10 +1,30 @@
-import { ReactNode } from "react";
-import { Link } from "wouter";
+import { ReactNode, useState, useRef, useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
+import { logoutUser } from "@/lib/auth-service";
+import { LogOut, User } from "lucide-react";
 
 export function Navbar() {
   const { user, profile } = useAuth();
+  const [, setLocation] = useLocation();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setDropdownOpen(false);
+    setLocation("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -25,23 +45,44 @@ export function Navbar() {
         <div className="flex items-center gap-4">
           {user ? (
             <>
-              <Link href="/messages" className="transition-colors hover:text-primary text-foreground/60">
+              <Link href="/messages" className="transition-colors hover:text-primary text-foreground/60 text-sm font-medium">
                 Mesajlar
               </Link>
-              {profile?.role === "moderator" || profile?.role === "admin" ? (
-                <Link href="/moderator" className="transition-colors hover:text-primary text-foreground/60">
+              {(profile?.role === "moderator" || profile?.role === "admin") && (
+                <Link href="/moderator" className="transition-colors hover:text-primary text-foreground/60 text-sm font-medium">
                   Panel
                 </Link>
-              ) : null}
-              <Link href={`/profile/${user.uid}`}>
-                <div className="w-8 h-8 rounded-full bg-muted overflow-hidden flex items-center justify-center border border-border">
+              )}
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setDropdownOpen(v => !v)}
+                  className="w-8 h-8 rounded-full bg-muted overflow-hidden flex items-center justify-center border border-border hover:border-primary/50 transition-colors"
+                >
                   {profile?.avatarUrl ? (
                     <img src={profile.avatarUrl} alt={profile.displayName} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-xs font-medium">{profile?.displayName?.charAt(0) || "U"}</span>
+                    <span className="text-xs font-medium">{profile?.displayName?.charAt(0) || user.email?.charAt(0) || "U"}</span>
                   )}
-                </div>
-              </Link>
+                </button>
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl border border-border bg-card shadow-xl z-50 overflow-hidden">
+                    <Link href={`/profile/${user.uid}`} onClick={() => setDropdownOpen(false)}>
+                      <div className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer">
+                        <User className="w-4 h-4 text-primary" />
+                        <span>Profilim</span>
+                      </div>
+                    </Link>
+                    <div className="border-t border-border" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted transition-colors text-destructive"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Çıkış Yap</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <Link href="/auth" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2">

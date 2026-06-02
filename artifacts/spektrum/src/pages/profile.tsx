@@ -6,26 +6,46 @@ import { BookOpen, Users, Edit3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUserProfile, UserProfile } from "@/lib/auth-service";
+import { getUserProfile, ensureUserProfile, UserProfile } from "@/lib/auth-service";
 import { getStoriesByAuthor, Story } from "@/lib/firestore-service";
 
 export default function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const isOwner = user?.uid === uid;
 
   useEffect(() => {
-    if (!uid) return;
-    Promise.all([getUserProfile(uid), getStoriesByAuthor(uid)]).then(([p, s]) => {
-      setProfile(p);
-      setStories(s.filter(story => story.status === "published" || isOwner));
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [uid]);
+    if (!uid || authLoading) return;
+    setLoading(true);
+    setError(null);
+
+    const fetchProfile = async () => {
+      try {
+        let p: UserProfile | null = null;
+        // Kendi profili ise eksik belgeyi otomatik oluştur
+        if (isOwner && user) {
+          p = await ensureUserProfile(user);
+        } else {
+          p = await getUserProfile(uid);
+        }
+        const s = await getStoriesByAuthor(uid);
+        setProfile(p);
+        setStories(s.filter(story => story.status === "published" || isOwner));
+      } catch (err: any) {
+        console.error("Profile fetch error:", err);
+        setError(err?.message || "Profil yüklenemedi");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [uid, authLoading, isOwner]);
 
   if (loading) {
     return (
@@ -35,6 +55,18 @@ export default function ProfilePage() {
           <Skeleton className="h-6 w-48 mb-2" />
           <Skeleton className="h-4 w-64 mb-6" />
           <div className="grid grid-cols-2 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="text-center py-20">
+          <p className="text-destructive font-medium mb-2">Profil yüklenemedi</p>
+          <p className="text-muted-foreground text-sm mb-4">{error}</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Tekrar Dene</button>
         </div>
       </AppLayout>
     );
