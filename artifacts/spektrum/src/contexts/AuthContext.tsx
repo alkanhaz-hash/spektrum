@@ -32,8 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthChange(async (u) => {
       setUser(u);
       if (u) {
-        const p = await ensureUserProfile(u);
-        setProfile(p);
+        try {
+          const p = await ensureUserProfile(u);
+          setProfile(p);
+        } catch (err) {
+          console.error("ensureUserProfile failed:", err);
+          setProfile(null);
+        }
       } else {
         setProfile(null);
       }
