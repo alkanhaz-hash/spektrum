@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User } from "firebase/auth";
-import { onAuthChange, getUserProfile, UserProfile } from "@/lib/auth-service";
+import { onAuthChange, getUserProfile, UserProfile, ensureUserProfile } from "@/lib/auth-service";
 
 interface AuthContextType {
   user: User | null;
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthChange(async (u) => {
       setUser(u);
       if (u) {
-        const p = await getUserProfile(u.uid);
+        const p = await ensureUserProfile(u);
         setProfile(p);
       } else {
         setProfile(null);

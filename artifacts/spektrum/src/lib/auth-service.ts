@@ -52,6 +52,24 @@ export async function registerUser(
 
 export async function loginUser(email: string, password: string): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
+  const userRef = doc(db, "users", credential.user.uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      uid: credential.user.uid,
+      displayName: credential.user.displayName || credential.user.email?.split("@")[0] || "Yazar",
+      email: credential.user.email,
+      bio: "",
+      avatarUrl: credential.user.photoURL || "",
+      coverUrl: "",
+      genre: "",
+      followerCount: 0,
+      followingCount: 0,
+      storyCount: 0,
+      createdAt: serverTimestamp(),
+      role: "user",
+    });
+  }
   return credential.user;
 }
 
@@ -86,6 +104,30 @@ export async function logoutUser(): Promise<void> {
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return null;
+  return snap.data() as UserProfile;
+}
+
+export async function ensureUserProfile(user: import("firebase/auth").User): Promise<UserProfile> {
+  const userRef = doc(db, "users", user.uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) {
+    const data: UserProfile = {
+      uid: user.uid,
+      displayName: user.displayName || user.email?.split("@")[0] || "Yazar",
+      email: user.email || "",
+      bio: "",
+      avatarUrl: user.photoURL || "",
+      coverUrl: "",
+      genre: "",
+      followerCount: 0,
+      followingCount: 0,
+      storyCount: 0,
+      createdAt: serverTimestamp(),
+      role: "user",
+    };
+    await setDoc(userRef, data);
+    return data;
+  }
   return snap.data() as UserProfile;
 }
 
