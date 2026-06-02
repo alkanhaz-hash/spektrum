@@ -130,21 +130,20 @@ export async function getStory(id: string): Promise<Story | null> {
 }
 
 export async function getStoriesByAuthor(authorId: string): Promise<Story[]> {
-  const q = query(collection(db, "stories"), where("authorId", "==", authorId), orderBy("updatedAt", "desc"));
+  const q = query(collection(db, "stories"), where("authorId", "==", authorId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Story))
+    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
 }
 
-export async function getPublishedStories(pageSize = 20, lastDoc?: QueryDocumentSnapshot<DocumentData>): Promise<Story[]> {
-  let q = query(
-    collection(db, "stories"),
-    where("status", "==", "published"),
-    orderBy("updatedAt", "desc"),
-    limit(pageSize)
-  );
-  if (lastDoc) q = query(q, startAfter(lastDoc));
+export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
+  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(pageSize * 2));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Story))
+    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
+    .slice(0, pageSize);
 }
 
 export async function updateStory(id: string, data: Partial<Story>) {
@@ -173,9 +172,11 @@ export async function createChapter(data: Omit<Chapter, "id" | "createdAt" | "up
 }
 
 export async function getChaptersByStory(storyId: string): Promise<Chapter[]> {
-  const q = query(collection(db, "chapters"), where("storyId", "==", storyId), orderBy("order", "asc"));
+  const q = query(collection(db, "chapters"), where("storyId", "==", storyId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Chapter))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 export async function getChapter(id: string): Promise<Chapter | null> {
@@ -193,9 +194,11 @@ export async function updateChapterStatus(id: string, status: Chapter["status"],
 }
 
 export async function getPendingChapters(): Promise<(Chapter & { storyTitle?: string })[]> {
-  const q = query(collection(db, "chapters"), where("status", "==", "pending_review"), orderBy("createdAt", "asc"));
+  const q = query(collection(db, "chapters"), where("status", "==", "pending_review"));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Chapter))
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
 }
 
 // ─── INLINE COMMENTS ─────────────────────────────────────────────────────────
@@ -212,9 +215,11 @@ export async function addInlineComment(data: Omit<InlineComment, "id" | "created
 }
 
 export async function getInlineComments(chapterId: string): Promise<InlineComment[]> {
-  const q = query(collection(db, "inlineComments"), where("chapterId", "==", chapterId), orderBy("createdAt", "asc"));
+  const q = query(collection(db, "inlineComments"), where("chapterId", "==", chapterId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as InlineComment));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as InlineComment))
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
 }
 
 export async function likeInlineComment(commentId: string, userId: string, liked: boolean) {
@@ -243,9 +248,12 @@ export async function getOrCreateConversation(uid1: string, uid2: string, names:
 }
 
 export function getConversations(uid: string, callback: (convs: Conversation[]) => void) {
-  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid), orderBy("lastMessageAt", "desc"));
+  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid));
   return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
+    const sorted = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as Conversation))
+      .sort((a, b) => ((b.lastMessageAt as any)?.seconds ?? 0) - ((a.lastMessageAt as any)?.seconds ?? 0));
+    callback(sorted);
   });
 }
 
@@ -259,9 +267,12 @@ export async function sendMessage(data: Omit<Message, "id" | "createdAt">) {
 }
 
 export function listenMessages(conversationId: string, callback: (msgs: Message[]) => void) {
-  const q = query(collection(db, "messages"), where("conversationId", "==", conversationId), orderBy("createdAt", "asc"), limit(100));
+  const q = query(collection(db, "messages"), where("conversationId", "==", conversationId), limit(100));
   return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
+    const sorted = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as Message))
+      .sort((a, b) => ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0));
+    callback(sorted);
   });
 }
 
@@ -273,25 +284,26 @@ export async function createTalentPortfolio(data: Omit<TalentPortfolio, "id" | "
 }
 
 export async function getTalentPortfoliosByStory(storyId: string): Promise<TalentPortfolio[]> {
-  const q = query(collection(db, "talentPortfolios"), where("storyId", "==", storyId), orderBy("likeCount", "desc"));
+  const q = query(collection(db, "talentPortfolios"), where("storyId", "==", storyId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as TalentPortfolio));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as TalentPortfolio))
+    .sort((a, b) => (b.likeCount ?? 0) - (a.likeCount ?? 0));
 }
 
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  // Stories with high engagement in the last 24h
-  const yesterday = new Date();
-  yesterday.setHours(yesterday.getHours() - 24);
   const q = query(
     collection(db, "stories"),
     where("status", "==", "published"),
-    orderBy("commentCount", "desc"),
-    limit(20)
+    limit(40)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Story))
+    .sort((a, b) => (b.commentCount ?? 0) - (a.commentCount ?? 0))
+    .slice(0, 20);
 }
 
 export const GENRES = [
