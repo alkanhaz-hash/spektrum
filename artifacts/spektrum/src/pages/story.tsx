@@ -197,10 +197,63 @@ function NarrationsTab({ story }: { story: Story }) {
   );
 
   const myNarration = narrations.find(n => n.narratorId === user?.uid);
+  const authorInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="space-y-6">
-      {/* ─ Narrator action area ─ */}
+
+      {/* ─ YAZAR: Kendi Seslendirmesi ─ */}
+      {user && isAuthor && (
+        <div className="border border-primary/30 rounded-2xl p-5 bg-primary/5">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-lg">👑</span>
+            <p className="font-semibold text-sm text-primary">Yazar Seslendirmesi</p>
+            <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-2 py-0.5 rounded-full">Resmi</span>
+          </div>
+
+          {!myNarration ? (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm">Hikayeni kendi sesinde yayınla.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">MP3, WAV veya M4A · En fazla 100 MB</p>
+              </div>
+              <button
+                onClick={() => authorInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 shrink-0"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {uploading ? "Yükleniyor..." : "Ses Yükle"}
+              </button>
+              <input
+                ref={authorInputRef}
+                type="file"
+                accept="audio/mpeg,audio/wav,audio/mp4,audio/m4a,audio/*"
+                className="hidden"
+                onChange={handleUpload}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4" /> Seslendirmeni yayında
+                </p>
+                <button
+                  onClick={() => handleDelete(myNarration)}
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                  title="Seslendirmeyi sil"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <AudioPlayer narration={myNarration} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─ Narrator action area (okuyucular için) ─ */}
       {user && !isAuthor && (
         <div className="border border-border rounded-2xl p-5 bg-card">
           {!myRequest && (
@@ -291,9 +344,14 @@ function NarrationsTab({ story }: { story: Story }) {
                   }
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Link href={`/profile/${n.narratorId}`}>
-                    <span className="text-sm font-semibold hover:text-primary transition-colors cursor-pointer">{n.narratorName}</span>
-                  </Link>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Link href={`/profile/${n.narratorId}`}>
+                      <span className="text-sm font-semibold hover:text-primary transition-colors cursor-pointer">{n.narratorName}</span>
+                    </Link>
+                    {n.narratorId === n.authorId && (
+                      <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-1.5 py-0.5 rounded-full leading-none">👑 Yazar</span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{Math.floor(n.durationSeconds / 60)}:{String(n.durationSeconds % 60).padStart(2, "0")} dakika</p>
                 </div>
                 <Mic className="w-4 h-4 text-primary/50" />
