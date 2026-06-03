@@ -147,6 +147,23 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
     .slice(0, pageSize);
 }
 
+// Yayınlanmış hikayelerde başlık/yazar/özet/etiket araması (istemci taraflı filtre).
+export async function searchStories(term: string): Promise<Story[]> {
+  const t = term.trim().toLocaleLowerCase("tr");
+  if (!t) return [];
+  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(300));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Story))
+    .filter(s =>
+      s.title.toLocaleLowerCase("tr").includes(t) ||
+      s.authorName.toLocaleLowerCase("tr").includes(t) ||
+      (s.summary ?? "").toLocaleLowerCase("tr").includes(t) ||
+      (s.tags ?? []).some(tag => tag.toLocaleLowerCase("tr").includes(t))
+    )
+    .sort((a, b) => (b.readCount ?? 0) - (a.readCount ?? 0));
+}
+
 export async function updateStory(id: string, data: Partial<Story>) {
   await updateDoc(doc(db, "stories", id), { ...data, updatedAt: serverTimestamp() });
 }

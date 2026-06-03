@@ -50,7 +50,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if true;
       allow create: if isOwner(uid) && request.resource.data.role == 'user';
-      allow update: if (isOwner(uid) && request.resource.data.role == resource.data.role)
+      // Kullanıcı kendi profilini günceller ama rolünü DEĞİŞTİREMEZ. `.get(...,'user')`
+      // ile eksik `role` alanı (eski belgeler) tolere edilir; aksi halde eksik alan
+      // kural değerlendirmesini hataya düşürüp tüm güncellemeleri reddediyordu.
+      allow update: if (isOwner(uid)
+                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user'))
                     || isModerator();
       allow delete: if isModerator();
     }

@@ -52,6 +52,10 @@ export default function WritePage() {
       }
       setChapters(ch);
       setLoading(false);
+    }).catch(() => {
+      // BUG FIX: hata olursa sayfa sonsuza dek "yükleniyor"da takılmasın.
+      setLoading(false);
+      toast({ title: "Hata", description: "Hikaye yüklenemedi.", variant: "destructive" });
     });
   }, [storyId, user]);
 
@@ -101,8 +105,14 @@ export default function WritePage() {
         toast({ title: "Hikaye oluşturuldu!" });
         setLocation(`/write/${newId}`);
       }
-    } catch {
-      toast({ title: "Hata", description: "Hikaye kaydedilemedi.", variant: "destructive" });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      const msg = (err as { message?: string })?.message;
+      toast({
+        title: "Hikaye kaydedilemedi",
+        description: code ? `Hata: ${code}` : msg || "Bilinmeyen bir hata oluştu.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }

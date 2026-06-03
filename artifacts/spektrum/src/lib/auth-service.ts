@@ -34,6 +34,8 @@ export interface UserProfile {
   instagram?: string;
   tiktok?: string;
   website?: string;
+  pinterest?: string;
+  snapchat?: string;
 }
 
 export async function registerUser(
@@ -127,10 +129,27 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const snap = await getDoc(userRef);
   if (snap.exists()) {
     const data = snap.data();
+    const patch: Record<string, unknown> = {};
     // GÜVENLİK: eski belgelerde e-posta/emailVerified herkese açık okunabiliyordu.
     // Kullanıcı her oturum açtığında bu PII alanlarını Firestore'dan temizle.
-    if ("email" in data || "emailVerified" in data) {
-      await updateDoc(userRef, { email: deleteField(), emailVerified: deleteField() });
+    if ("email" in data) patch.email = deleteField();
+    if ("emailVerified" in data) patch.emailVerified = deleteField();
+    // BUG FIX: Eski (role alanı olmayan) belgelerde güvenlik kuralı tüm profil
+    // güncellemelerini reddediyordu (fotoğraf/kapak/bio kaydedilemiyordu).
+    // Eksik zorunlu alanları burada tamamla.
+    if (!("role" in data)) patch.role = "user";
+    if (!("followerCount" in data)) patch.followerCount = 0;
+    if (!("followingCount" in data)) patch.followingCount = 0;
+    if (!("storyCount" in data)) patch.storyCount = 0;
+    if (!("readCount" in data)) patch.readCount = 0;
+    if (!("bio" in data)) patch.bio = "";
+    if (!("avatarUrl" in data)) patch.avatarUrl = "";
+    if (!("coverUrl" in data)) patch.coverUrl = "";
+    if (!("genre" in data)) patch.genre = "";
+    if (Object.keys(patch).length > 0) {
+      await updateDoc(userRef, patch);
+      const fresh = await getDoc(userRef);
+      return fresh.data() as UserProfile;
     }
     return data as UserProfile;
   }
@@ -156,7 +175,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
 
 export async function updateUserProfile(
   uid: string,
-  data: Partial<Pick<UserProfile, "displayName" | "bio" | "genre" | "status" | "instagram" | "tiktok" | "website" | "avatarUrl" | "coverUrl">>
+  data: Partial<Pick<UserProfile, "displayName" | "bio" | "genre" | "status" | "instagram" | "tiktok" | "website" | "pinterest" | "snapchat" | "avatarUrl" | "coverUrl">>
 ): Promise<void> {
   await updateDoc(doc(db, "users", uid), { ...data });
 }

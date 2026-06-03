@@ -116,6 +116,8 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
     instagram: profile.instagram || "",
     tiktok: profile.tiktok || "",
     website: profile.website || "",
+    pinterest: profile.pinterest || "",
+    snapchat: profile.snapchat || "",
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(profile.avatarUrl || "");
@@ -154,8 +156,14 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
       onSave({ ...profile, ...updated });
       toast({ title: "Profil güncellendi!" });
       onClose();
-    } catch {
-      toast({ title: "Hata", description: "Profil kaydedilemedi.", variant: "destructive" });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      const msg = (err as { message?: string })?.message;
+      toast({
+        title: "Profil kaydedilemedi",
+        description: code ? `Hata: ${code}` : msg || "Bilinmeyen bir hata oluştu.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -249,6 +257,18 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
               <span className="text-[15px] shrink-0">🎵</span>
               <input value={form.tiktok} onChange={e => setForm(f => ({ ...f, tiktok: e.target.value }))}
                 placeholder="tiktok.com/@kullanici"
+                className="flex-1 bg-background border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[15px] shrink-0">📌</span>
+              <input value={form.pinterest} onChange={e => setForm(f => ({ ...f, pinterest: e.target.value }))}
+                placeholder="pinterest.com/kullanici"
+                className="flex-1 bg-background border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[15px] shrink-0">👻</span>
+              <input value={form.snapchat} onChange={e => setForm(f => ({ ...f, snapchat: e.target.value }))}
+                placeholder="snapchat.com/add/kullanici"
                 className="flex-1 bg-background border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
             <div className="flex items-center gap-3">
@@ -590,7 +610,7 @@ export default function ProfilePage() {
           {profile.bio && <p className="text-muted-foreground text-sm mb-4 max-w-lg leading-relaxed">{profile.bio}</p>}
 
           {/* Social Links */}
-          {(profile.instagram || profile.tiktok || profile.website) && (
+          {(profile.instagram || profile.tiktok || profile.pinterest || profile.snapchat || profile.website) && (
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               {profile.instagram && (
                 <a href={profile.instagram.startsWith("http") ? profile.instagram : `https://${profile.instagram}`} target="_blank" rel="noopener noreferrer"
@@ -602,6 +622,18 @@ export default function ProfilePage() {
                 <a href={profile.tiktok.startsWith("http") ? profile.tiktok : `https://${profile.tiktok}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-border hover:border-primary/50 rounded-lg px-3 py-1.5">
                   🎵 TikTok
+                </a>
+              )}
+              {profile.pinterest && (
+                <a href={profile.pinterest.startsWith("http") ? profile.pinterest : `https://${profile.pinterest}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-red-400 transition-colors border border-border hover:border-red-400/50 rounded-lg px-3 py-1.5">
+                  📌 Pinterest
+                </a>
+              )}
+              {profile.snapchat && (
+                <a href={profile.snapchat.startsWith("http") ? profile.snapchat : `https://${profile.snapchat}`} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-yellow-400 transition-colors border border-border hover:border-yellow-400/50 rounded-lg px-3 py-1.5">
+                  👻 Snapchat
                 </a>
               )}
               {profile.website && (
@@ -683,7 +715,7 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {stories.map((s, i) => (
                     <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                      <Link href={`/story/${s.id}`}>
+                      <Link href={isOwner && s.status !== "published" ? `/write/${s.id}` : `/story/${s.id}`}>
                         <div className="group cursor-pointer">
                           <div className="aspect-[2/3] rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border overflow-hidden mb-2 group-hover:border-primary/50 transition-all group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.2)]">
                             {s.coverUrl && <img src={s.coverUrl} alt={s.title} className="w-full h-full object-cover" />}

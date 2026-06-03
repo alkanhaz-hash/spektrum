@@ -2,13 +2,20 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { logoutUser } from "@/lib/auth-service";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Search } from "lucide-react";
 
 export function Navbar() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = searchTerm.trim();
+    setLocation(t ? `/search?q=${encodeURIComponent(t)}` : "/search");
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -43,6 +50,19 @@ export function Navbar() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          <form onSubmit={handleSearchSubmit} className="hidden sm:flex items-center relative">
+            <Search className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Kitap ara..."
+              className="w-40 lg:w-56 bg-muted/50 border border-border rounded-full pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:w-48 lg:focus:w-64 transition-all"
+              data-testid="input-navbar-search"
+            />
+          </form>
+          <Link href="/search" className="sm:hidden text-foreground/60 hover:text-primary transition-colors" aria-label="Ara">
+            <Search className="w-5 h-5" />
+          </Link>
           {user ? (
             <>
               <Link href="/messages" className="transition-colors hover:text-primary text-foreground/60 text-sm font-medium">

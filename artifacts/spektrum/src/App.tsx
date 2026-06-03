@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth";
 import HomePage from "@/pages/home";
 import DiscoverPage from "@/pages/discover";
+import SearchPage from "@/pages/search";
 import StoryPage from "@/pages/story";
 import ReadPage from "@/pages/read";
 import WritePage from "@/pages/write";
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/" component={HomePage} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/discover" component={DiscoverPage} />
+      <Route path="/search" component={SearchPage} />
       <Route path="/story/:id" component={StoryPage} />
       <Route path="/read/:storyId/:chapterId" component={ReadPage} />
       <Route path="/write" component={WritePage} />

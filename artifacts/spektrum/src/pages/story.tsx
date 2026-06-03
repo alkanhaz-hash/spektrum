@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Heart, MessageSquare, ChevronRight, User, Palette,
-  Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2
+  Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -463,13 +463,22 @@ export default function StoryPage() {
                 <Heart className={`w-4 h-4 ${liked ? "fill-pink-400" : ""}`} /> {story.likeCount}
               </button>
             </div>
-            {chapters.length > 0 && (
-              <Link href={`/read/${story.id}/${chapters[0].id}`}>
-                <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)] transition-all" data-testid="button-start-reading">
-                  <BookOpen className="w-4 h-4" /> Okumaya Başla
-                </button>
-              </Link>
-            )}
+            <div className="flex flex-wrap items-center gap-3">
+              {chapters.length > 0 && (
+                <Link href={`/read/${story.id}/${chapters[0].id}`}>
+                  <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)] transition-all" data-testid="button-start-reading">
+                    <BookOpen className="w-4 h-4" /> Okumaya Başla
+                  </button>
+                </Link>
+              )}
+              {user?.uid === story.authorId && (
+                <Link href={`/write/${story.id}`}>
+                  <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-primary/40 text-primary font-semibold hover:bg-primary/10 transition-all" data-testid="button-edit-story">
+                    <Edit3 className="w-4 h-4" /> Düzenle / Devam Et
+                  </button>
+                </Link>
+              )}
+            </div>
           </div>
         </motion.div>
 
