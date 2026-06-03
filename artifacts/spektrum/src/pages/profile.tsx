@@ -18,11 +18,19 @@ import { useToast } from "@/hooks/use-toast";
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 
 const BADGE_DEFS = [
+  // Yazarlık rozetleri
   { id: "author", emoji: "✍️", label: "Hikayeci", desc: "İlk hikayesini yayınladı", condition: (p: UserProfile) => (p.storyCount ?? 0) >= 1 },
   { id: "ink_master", emoji: "🖋️", label: "Mürekkep Ustası", desc: "5+ hikaye yazdı", condition: (p: UserProfile) => (p.storyCount ?? 0) >= 5 },
+  // Okuma rozetleri
   { id: "bookworm", emoji: "📚", label: "Kitap Kurdu", desc: "10+ hikaye okudu", condition: (p: UserProfile) => (p.readCount ?? 0) >= 10 },
-  { id: "popular", emoji: "⭐", label: "Popüler", desc: "50+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 50 },
-  { id: "legend", emoji: "🏆", label: "Efsane", desc: "100+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 100 },
+  // Takipçi rozetleri — kademeli
+  { id: "rising", emoji: "🌱", label: "Yükselen", desc: "50+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 50 },
+  { id: "shining", emoji: "💫", label: "Parlayan", desc: "200+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 200 },
+  { id: "popular", emoji: "🔥", label: "Popüler", desc: "1.000+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 1000 },
+  { id: "celebrated", emoji: "⭐", label: "Ünlü", desc: "5.000+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 5000 },
+  { id: "icon", emoji: "💎", label: "İkon", desc: "10.000+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 10000 },
+  { id: "elite", emoji: "👑", label: "Elit", desc: "50.000+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 50000 },
+  { id: "legend", emoji: "🏆", label: "Efsane", desc: "100.000+ takipçi", condition: (p: UserProfile) => (p.followerCount ?? 0) >= 100000 },
 ];
 
 function getBadges(profile: UserProfile) {
