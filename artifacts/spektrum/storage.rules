@@ -1,0 +1,76 @@
+rules_version = '2';
+
+// SPEKTRUM Firebase Storage Güvenlik Kuralları
+// ---------------------------------------------------------------------------
+// Yüklemeleri kimliği doğrulanmış kullanıcılarla, doğru içerik tipi ve boyutla
+// sınırlar. Görsel içeriğin uygunluğu yüklemeden ÖNCE tarayıcıda (nsfwjs ile)
+// kontrol edilir; bu kurallar yetkilendirme ve kötüye kullanım sınırıdır.
+//
+// DAĞITIM: bkz. artifacts/spektrum/FIREBASE_RULES.md
+// ---------------------------------------------------------------------------
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*')
+             && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*')
+             && request.resource.size < 100 * 1024 * 1024;
+    }
+
+    // conversationId formatı: "<uid1>_<uid2>" (sıralı) — katılımcı kontrolü
+    // doğrudan yoldan yapılır (Storage kuralları Firestore'a erişemez).
+    function isConversationParticipant(conversationId) {
+      return isSignedIn() && request.auth.uid in conversationId.split('_');
+    }
+
+    // Kullanıcı profil kapağı — yalnızca sahibi
+    match /covers/users/{uid}/{file=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+    }
+
+    // Hikaye kapakları — yalnızca yükleyen sahibi (yol sahibe göre izole)
+    match /story-covers/{uid}/{file=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+    }
+
+    // Avatarlar — yalnızca sahibi
+    match /avatars/{uid}/{file=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+    }
+
+    // DM medyası (resim/GIF) — yalnızca konuşmanın katılımcıları
+    match /messages/{conversationId}/{file=**} {
+      allow read: if isConversationParticipant(conversationId);
+      allow write: if isConversationParticipant(conversationId) && isImage();
+    }
+
+    // Yetenek portfolyo görselleri — yalnızca sahibi
+    match /talent/{userId}/{file=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId && isImage();
+    }
+
+    // Seslendirme dosyaları — kimliği doğrulanmış kullanıcılar
+    match /narrations/{storyId}/{file=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAudio();
+    }
+
+    // Diğer her şey reddedilir
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

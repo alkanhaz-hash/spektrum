@@ -21,7 +21,6 @@ import type {
 
 import type {
   HealthStatus,
-  MediaModerationInput,
   ModerationResult,
   TextModerationInput,
   TrendingStory
@@ -187,78 +186,6 @@ export const useModerateText = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getModerateTextMutationOptions(options));
-    }
-
-export const getModerateMediaUrl = () => {
-
-
-
-
-  return `/api/moderation/media`
-}
-
-/**
- * AI-powered visual content moderation. Checks images and videos for violence, sexual content, etc.
- * @summary Moderate image or video content
- */
-export const moderateMedia = async (mediaModerationInput: MediaModerationInput, options?: RequestInit): Promise<ModerationResult> => {
-
-  return customFetch<ModerationResult>(getModerateMediaUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      mediaModerationInput,)
-  }
-);}
-
-
-
-
-export const getModerateMediaMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moderateMedia>>, TError,{data: BodyType<MediaModerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof moderateMedia>>, TError,{data: BodyType<MediaModerationInput>}, TContext> => {
-
-const mutationKey = ['moderateMedia'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof moderateMedia>>, {data: BodyType<MediaModerationInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  moderateMedia(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ModerateMediaMutationResult = NonNullable<Awaited<ReturnType<typeof moderateMedia>>>
-    export type ModerateMediaMutationBody = BodyType<MediaModerationInput>
-    export type ModerateMediaMutationError = ErrorType<unknown>
-
-    /**
- * @summary Moderate image or video content
- */
-export const useModerateMedia = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moderateMedia>>, TError,{data: BodyType<MediaModerationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof moderateMedia>>,
-        TError,
-        {data: BodyType<MediaModerationInput>},
-        TContext
-      > => {
-      return useMutation(getModerateMediaMutationOptions(options));
     }
 
 export const getGetTrendingStoriesUrl = () => {

@@ -7,8 +7,6 @@
  */
 
 export * from './healthStatus';
-export * from './mediaModerationInput';
-export * from './mediaModerationInputMediaType';
 export * from './moderationResult';
 export * from './moderationResultAction';
 export * from './textModerationInput';

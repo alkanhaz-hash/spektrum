@@ -12,8 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { createStory, getStory, getChaptersByStory, updateStory, Story, Chapter, GENRES } from "@/lib/firestore-service";
-import { uploadStoryCover, deleteFile } from "@/lib/storage-service";
-import { moderateMedia } from "@/lib/moderation-service";
+import { uploadStoryCover } from "@/lib/storage-service";
+import { checkImageSafety } from "@/lib/nsfw-service";
 import { useToast } from "@/hooks/use-toast";
 
 const schema = z.object({
@@ -70,15 +70,15 @@ export default function WritePage() {
       let coverUrl = story?.coverUrl ?? "";
 
       if (coverFile) {
-        const tempId = storyId || `temp-${Date.now()}`;
-        coverUrl = await uploadStoryCover(tempId, coverFile);
-        const modResult = await moderateMedia(coverUrl, "image");
-        if (!modResult.safe) {
-          deleteFile(coverUrl).catch(() => {});
-          toast({ title: "Kapak uygun değil", description: modResult.reason || "Kapak görseli uygunsuz içerik barındırıyor.", variant: "destructive" });
+        // Yükleme ÖNCESİ tarayıcıda moderasyon — uygunsuzsa hiç upload edilmez (sıfır kredi).
+        const check = await checkImageSafety(coverFile);
+        if (!check.safe) {
+          toast({ title: "Kapak uygun değil", description: "Kapak görselinde uygunsuz (cinsel/müstehcen) içerik tespit edildi.", variant: "destructive" });
           setSaving(false);
           return;
         }
+        const tempId = storyId || `temp-${Date.now()}`;
+        coverUrl = await uploadStoryCover(user.uid, tempId, coverFile);
       }
 
       const tags = data.tags ? data.tags.split(",").map(t => t.trim()).filter(Boolean) : [];

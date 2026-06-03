@@ -45,25 +45,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModerationResult"
-  /moderation/media:
-    post:
-      operationId: moderateMedia
-      tags: [moderation]
-      summary: Moderate image or video content
-      description: AI-powered visual content moderation. Checks images and videos for violence, sexual content, etc.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MediaModerationInput"
-      responses:
-        "200":
-          description: Moderation result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ModerationResult"
   /discover/trending:
     get:
       operationId: getTrendingStories
@@ -101,19 +82,6 @@ components:
           type: string
           default: "tr"
           description: Language of the content (tr for Turkish, en for English)
-    MediaModerationInput:
-      type: object
-      required:
-        - url
-        - mediaType
-      properties:
-        url:
-          type: string
-          description: Public URL of the image or video to moderate
-        mediaType:
-          type: string
-          enum: [image, video, gif]
-          description: Type of media being moderated
     ModerationResult:
       type: object
       required:

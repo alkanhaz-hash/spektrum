@@ -23,13 +23,3 @@ export async function moderateText(text: string, language = "tr"): Promise<Moder
   if (!res.ok) throw new Error("Moderasyon servisi yanıt vermedi");
   return res.json();
 }
-
-export async function moderateMedia(url: string, mediaType: "image" | "video" | "gif"): Promise<ModerationResult> {
-  const res = await fetch("/api/moderation/media", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, mediaType }),
-  });
-  if (!res.ok) throw new Error("Moderasyon servisi yanıt vermedi");
-  return res.json();
-}

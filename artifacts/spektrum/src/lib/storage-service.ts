@@ -26,9 +26,10 @@ async function convertToWebP(file: File): Promise<Blob> {
   });
 }
 
-export async function uploadStoryCover(storyId: string, file: File): Promise<string> {
+export async function uploadStoryCover(uid: string, storyId: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);
-  const storageRef = ref(storage, `covers/${storyId}/cover.webp`);
+  // Sahibe göre izole yol — Storage kuralları yalnızca sahibinin yazmasına izin verir.
+  const storageRef = ref(storage, `story-covers/${uid}/${storyId}.webp`);
   await uploadBytes(storageRef, webpBlob, { contentType: "image/webp" });
   return getDownloadURL(storageRef);
 }

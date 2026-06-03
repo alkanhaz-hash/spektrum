@@ -1,0 +1,1 @@
+- [Firebase security rules (SPEKTRUM)](firebase-rules.md) — Storage rules can't read Firestore; encode owner/participant in the storage path. Client moderation is bypassable.

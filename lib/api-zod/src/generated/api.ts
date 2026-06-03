@@ -38,24 +38,6 @@ export const ModerateTextResponse = zod.object({
 
 
 /**
- * AI-powered visual content moderation. Checks images and videos for violence, sexual content, etc.
- * @summary Moderate image or video content
- */
-export const ModerateMediaBody = zod.object({
-  "url": zod.string().describe('Public URL of the image or video to moderate'),
-  "mediaType": zod.enum(['image', 'video', 'gif']).describe('Type of media being moderated')
-})
-
-export const ModerateMediaResponse = zod.object({
-  "safe": zod.boolean().describe('Whether the content is safe to publish'),
-  "action": zod.enum(['approved', 'pending_review', 'rejected']).describe('Action to take with the content'),
-  "categories": zod.array(zod.string()).describe('List of detected content categories (violence, sexual, drugs, suicide, child_safety, weapons)'),
-  "score": zod.number().describe('Overall toxicity score 0-1'),
-  "reason": zod.string().nullish().describe('Human-readable reason for rejection')
-})
-
-
-/**
  * Returns stories trending in last 24h by inline comment velocity and engagement rate
  * @summary Get trending stories
  */

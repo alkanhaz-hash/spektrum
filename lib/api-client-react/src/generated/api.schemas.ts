@@ -17,25 +17,6 @@ export interface TextModerationInput {
 }
 
 /**
- * Type of media being moderated
- */
-export type MediaModerationInputMediaType = typeof MediaModerationInputMediaType[keyof typeof MediaModerationInputMediaType];
-
-
-export const MediaModerationInputMediaType = {
-  image: 'image',
-  video: 'video',
-  gif: 'gif',
-} as const;
-
-export interface MediaModerationInput {
-  /** Public URL of the image or video to moderate */
-  url: string;
-  /** Type of media being moderated */
-  mediaType: MediaModerationInputMediaType;
-}
-
-/**
  * Action to take with the content
  */
 export type ModerationResultAction = typeof ModerationResultAction[keyof typeof ModerationResultAction];

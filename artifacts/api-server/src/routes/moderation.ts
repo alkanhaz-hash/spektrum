@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { ModerateTextBody, ModerateMediaBody } from "@workspace/api-zod";
+import { ModerateTextBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -147,45 +147,8 @@ router.post("/text", async (req: Request, res: Response) => {
   });
 });
 
-// ─── MEDIA MODERATION ─────────────────────────────────────────────────────────
-
-router.post("/media", async (req: Request, res: Response) => {
-  const parsed = ModerateMediaBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Geçersiz istek" });
-    return;
-  }
-
-  const { url, mediaType } = parsed.data;
-  const lowerUrl = url.toLowerCase();
-  const suspiciousPatterns = [
-    "porn", "xxx", "nude", "naked", "nsfw", "hentai", "sex",
-    "porno", "müstehcen", "erotik",
-  ];
-
-  if (suspiciousPatterns.some((p) => lowerUrl.includes(p))) {
-    res.json({
-      safe: false,
-      action: "rejected" as const,
-      categories: ["sexual"],
-      score: 0.95,
-      reason: "Medya URL'si uygunsuz içerik barındırıyor.",
-    });
-    return;
-  }
-
-  if (mediaType === "video" || mediaType === "gif") {
-    res.json({
-      safe: true,
-      action: "pending_review" as const,
-      categories: [],
-      score: 0.1,
-      reason: `${mediaType === "video" ? "Video" : "GIF"} içerikler moderatör onayına gönderildi.`,
-    });
-    return;
-  }
-
-  res.json({ safe: true, action: "approved" as const, categories: [], score: 0, reason: null });
-});
+// NOT: Görsel/medya moderasyonu artık tamamen istemci tarafında (tarayıcıda)
+// nsfwjs ile yapılıyor — bkz. spektrum/src/lib/nsfw-service.ts. Bu sayede sıfır
+// sunucu yükü ve sıfır AI kredisi harcanır. Sunucu yalnızca metin moderasyonu yapar.
 
 export default router;

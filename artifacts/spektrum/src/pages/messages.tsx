@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { getConversations, listenMessages, sendMessage, markConversationRead, Conversation, Message } from "@/lib/firestore-service";
 import { uploadMessageMedia } from "@/lib/storage-service";
-import { moderateMedia } from "@/lib/moderation-service";
+import { checkImageSafety } from "@/lib/nsfw-service";
 import { useToast } from "@/hooks/use-toast";
 
 const EMOJIS = ["😂", "❤️", "🔥", "👏", "😭", "🙌", "✨", "💜", "🎉", "😍", "🤩", "💯"];
@@ -70,13 +70,13 @@ export default function MessagesPage() {
     setSending(true);
     try {
       const mediaType = file.type === "image/gif" ? "gif" : "image";
-      const url = await uploadMessageMedia(conversationId, file);
-      const modResult = await moderateMedia(url, mediaType);
-      if (!modResult.safe && modResult.action === "rejected") {
-        toast({ title: "Medya uygun değil", description: modResult.reason || "Bu içerik gönderilemez.", variant: "destructive" });
-        setSending(false);
+      // Yükleme ÖNCESİ tarayıcıda moderasyon — uygunsuzsa hiç upload edilmez (sıfır kredi).
+      const check = await checkImageSafety(file);
+      if (!check.safe) {
+        toast({ title: "Medya uygun değil", description: "Görselde uygunsuz (cinsel/müstehcen) içerik tespit edildi.", variant: "destructive" });
         return;
       }
+      const url = await uploadMessageMedia(conversationId, file);
       await sendMessage({ conversationId, senderId: user.uid, senderName: profile.displayName, senderAvatar: profile.avatarUrl, text: "", mediaUrl: url, mediaType });
     } catch { toast({ title: "Hata", description: "Medya gönderilemedi.", variant: "destructive" }); }
     finally { setSending(false); e.target.value = ""; }
