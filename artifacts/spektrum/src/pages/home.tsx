@@ -28,7 +28,7 @@ export default function HomePage() {
         {/* Hero Section */}
         <section className="py-20 flex flex-col items-center text-center space-y-8 relative overflow-hidden rounded-3xl bg-card border border-border/50 shadow-2xl shadow-primary/5 mb-16">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/5 pointer-events-none" />
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none" />
+          <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}noise.svg)` }} />
           
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
