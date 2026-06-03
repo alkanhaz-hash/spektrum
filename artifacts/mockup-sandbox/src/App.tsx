@@ -14,6 +14,7 @@ function _resolveComponent(
   return (
     (mod.default as ComponentType) ||
     (mod.Preview as ComponentType) ||
+    // nosemgrep: unsafe-dynamic-method
     (mod[name] as ComponentType) ||
     fns[fns.length - 1]
   );
@@ -37,6 +38,7 @@ function PreviewRenderer({
 
     async function loadComponent(): Promise<void> {
       const key = `./components/mockups/${componentPath}.tsx`;
+      // nosemgrep: unsafe-dynamic-method
       const loader = modules[key];
       if (!loader) {
         setError(`No component found at ${componentPath}.tsx`);

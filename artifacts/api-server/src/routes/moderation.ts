@@ -74,10 +74,27 @@ interface ScanResult {
  * çevrilmiş olmasını gerektirir.
  * Bu sayede "am" → "anlam", "program", "kamera" gibi kelimelerde eşleşmez.
  */
-function matchesKeyword(text: string, keyword: string): boolean {
+const WORD_BOUNDARY = "a-zA-ZğüşöçıİĞÜŞÖÇ0-9";
+
+function buildKeywordPattern(keyword: string): RegExp {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const letters = "a-zA-ZğüşöçıİĞÜŞÖÇ0-9";
-  const pattern = new RegExp(`(?<![${letters}])${escaped}(?![${letters}])`, "i");
+  // Gerekçe: keyword'ler statik, geliştirici tanımlı CATEGORIES listesinden gelir,
+  // regex özel karakterleri escape edilir, iç içe niceleyici (backtracking) yoktur ve
+  // kullanıcı girdisiyle regex kurulmaz; ReDoS riski yoktur.
+  // nosemgrep: detect-non-literal-regexp
+  return new RegExp(`(?<![${WORD_BOUNDARY}])${escaped}(?![${WORD_BOUNDARY}])`, "i");
+}
+
+// Desenleri modül yüklenirken bir kez derle (her tarama çağrısında yeniden derlemeyi önler).
+const KEYWORD_PATTERNS: Map<string, RegExp> = new Map();
+for (const words of Object.values(CATEGORIES)) {
+  for (const w of words) {
+    if (!KEYWORD_PATTERNS.has(w)) KEYWORD_PATTERNS.set(w, buildKeywordPattern(w));
+  }
+}
+
+function matchesKeyword(text: string, keyword: string): boolean {
+  const pattern = KEYWORD_PATTERNS.get(keyword) ?? buildKeywordPattern(keyword);
   return pattern.test(text);
 }
 
