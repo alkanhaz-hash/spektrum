@@ -24,6 +24,11 @@ Checking `resource.data.authorId == request.auth.uid` on a story/chapter update 
 
 **How to apply:** for non-moderator updates, also assert the ownership/parent field is unchanged: `request.resource.data.storyId == resource.data.storyId` (chapters) and `request.resource.data.authorId == resource.data.authorId` (stories). Moderators are exempt.
 
+## Participant/membership lists and "self-only" array mutations must be constrained
+A "participant in conversation" update rule that only checks membership lets a participant ADD strangers to `participants`, who then pass the messages read rule — a visibility-escalation hole. Likewise a `likedBy` update that only checks `hasOnly(['likeCount','likedBy'])` lets anyone add/remove other users' likes.
+
+**How to apply:** restrict conversation updates to non-membership fields via `changedKeys().hasOnly(['lastMessage','lastMessageAt','unreadCount'])` (participants becomes immutable). For self-only array toggles, require the symmetric set-difference to equal exactly the caller: `before.toSet().difference(after.toSet()).union(after.toSet().difference(before.toSet())) == [request.auth.uid].toSet()`.
+
 ## Cross-user counter writes
 Likes/comments/read counts are incremented by users who don't own the doc (e.g. `likeStory`, `addInlineComment`). Rules allow non-owner updates only when `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...counter fields])`. Bounded counter inflation is an accepted residual risk; content tampering is blocked.
 

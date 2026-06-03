@@ -55,7 +55,10 @@ elle güncelleyin.
   bölümünü `published` yapamaz** (yalnızca `draft`/`pending_review`); yayına alma
   yalnızca moderatöre aittir. Diğer kullanıcılar yalnızca okunma sayacını artırır.
 - **conversations / messages**: yalnızca konuşmanın katılımcıları okur; gönderen
-  kendi adına mesaj yazar.
+  kendi adına mesaj yazar. Konuşma güncellemesinde `participants` **değiştirilemez**
+  (yabancı ekleyip mesaj okuma yetkisi yükseltmesi engellenir).
+- **inlineComments**: beğeni güncellemesinde `likedBy` yalnızca isteği yapan
+  kullanıcının kendi UID'sini ekler/çıkarır — başkası adına beğeni sahteciliği engellenir.
 - **storage**: yüklemeler kimlik doğrulamalı, içerik tipi ve boyut sınırlı
   (görseller < 10 MB, ses < 100 MB); DM medyası ve hikaye kapakları yola gömülü
   sahip/katılımcı kontrolüyle izole edilir.

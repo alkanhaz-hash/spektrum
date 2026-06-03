@@ -89,21 +89,31 @@ service cloud.firestore {
     }
 
     // ─── INLINE COMMENTS ────────────────────────────────────────────────────
+    // Beğeni güncellemesinde `likedBy` yalnızca isteği yapan kullanıcının kendi
+    // UID'sini ekleyip çıkarabilir — başkası adına beğeni/geri alma engellenir.
     match /inlineComments/{commentId} {
       allow read: if true;
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
       allow update: if (isSignedIn() && resource.data.authorId == request.auth.uid)
                     || isModerator()
-                    || (isSignedIn() && changedKeys().hasOnly(['likeCount', 'likedBy']));
+                    || (isSignedIn()
+                        && changedKeys().hasOnly(['likeCount', 'likedBy'])
+                        && resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet())
+                             .union(request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()))
+                           == [request.auth.uid].toSet());
       allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
     }
 
     // ─── CONVERSATIONS ──────────────────────────────────────────────────────
-    // Yalnızca katılımcılar okur/yazar.
+    // Yalnızca katılımcılar okur/yazar. Güncellemede `participants` DEĞİŞTİRİLEMEZ
+    // (yabancı kullanıcı ekleyip mesajları okuma yetkisi yükseltmesi engellenir);
+    // yalnızca son mesaj alanları ve okunmamış sayacı yazılabilir.
     match /conversations/{conversationId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
-      allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow update: if isSignedIn()
+                    && request.auth.uid in resource.data.participants
+                    && changedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount']);
       allow delete: if isModerator();
     }
 
