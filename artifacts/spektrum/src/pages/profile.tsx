@@ -468,7 +468,7 @@ export default function ProfilePage() {
         if (isOwner && user) p = await ensureUserProfile(user);
         else p = await getUserProfile(uid);
         const [s, narrs] = await Promise.all([
-          getStoriesByAuthor(uid),
+          getStoriesByAuthor(uid, !isOwner),
           getNarrationsByNarrator(uid),
         ]);
         setProfile(p);

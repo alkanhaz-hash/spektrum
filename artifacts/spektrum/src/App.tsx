@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import NotFound from "@/pages/not-found";
 
-// Lazy-loaded pages
 import AuthPage from "@/pages/auth";
 import HomePage from "@/pages/home";
 import DiscoverPage from "@/pages/discover";

@@ -80,6 +80,8 @@ function NarrationsTab({ story }: { story: Story }) {
   const [requesting, setRequesting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  // BUG FIX: useRef hook'u conditional return'dan önce tanımlanmalı (React hook kuralı)
+  const authorInputRef = useRef<HTMLInputElement>(null);
 
   const isAuthor = user?.uid === story.authorId;
   const isNarrator = !!myRequest && myRequest.status === "approved";
@@ -197,7 +199,6 @@ function NarrationsTab({ story }: { story: Story }) {
   );
 
   const myNarration = narrations.find(n => n.narratorId === user?.uid);
-  const authorInputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="space-y-6">

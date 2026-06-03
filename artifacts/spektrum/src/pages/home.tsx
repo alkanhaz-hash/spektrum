@@ -1,5 +1,4 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useAuth } from "@/contexts/AuthContext";
 import { useGetTrendingStories } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { GENRES, getDiscoverFeed, Story } from "@/lib/firestore-service";

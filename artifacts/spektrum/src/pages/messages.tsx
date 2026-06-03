@@ -9,7 +9,6 @@ import { getConversations, listenMessages, sendMessage, Conversation, Message } 
 import { uploadMessageMedia } from "@/lib/storage-service";
 import { moderateMedia } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation as useWouterLocation } from "wouter";
 
 const EMOJIS = ["😂", "❤️", "🔥", "👏", "😭", "🙌", "✨", "💜", "🎉", "😍", "🤩", "💯"];
 

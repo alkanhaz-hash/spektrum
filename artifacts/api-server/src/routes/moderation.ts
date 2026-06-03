@@ -10,15 +10,15 @@ const CATEGORIES = {
     // Turkish
     "seks", "cinsel", "müstehcen", "porno", "porniyo", "porni", "erotik",
     "tecavüz", "cinsel taciz", "fuhuş", "orospu", "fahişe", "sikiş", "sikişme",
-    "am", "göt", "penis", "vajina", "meme", "yarak", "amk", "amına", "sikeyim",
-    "siktir", "oç", "orospu çocuğu", "bok", "taşak", "sik",
+    "göt", "penis", "vajina", "meme", "yarak", "amk", "amına", "sikeyim",
+    "siktir", "oç", "orospu çocuğu", "taşak", "sik",
     // English
-    "porn", "sex", "nude", "naked", "xxx", "nsfw", "hentai",
+    "porn", "nude", "naked", "xxx", "nsfw", "hentai",
     "rape", "molest", "prostitut",
   ],
   violence: [
-    // Turkish
-    "öldür", "katliam", "kesmek", "bıçaklamak", "vurmak", "katil", "cinayet",
+    // Turkish — aşırı genel kelimeler kaldırıldı ("kesmek", "vurmak")
+    "öldür", "katliam", "bıçaklamak", "katil", "cinayet",
     "bomba", "patlama", "terörist", "terör", "infaz", "işkence", "kıyım",
     "kurban et", "kan dök", "kelle", "başını kopar", "parçala", "ezip geç",
     "döverim", "kıracağım", "öldürece", "katlede", "vahşet", "linç",
@@ -30,7 +30,7 @@ const CATEGORIES = {
     // Turkish
     "eroin", "kokain", "esrar", "uyuşturucu", "bong", "ot çek", "tiner",
     "metamfetamin", "ectasy", "ecstasy", "uyuştur", "madde kullan", "bağımlılık",
-    "kafayı bul", "kafayı yak", "satıcı", "uyuşturucu kaçakçı",
+    "kafayı bul", "kafayı yak", "uyuşturucu kaçakçı",
     // English
     "heroin", "cocaine", "meth", "crystal meth", "fentanyl", "ecstasy",
     "drug deal", "overdose", "narcotics",
@@ -39,7 +39,7 @@ const CATEGORIES = {
     // Turkish
     "intihar et", "kendini öldür", "canına kıy", "hayatına son ver",
     "ölmek istiyorum", "yaşamak istemiyorum", "kendine zarar ver",
-    "bileklerini kes", "atla", "kendini as", "zehirlen", "intihar yöntemi",
+    "bileklerini kes", "kendini as", "zehirlen", "intihar yöntemi",
     "ölmenin yolu", "nasıl intihar",
     // English
     "kill yourself", "commit suicide", "end your life", "how to suicide",
@@ -47,7 +47,7 @@ const CATEGORIES = {
   ],
   child_safety: [
     // Turkish
-    "çocuk istismar", "pedofil", "çocuğa tecavüz", "küçük çocuk",
+    "çocuk istismar", "pedofil", "çocuğa tecavüz",
     "reşit olmayan", "çocuk pornosu", "loli",
     // English
     "child abuse", "pedophil", "minor sex", "underage sex", "child porn", "loli",
@@ -69,17 +69,28 @@ interface ScanResult {
   score: number;
 }
 
+/**
+ * Tam kelime sınırı eşleşmesi: Türkçe/İngilizce harf olmayan karakterlerle
+ * çevrilmiş olmasını gerektirir.
+ * Bu sayede "am" → "anlam", "program", "kamera" gibi kelimelerde eşleşmez.
+ */
+function matchesKeyword(text: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const letters = "a-zA-ZğüşöçıİĞÜŞÖÇ0-9";
+  const pattern = new RegExp(`(?<![${letters}])${escaped}(?![${letters}])`, "i");
+  return pattern.test(text);
+}
+
 function scanText(text: string): ScanResult {
   const lower = text.toLowerCase();
   const found: Category[] = [];
 
   for (const [cat, words] of Object.entries(CATEGORIES) as [Category, string[]][]) {
-    if (words.some((w) => lower.includes(w.toLowerCase()))) {
+    if (words.some((w) => matchesKeyword(lower, w))) {
       found.push(cat);
     }
   }
 
-  // Weighted scoring
   const weights: Record<Category, number> = {
     child_safety: 1.0,
     sexual: 0.85,
@@ -89,7 +100,9 @@ function scanText(text: string): ScanResult {
     weapons: 0.6,
   };
 
-  const score = found.length === 0 ? 0 : Math.min(1, found.reduce((acc, c) => acc + weights[c], 0) / 2);
+  const score = found.length === 0
+    ? 0
+    : Math.min(1, found.reduce((acc, c) => acc + weights[c], 0) / 2);
 
   return { flagged: found.length > 0, categories: found, score };
 }
@@ -116,20 +129,12 @@ router.post("/text", async (req: Request, res: Response) => {
   const result = scanText(text);
 
   if (!result.flagged) {
-    res.json({
-      safe: true,
-      action: "approved",
-      categories: [],
-      score: 0,
-      reason: null,
-    });
+    res.json({ safe: true, action: "approved", categories: [], score: 0, reason: null });
     return;
   }
 
-  // High-severity categories → outright reject; medium → pending_review
   const hardBlock: Category[] = ["child_safety", "suicide"];
   const isHardBlock = result.categories.some((c) => hardBlock.includes(c));
-
   const labels = result.categories.map((c) => CATEGORY_LABELS[c]).join(", ");
   const reason = `İçerik şu kategorilerde uygunsuz içerik barındırıyor: ${labels}.`;
 
@@ -152,17 +157,13 @@ router.post("/media", async (req: Request, res: Response) => {
   }
 
   const { url, mediaType } = parsed.data;
-
-  // Heuristic checks on the URL/filename for obvious violations
   const lowerUrl = url.toLowerCase();
   const suspiciousPatterns = [
     "porn", "xxx", "nude", "naked", "nsfw", "hentai", "sex",
     "porno", "müstehcen", "erotik",
   ];
 
-  const urlFlagged = suspiciousPatterns.some((p) => lowerUrl.includes(p));
-
-  if (urlFlagged) {
+  if (suspiciousPatterns.some((p) => lowerUrl.includes(p))) {
     res.json({
       safe: false,
       action: "rejected" as const,
@@ -173,7 +174,6 @@ router.post("/media", async (req: Request, res: Response) => {
     return;
   }
 
-  // Videos and GIFs go to pending_review by default for human moderation
   if (mediaType === "video" || mediaType === "gif") {
     res.json({
       safe: true,
@@ -185,14 +185,7 @@ router.post("/media", async (req: Request, res: Response) => {
     return;
   }
 
-  // Images: approved by default (URL check passed)
-  res.json({
-    safe: true,
-    action: "approved" as const,
-    categories: [],
-    score: 0,
-    reason: null,
-  });
+  res.json({ safe: true, action: "approved" as const, categories: [], score: 0, reason: null });
 });
 
 export default router;

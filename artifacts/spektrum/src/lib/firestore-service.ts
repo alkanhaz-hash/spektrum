@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   getDoc,
@@ -129,8 +130,12 @@ export async function getStory(id: string): Promise<Story | null> {
   return { id: snap.id, ...snap.data() } as Story;
 }
 
-export async function getStoriesByAuthor(authorId: string): Promise<Story[]> {
-  const q = query(collection(db, "stories"), where("authorId", "==", authorId));
+export async function getStoriesByAuthor(authorId: string, publishedOnly = false): Promise<Story[]> {
+  // BUG FIX: publishedOnly=true olunca yalnızca yayınlanmış hikayeler döndürülür.
+  // Sahip kendi profilini görüntülerken tüm statüler, yabancı görüntülerken sadece published gelir.
+  const constraints = [where("authorId", "==", authorId)];
+  if (publishedOnly) constraints.push(where("status", "==", "published"));
+  const q = query(collection(db, "stories"), ...constraints);
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
@@ -151,6 +156,14 @@ export async function updateStory(id: string, data: Partial<Story>) {
 }
 
 export async function likeStory(storyId: string, userId: string) {
+  // BUG FIX: Dedup kontrolü — aynı kullanıcı birden fazla beğeni ekleyemesin
+  const existingQ = query(
+    collection(db, "storyLikes"),
+    where("storyId", "==", storyId),
+    where("userId", "==", userId)
+  );
+  const existing = await getDocs(existingQ);
+  if (!existing.empty) return;
   await updateDoc(doc(db, "stories", storyId), { likeCount: increment(1) });
   await addDoc(collection(db, "storyLikes"), { storyId, userId, createdAt: serverTimestamp() });
 }
@@ -239,19 +252,22 @@ export async function likeInlineComment(commentId: string, userId: string, liked
 // ─── CONVERSATIONS & MESSAGES ─────────────────────────────────────────────────
 
 export async function getOrCreateConversation(uid1: string, uid2: string, names: Record<string, string>, avatars: Record<string, string>): Promise<string> {
-  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid1));
-  const snap = await getDocs(q);
-  const existing = snap.docs.find(d => d.data().participants.includes(uid2));
-  if (existing) return existing.id;
-  const ref = await addDoc(collection(db, "conversations"), {
-    participants: [uid1, uid2],
-    participantNames: names,
-    participantAvatars: avatars,
-    lastMessage: "",
-    lastMessageAt: serverTimestamp(),
-    unreadCount: { [uid1]: 0, [uid2]: 0 },
-  });
-  return ref.id;
+  // BUG FIX: Deterministik ID kullan — addDoc her çağrıda yeni belge üretiyordu.
+  // İki kullanıcı arasında her zaman aynı konuşma ID'si elde edilir.
+  const conversationId = [uid1, uid2].sort().join("_");
+  const convRef = doc(db, "conversations", conversationId);
+  const snap = await getDoc(convRef);
+  if (!snap.exists()) {
+    await setDoc(convRef, {
+      participants: [uid1, uid2],
+      participantNames: names,
+      participantAvatars: avatars,
+      lastMessage: "",
+      lastMessageAt: serverTimestamp(),
+      unreadCount: { [uid1]: 0, [uid2]: 0 },
+    });
+  }
+  return conversationId;
 }
 
 export function getConversations(uid: string, callback: (convs: Conversation[]) => void) {
@@ -266,10 +282,16 @@ export function getConversations(uid: string, callback: (convs: Conversation[]) 
 
 export async function sendMessage(data: Omit<Message, "id" | "createdAt">) {
   const ref = await addDoc(collection(db, "messages"), { ...data, createdAt: serverTimestamp() });
-  await updateDoc(doc(db, "conversations", data.conversationId), {
+  // BUG FIX: Karşı tarafın okunmamış sayacını artır
+  const convSnap = await getDoc(doc(db, "conversations", data.conversationId));
+  const participants = (convSnap.data()?.participants ?? []) as string[];
+  const otherId = participants.find(p => p !== data.senderId);
+  const convUpdate: Record<string, unknown> = {
     lastMessage: data.text || (data.mediaType === "image" ? "📷 Fotoğraf" : "GIF"),
     lastMessageAt: serverTimestamp(),
-  });
+  };
+  if (otherId) convUpdate[`unreadCount.${otherId}`] = increment(1);
+  await updateDoc(doc(db, "conversations", data.conversationId), convUpdate);
   return ref.id;
 }
 
@@ -448,6 +470,10 @@ export async function deleteQuestion(questionId: string): Promise<void> {
 
 export async function incrementUserReadCount(uid: string): Promise<void> {
   await updateDoc(doc(db, "users", uid), { readCount: increment(1) });
+}
+
+export async function incrementChapterReadCount(chapterId: string): Promise<void> {
+  await updateDoc(doc(db, "chapters", chapterId), { readCount: increment(1) });
 }
 
 export const GENRES = [

@@ -27,6 +27,7 @@ export interface UserProfile {
   readCount: number;
   createdAt: unknown;
   role: "user" | "moderator" | "admin";
+  emailVerified?: boolean;
   status?: string;
   instagram?: string;
   tiktok?: string;
@@ -69,6 +70,7 @@ export async function loginUser(email: string, password: string): Promise<User> 
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {
+    // BUG FIX: emailVerified alanı eklendi (registerUser ile şema tutarlılığı)
     await setDoc(userRef, {
       uid: credential.user.uid,
       displayName: credential.user.displayName || credential.user.email?.split("@")[0] || "Kullanıcı",
@@ -83,6 +85,7 @@ export async function loginUser(email: string, password: string): Promise<User> 
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
+      emailVerified: credential.user.emailVerified,
     });
   }
   return credential.user;
@@ -94,6 +97,7 @@ export async function loginWithGoogle(): Promise<User> {
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {
+    // BUG FIX: emailVerified alanı eklendi
     await setDoc(userRef, {
       uid: credential.user.uid,
       displayName: credential.user.displayName || "Kullanıcı",
@@ -108,6 +112,7 @@ export async function loginWithGoogle(): Promise<User> {
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
+      emailVerified: credential.user.emailVerified,
     });
   }
   return credential.user;
@@ -123,29 +128,32 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return snap.data() as UserProfile;
 }
 
-export async function ensureUserProfile(user: import("firebase/auth").User): Promise<UserProfile> {
+export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
-  if (!snap.exists()) {
-    const data: UserProfile = {
-      uid: user.uid,
-      displayName: user.displayName || user.email?.split("@")[0] || "Kullanıcı",
-      email: user.email || "",
-      bio: "",
-      avatarUrl: user.photoURL || "",
-      coverUrl: "",
-      genre: "",
-      followerCount: 0,
-      followingCount: 0,
-      storyCount: 0,
-      readCount: 0,
-      createdAt: serverTimestamp(),
-      role: "user",
-    };
-    await setDoc(userRef, data);
-    return data;
+  if (snap.exists()) {
+    return snap.data() as UserProfile;
   }
-  return snap.data() as UserProfile;
+  // BUG FIX: setDoc sonrası getDoc yapılıyor — serverTimestamp() sentinel değil,
+  // Firestore'un çözülmüş gerçek değeri döndürülüyor.
+  await setDoc(userRef, {
+    uid: user.uid,
+    displayName: user.displayName || user.email?.split("@")[0] || "Kullanıcı",
+    email: user.email || "",
+    bio: "",
+    avatarUrl: user.photoURL || "",
+    coverUrl: "",
+    genre: "",
+    followerCount: 0,
+    followingCount: 0,
+    storyCount: 0,
+    readCount: 0,
+    createdAt: serverTimestamp(),
+    role: "user",
+    emailVerified: user.emailVerified,
+  });
+  const freshSnap = await getDoc(userRef);
+  return freshSnap.data() as UserProfile;
 }
 
 export async function updateUserProfile(

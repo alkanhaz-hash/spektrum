@@ -18,8 +18,6 @@ import { moderateText } from "@/lib/moderation-service";
 import { correctText, countDiff } from "@/lib/text-corrector";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 const schema = z.object({
   title: z.string().min(1, "Başlık zorunlu").max(200),
@@ -283,12 +281,13 @@ export default function ChapterEditorPage() {
     setSaving(true);
     try {
       if (chapterId === "new") {
-        const ref = await addDoc(collection(db, "chapters"), {
+        // BUG FIX: addDoc yerine createChapter kullanıldı — chapterCount artık doğru güncelleniyor
+        const newId = await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
-          wordCount, readCount: 0, status: "draft", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+          wordCount, status: "draft",
         });
         toast({ title: "Taslak kaydedildi" });
-        setLocation(`/write/${storyId}/chapter/${ref.id}`);
+        setLocation(`/write/${storyId}/chapter/${newId}`);
       } else {
         await updateChapter(chapterId, { title: data.title, content: data.content, status: "draft", wordCount });
         toast({ title: "Taslak güncellendi" });
@@ -312,11 +311,11 @@ export default function ChapterEditorPage() {
       setModerationReason(result.reason);
 
       if (chapterId === "new") {
-        await addDoc(collection(db, "chapters"), {
+        // BUG FIX: addDoc yerine createChapter — chapterCount doğru artıyor
+        await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
-          wordCount, readCount: 0, status: chapterStatus,
+          wordCount, status: chapterStatus,
           ...(result.categories.length ? { moderationCategories: result.categories } : {}),
-          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         });
       } else {
         await updateChapter(chapterId, {

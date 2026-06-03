@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getStory, getChapter, getChaptersByStory, getInlineComments,
-  addInlineComment, likeInlineComment,
+  addInlineComment, likeInlineComment, incrementUserReadCount, incrementChapterReadCount,
   Story, Chapter, InlineComment
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
@@ -128,6 +128,9 @@ export default function ReadPage() {
       setAllChapters(allCh.filter(c => c.status === "published"));
       setComments(cmts);
       setLoading(false);
+      // BUG FIX: Bölüm ve kullanıcı okuma sayaçlarını artır (önceden hiç çağrılmıyordu)
+      incrementChapterReadCount(chapterId).catch(() => {});
+      if (user) incrementUserReadCount(user.uid).catch(() => {});
     }).catch(() => setLoading(false));
   }, [storyId, chapterId]);
 
