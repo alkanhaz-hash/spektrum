@@ -19,6 +19,11 @@ Image moderation runs in the browser (nsfwjs, zero credit) and text moderation i
 
 **Why:** an earlier version auto-published from the client the moment client text moderation returned `approved`, which is bypassable and was rejected in review as an unmoderated-publish hole. The fix requires BOTH sides to agree: `chapter-editor.tsx` submits `pending_review` (never `published`) and rejected content is not persisted at all; the moderator panel (`updateChapterStatus`) is the only path to `published`. **If you relax the rule, you must also change the client, and vice-versa — they are a matched pair.**
 
+## Ownership fields must be immutable on update, not just checked on create
+Checking `resource.data.authorId == request.auth.uid` on a story/chapter update only proves you owned the OLD doc — it does not stop you reassigning the doc to someone else. A chapter update validated only on `resource.data.storyId` lets a hostile client change `request.resource.data.storyId` to another user's story (ownership-transfer / integrity bypass).
+
+**How to apply:** for non-moderator updates, also assert the ownership/parent field is unchanged: `request.resource.data.storyId == resource.data.storyId` (chapters) and `request.resource.data.authorId == resource.data.authorId` (stories). Moderators are exempt.
+
 ## Cross-user counter writes
 Likes/comments/read counts are incremented by users who don't own the doc (e.g. `likeStory`, `addInlineComment`). Rules allow non-owner updates only when `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...counter fields])`. Bounded counter inflation is an accepted residual risk; content tampering is blocked.
 
