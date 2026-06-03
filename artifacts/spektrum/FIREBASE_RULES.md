@@ -51,8 +51,9 @@ elle güncelleyin.
   yazar ve **rolünü değiştiremez** (yetki yükseltme engeli).
 - **stories**: yalnızca yazar düzenler/siler; diğer kullanıcılar yalnızca
   beğeni/yorum/okunma sayaçlarını güncelleyebilir.
-- **chapters**: yalnızca hikaye sahibi (veya moderatör) oluşturur/düzenler/siler;
-  diğer kullanıcılar yalnızca okunma sayacını artırabilir.
+- **chapters**: yalnızca hikaye sahibi oluşturur/düzenler/siler ve **kendi
+  bölümünü `published` yapamaz** (yalnızca `draft`/`pending_review`); yayına alma
+  yalnızca moderatöre aittir. Diğer kullanıcılar yalnızca okunma sayacını artırır.
 - **conversations / messages**: yalnızca konuşmanın katılımcıları okur; gönderen
   kendi adına mesaj yazar.
 - **storage**: yüklemeler kimlik doğrulamalı, içerik tipi ve boyut sınırlı

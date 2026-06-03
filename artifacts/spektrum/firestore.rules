@@ -60,15 +60,19 @@ service cloud.firestore {
     }
 
     // ─── CHAPTERS ───────────────────────────────────────────────────────────
-    // Bölümü yalnızca hikaye sahibi oluşturur/düzenler/siler. Moderatör de
-    // (panelden onay/red için) yazabilir. Diğer kullanıcılar yalnızca okunma
-    // sayacını artırabilir.
+    // Bölümü yalnızca hikaye sahibi oluşturur/düzenler/siler ama KENDİ BÖLÜMÜNÜ
+    // 'published'/'rejected' yapamaz — yalnızca 'draft' veya 'pending_review'
+    // yazabilir. Yayına alma/reddetme yalnızca moderatöre aittir. Diğer
+    // kullanıcılar yalnızca okunma sayacını artırabilir.
     match /chapters/{chapterId} {
       allow read: if true;
       allow create: if isSignedIn()
-                    && storyAuthor(request.resource.data.storyId) == request.auth.uid;
+                    && storyAuthor(request.resource.data.storyId) == request.auth.uid
+                    && request.resource.data.status in ['draft', 'pending_review'];
       allow update: if isModerator()
-                    || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid)
+                    || (isSignedIn()
+                        && storyAuthor(resource.data.storyId) == request.auth.uid
+                        && request.resource.data.status in ['draft', 'pending_review'])
                     || (isSignedIn() && changedKeys().hasOnly(['readCount']));
       allow delete: if isModerator()
                     || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid);

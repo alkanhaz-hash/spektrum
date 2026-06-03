@@ -310,9 +310,17 @@ export default function ChapterEditorPage() {
 
     try {
       const result = await moderateText(data.content, "tr");
-      const chapterStatus = result.action === "approved" ? "published" : result.action;
-      setModerationStatus(result.action);
+      setModerationStatus(result.action === "rejected" ? "rejected" : "pending_review");
       setModerationReason(result.reason);
+
+      // Yüksek riskli içerik anında reddedilir ve kaydedilmez.
+      if (result.action === "rejected") {
+        toast({ title: "Yayınlanamadı", description: result.reason || "İçerik uyumsuz bulundu.", variant: "destructive" });
+        return;
+      }
+
+      // Yayına alma yalnızca moderatöre aittir — temiz içerik bile önce incelemeye gönderilir.
+      const chapterStatus: Chapter["status"] = "pending_review";
 
       if (chapterId === "new") {
         // BUG FIX: addDoc yerine createChapter — chapterCount doğru artıyor
@@ -331,14 +339,8 @@ export default function ChapterEditorPage() {
         });
       }
 
-      if (result.action === "approved") {
-        toast({ title: "Bölüm yayınlandı!", description: "Okuyucular artık görebilir." });
-        setTimeout(() => setLocation(`/write/${storyId}`), 1500);
-      } else if (result.action === "pending_review") {
-        toast({ title: "Moderatör incelemesine gönderildi", description: "Bölümün onaylanınca yayınlanacak." });
-      } else {
-        toast({ title: "Yayınlanamadı", description: result.reason || "İçerik uyumsuz bulundu.", variant: "destructive" });
-      }
+      toast({ title: "Moderatör incelemesine gönderildi", description: "Bölüm onaylanınca yayınlanacak." });
+      setTimeout(() => setLocation(`/write/${storyId}`), 1500);
     } catch {
       toast({ title: "Hata", description: "Yayınlama sırasında bir sorun oluştu.", variant: "destructive" });
       setModerationStatus("idle");
