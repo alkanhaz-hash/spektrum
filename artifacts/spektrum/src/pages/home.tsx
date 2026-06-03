@@ -18,7 +18,7 @@ export default function HomePage() {
     getDiscoverFeed().then(res => {
       setDiscoverStories(res);
       setDiscoverLoading(false);
-    }).catch(console.error);
+    }).catch(() => setDiscoverLoading(false));
   }, []);
 
   return (

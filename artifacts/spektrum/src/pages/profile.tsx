@@ -127,6 +127,7 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (avatarPreview.startsWith("blob:")) URL.revokeObjectURL(avatarPreview);
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };
@@ -134,6 +135,7 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (coverPreview.startsWith("blob:")) URL.revokeObjectURL(coverPreview);
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
   };
@@ -472,10 +474,10 @@ export default function ProfilePage() {
           getNarrationsByNarrator(uid),
         ]);
         setProfile(p);
-        setStories(s.filter(st => st.status === "published" || isOwner));
+        setStories(s);
         setNarrations(narrs);
-      } catch (err: any) {
-        setError(err?.message || "Profil yüklenemedi");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Profil yüklenemedi");
       } finally {
         setLoading(false);
       }

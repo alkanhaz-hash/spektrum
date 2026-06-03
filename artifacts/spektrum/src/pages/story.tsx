@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
+import { Timestamp } from "firebase/firestore";
 import {
-  getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory,
+  getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, hasUserLikedStory,
   getNarrationsByStory, getNarrationRequest, createNarrationRequest, uploadNarration, deleteNarration,
   getOrCreateConversation, sendMessage,
   Story, Chapter, TalentPortfolio, Narration, NarrationRequest,
@@ -137,10 +138,9 @@ function NarrationsTab({ story }: { story: Story }) {
         text: msg,
       });
 
-      setMyRequest({ id: reqId, storyId: story.id, storyTitle: story.title, narratorId: user.uid, narratorName: profile.displayName, narratorAvatar: profile.avatarUrl || "", authorId: story.authorId, status: "pending", conversationId: convId, createdAt: null as any });
+      setMyRequest({ id: reqId, storyId: story.id, storyTitle: story.title, narratorId: user.uid, narratorName: profile.displayName, narratorAvatar: profile.avatarUrl || "", authorId: story.authorId, status: "pending", conversationId: convId, createdAt: Timestamp.now() });
       toast({ title: "İzin isteği gönderildi!", description: "Yazara DM olarak mesaj iletildi." });
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast({ title: "Hata", description: "İstek gönderilemedi.", variant: "destructive" });
     } finally {
       setRequesting(false);
@@ -353,7 +353,7 @@ function NarrationsTab({ story }: { story: Story }) {
                       <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-1.5 py-0.5 rounded-full leading-none">👑 Yazar</span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{Math.floor(n.durationSeconds / 60)}:{String(n.durationSeconds % 60).padStart(2, "0")} dakika</p>
+                  <p className="text-xs text-muted-foreground">{Math.floor(n.durationSeconds / 60)}:{String(n.durationSeconds % 60).padStart(2, "0")}</p>
                 </div>
                 <Mic className="w-4 h-4 text-primary/50" />
               </div>
@@ -384,13 +384,15 @@ export default function StoryPage() {
       getStory(id),
       getChaptersByStory(id),
       getTalentPortfoliosByStory(id),
-    ]).then(([s, ch, t]) => {
+      user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
+    ]).then(([s, ch, t, alreadyLiked]) => {
       setStory(s);
       setChapters(ch.filter(c => c.status === "published"));
       setTalents(t);
+      setLiked(alreadyLiked);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [id]);
+  }, [id, user?.uid]);
 
   const handleLike = async () => {
     if (!user || !story) return;

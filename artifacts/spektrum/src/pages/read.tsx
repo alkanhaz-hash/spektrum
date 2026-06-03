@@ -125,12 +125,15 @@ export default function ReadPage() {
     ]).then(([s, ch, allCh, cmts]) => {
       setStory(s);
       setChapter(ch);
-      setAllChapters(allCh.filter(c => c.status === "published"));
+      setAllChapters(allCh.filter(c => c.status === "published" || c.id === chapterId));
       setComments(cmts);
       setLoading(false);
-      // BUG FIX: Bölüm ve kullanıcı okuma sayaçlarını artır (önceden hiç çağrılmıyordu)
-      incrementChapterReadCount(chapterId).catch(() => {});
-      if (user) incrementUserReadCount(user.uid).catch(() => {});
+      const sessionKey = `spektrum_read_${chapterId}`;
+      if (!sessionStorage.getItem(sessionKey)) {
+        sessionStorage.setItem(sessionKey, "1");
+        incrementChapterReadCount(chapterId).catch(() => {});
+        if (user) incrementUserReadCount(user.uid).catch(() => {});
+      }
     }).catch(() => setLoading(false));
   }, [storyId, chapterId]);
 

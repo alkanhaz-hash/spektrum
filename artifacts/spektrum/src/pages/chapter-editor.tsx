@@ -264,13 +264,17 @@ export default function ChapterEditorPage() {
   useEffect(() => {
     if (!user) { setLocation("/auth"); return; }
     if (chapterId === "new") {
-      getChaptersByStory(storyId).then(chs => { setNextOrder(chs.length + 1); setLoading(false); });
+      getChaptersByStory(storyId)
+        .then(chs => { setNextOrder(chs.length + 1); setLoading(false); })
+        .catch(() => setLoading(false));
       return;
     }
-    getChapter(chapterId).then(ch => {
-      if (ch) { setChapter(ch); form.reset({ title: ch.title, content: ch.content }); }
-      setLoading(false);
-    });
+    getChapter(chapterId)
+      .then(ch => {
+        if (ch) { setChapter(ch); form.reset({ title: ch.title, content: ch.content }); }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [chapterId, user]);
 
   const wordCount = form.watch("content").split(/\s+/).filter(Boolean).length;

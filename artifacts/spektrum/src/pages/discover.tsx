@@ -79,7 +79,9 @@ export default function DiscoverPage() {
   const { data: trending, isLoading: trendingLoading } = useGetTrendingStories();
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("genre")
+  );
 
   useEffect(() => {
     getDiscoverFeed().then(res => {

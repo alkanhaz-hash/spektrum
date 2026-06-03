@@ -9,7 +9,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   limit,
   onSnapshot,
   serverTimestamp,
@@ -17,9 +16,6 @@ import {
   arrayUnion,
   arrayRemove,
   Timestamp,
-  startAfter,
-  QueryDocumentSnapshot,
-  DocumentData,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -168,6 +164,16 @@ export async function likeStory(storyId: string, userId: string) {
   await addDoc(collection(db, "storyLikes"), { storyId, userId, createdAt: serverTimestamp() });
 }
 
+export async function hasUserLikedStory(storyId: string, userId: string): Promise<boolean> {
+  const q = query(
+    collection(db, "storyLikes"),
+    where("storyId", "==", storyId),
+    where("userId", "==", userId)
+  );
+  const snap = await getDocs(q);
+  return !snap.empty;
+}
+
 // ─── CHAPTERS ────────────────────────────────────────────────────────────────
 
 export async function createChapter(data: Omit<Chapter, "id" | "createdAt" | "updatedAt" | "readCount">) {
@@ -293,6 +299,12 @@ export async function sendMessage(data: Omit<Message, "id" | "createdAt">) {
   if (otherId) convUpdate[`unreadCount.${otherId}`] = increment(1);
   await updateDoc(doc(db, "conversations", data.conversationId), convUpdate);
   return ref.id;
+}
+
+export async function markConversationRead(conversationId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, "conversations", conversationId), {
+    [`unreadCount.${userId}`]: 0,
+  });
 }
 
 export function listenMessages(conversationId: string, callback: (msgs: Message[]) => void) {

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Image, Smile, ChevronLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import { getConversations, listenMessages, sendMessage, Conversation, Message } from "@/lib/firestore-service";
+import { getConversations, listenMessages, sendMessage, markConversationRead, Conversation, Message } from "@/lib/firestore-service";
 import { uploadMessageMedia } from "@/lib/storage-service";
 import { moderateMedia } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +44,11 @@ export default function MessagesPage() {
     const unsub = listenMessages(conversationId, (msgs) => setMessages(msgs));
     return () => { if (typeof unsub === "function") unsub(); };
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || !user) return;
+    markConversationRead(conversationId, user.uid).catch(() => {});
+  }, [conversationId, user?.uid]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

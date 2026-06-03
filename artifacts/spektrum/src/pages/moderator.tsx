@@ -25,7 +25,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function ModeratorPage() {
   const [, setLocation] = useLocation();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +33,8 @@ export default function ModeratorPage() {
 
   useEffect(() => {
     if (!user) { setLocation("/auth"); return; }
-    if (profile && profile.role !== "moderator" && profile.role !== "admin") {
+    if (authLoading) return;
+    if (!profile || (profile.role !== "moderator" && profile.role !== "admin")) {
       setLocation("/");
       return;
     }
@@ -45,7 +46,7 @@ export default function ModeratorPage() {
       setItems(withTitles);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [user, profile]);
+  }, [user, profile, authLoading]);
 
   const handleDecision = async (chapterId: string, decision: "published" | "rejected") => {
     setProcessing(chapterId);

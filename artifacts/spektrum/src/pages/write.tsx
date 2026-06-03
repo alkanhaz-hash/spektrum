@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { createStory, getStory, getChaptersByStory, updateStory, Story, Chapter, GENRES } from "@/lib/firestore-service";
-import { uploadStoryCover } from "@/lib/storage-service";
+import { uploadStoryCover, deleteFile } from "@/lib/storage-service";
 import { moderateMedia } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,6 +58,7 @@ export default function WritePage() {
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (coverPreview.startsWith("blob:")) URL.revokeObjectURL(coverPreview);
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
   };
@@ -73,6 +74,7 @@ export default function WritePage() {
         coverUrl = await uploadStoryCover(tempId, coverFile);
         const modResult = await moderateMedia(coverUrl, "image");
         if (!modResult.safe) {
+          deleteFile(coverUrl).catch(() => {});
           toast({ title: "Kapak uygun değil", description: modResult.reason || "Kapak görseli uygunsuz içerik barındırıyor.", variant: "destructive" });
           setSaving(false);
           return;
