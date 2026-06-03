@@ -32,6 +32,14 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // Sayaç alanı (beğeni/yorum/okunma) yalnızca aynı kalabilir veya tam olarak
+    // +1 / -1 değişebilir — keyfi değerlerle şişirme (sahte beğeni) engellenir.
+    function counterDeltaOk(f) {
+      return request.resource.data.get(f, 0) == resource.data.get(f, 0)
+          || request.resource.data.get(f, 0) == resource.data.get(f, 0) + 1
+          || request.resource.data.get(f, 0) == resource.data.get(f, 0) - 1;
+    }
+
     function storyAuthor(storyId) {
       return get(/databases/$(database)/documents/stories/$(storyId)).data.authorId;
     }
@@ -57,7 +65,11 @@ service cloud.firestore {
                         && resource.data.authorId == request.auth.uid
                         && request.resource.data.authorId == resource.data.authorId)
                     || isModerator()
-                    || (isSignedIn() && changedKeys().hasOnly(['likeCount', 'commentCount', 'readCount']));
+                    || (isSignedIn()
+                        && changedKeys().hasOnly(['likeCount', 'commentCount', 'readCount'])
+                        && counterDeltaOk('likeCount')
+                        && counterDeltaOk('commentCount')
+                        && counterDeltaOk('readCount'));
       allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
     }
 
@@ -67,7 +79,11 @@ service cloud.firestore {
     // yazabilir. Yayına alma/reddetme yalnızca moderatöre aittir. Diğer
     // kullanıcılar yalnızca okunma sayacını artırabilir.
     match /chapters/{chapterId} {
-      allow read: if true;
+      // Yalnızca 'published' bölümler herkese açık. Taslak/incelemedeki/reddedilmiş
+      // bölümleri yalnızca hikaye sahibi veya moderatör okuyabilir.
+      allow read: if resource.data.status == 'published'
+                  || isModerator()
+                  || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid);
       allow create: if isSignedIn()
                     && storyAuthor(request.resource.data.storyId) == request.auth.uid
                     && request.resource.data.status in ['draft', 'pending_review'];
@@ -76,7 +92,7 @@ service cloud.firestore {
                         && storyAuthor(resource.data.storyId) == request.auth.uid
                         && request.resource.data.storyId == resource.data.storyId
                         && request.resource.data.status in ['draft', 'pending_review'])
-                    || (isSignedIn() && changedKeys().hasOnly(['readCount']));
+                    || (isSignedIn() && changedKeys().hasOnly(['readCount']) && counterDeltaOk('readCount'));
       allow delete: if isModerator()
                     || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid);
     }
@@ -98,6 +114,7 @@ service cloud.firestore {
                     || isModerator()
                     || (isSignedIn()
                         && changedKeys().hasOnly(['likeCount', 'likedBy'])
+                        && counterDeltaOk('likeCount')
                         && resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet())
                              .union(request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()))
                            == [request.auth.uid].toSet());
@@ -125,7 +142,15 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.resource.data.senderId == request.auth.uid
                     && request.auth.uid in get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participants;
-      allow update, delete: if (isSignedIn() && resource.data.senderId == request.auth.uid) || isModerator();
+      // Gönderen kendi mesajını düzenleyebilir ama gönderen kimliğini/adını ve
+      // konuşmayı DEĞİŞTİREMEZ (başka konuşmaya taşıma / kimlik sahteciliği engellenir).
+      allow update: if (isSignedIn()
+                        && resource.data.senderId == request.auth.uid
+                        && request.resource.data.senderId == resource.data.senderId
+                        && request.resource.data.senderName == resource.data.senderName
+                        && request.resource.data.conversationId == resource.data.conversationId)
+                    || isModerator();
+      allow delete: if (isSignedIn() && resource.data.senderId == request.auth.uid) || isModerator();
     }
 
     // ─── TALENT PORTFOLIOS ──────────────────────────────────────────────────
@@ -134,7 +159,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if (isSignedIn() && resource.data.userId == request.auth.uid)
                     || isModerator()
-                    || (isSignedIn() && changedKeys().hasOnly(['likeCount']));
+                    || (isSignedIn() && changedKeys().hasOnly(['likeCount']) && counterDeltaOk('likeCount'));
       allow delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isModerator();
     }
 

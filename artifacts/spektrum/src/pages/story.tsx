@@ -382,7 +382,7 @@ export default function StoryPage() {
     if (!id) return;
     Promise.all([
       getStory(id),
-      getChaptersByStory(id),
+      getChaptersByStory(id, true),
       getTalentPortfoliosByStory(id),
       user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
     ]).then(([s, ch, t, alreadyLiked]) => {

@@ -29,8 +29,16 @@ A "participant in conversation" update rule that only checks membership lets a p
 
 **How to apply:** restrict conversation updates to non-membership fields via `changedKeys().hasOnly(['lastMessage','lastMessageAt','unreadCount'])` (participants becomes immutable). For self-only array toggles, require the symmetric set-difference to equal exactly the caller: `before.toSet().difference(after.toSet()).union(after.toSet().difference(before.toSet())) == [request.auth.uid].toSet()`.
 
-## Cross-user counter writes
-Likes/comments/read counts are incremented by users who don't own the doc (e.g. `likeStory`, `addInlineComment`). Rules allow non-owner updates only when `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...counter fields])`. Bounded counter inflation is an accepted residual risk; content tampering is blocked.
+## Cross-user counter writes — must bound the delta, not just the field set
+Likes/comments/read counts are incremented by users who don't own the doc (e.g. `likeStory`, `addInlineComment`). `hasOnly([...counter fields])` alone lets any signed-in user set a counter to an ARBITRARY value (fake 9999 likes). Constrain the magnitude too: a `counterDeltaOk(f)` rule helper requires each changed counter to stay equal or move by exactly ±1 (`request.resource.data.get(f,0) == resource.data.get(f,0) (±1)`). All client increments are `increment(±1)`, so this is non-breaking.
+
+**Why:** field-set checks stop content tampering but not metric fraud. **How to apply:** any non-owner counter path (stories like/comment/read, chapters read, inlineComments like, talentPortfolios like) must AND `counterDeltaOk('<field>')` for every counter in its `hasOnly` list.
+
+## Public reads must be status-gated; reader queries must match the rule
+`chapters` was world-readable (`allow read: if true`), leaking drafts/pending/rejected content. Gate it: `status=='published' || isModerator() || (signedIn && storyAuthor==uid)`. **Firestore rejects a list query if ANY potentially-returned doc would be unreadable** — so the matching client query must filter to the readable set. `getChaptersByStory(storyId, publishedOnly)` passes `true` from reader pages (story.tsx, read.tsx) and `false` from author pages (chapter-editor, write — the author clause covers their own drafts). Order the rule with `status=='published'` first so `||` short-circuits and anonymous reads skip the `storyAuthor` get().
+
+## Never store PII (email) in a publicly-readable doc
+`users` docs are `read: if true` (needed for public profile name/avatar/bio), but they also stored `email` — so anyone, even logged-out, could scrape every user's email. Firestore reads are all-or-nothing per doc (can't hide one field), so the fix is to NOT put PII there: email/emailVerified were removed from `users` entirely. The owner's own email is always available via Firebase Auth (`auth.currentUser.email`); no other user needs it. `ensureUserProfile` strips legacy `email`/`emailVerified` from existing docs via `deleteField()` on next login (covers already-stored data without a manual migration).
 
 ## Deployment is manual
 Rules are NOT deployed from Replit. The user runs `firebase deploy --only firestore:rules,storage` from `artifacts/spektrum/` (config in `firebase.json` + `.firebaserc`, project `spektrum-5c7cc`). See `artifacts/spektrum/FIREBASE_RULES.md`.

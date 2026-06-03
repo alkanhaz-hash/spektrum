@@ -120,7 +120,7 @@ export default function ReadPage() {
     Promise.all([
       getStory(storyId),
       getChapter(chapterId),
-      getChaptersByStory(storyId),
+      getChaptersByStory(storyId, true),
       getInlineComments(chapterId),
     ]).then(([s, ch, allCh, cmts]) => {
       setStory(s);

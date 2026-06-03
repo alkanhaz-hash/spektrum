@@ -10,13 +10,16 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
+// GÜVENLİK NOTU: e-posta (ve emailVerified) artık Firestore `users` belgesinde
+// TUTULMAZ. `users` belgeleri herkese açık okunabilir (profil ad/avatar/bio için);
+// e-posta bir PII olduğundan oraya yazılmaz. Kullanıcının kendi e-postası her zaman
+// Firebase Auth üzerinden (auth.currentUser.email) erişilebilir.
 export interface UserProfile {
   uid: string;
   displayName: string;
-  email: string;
   bio: string;
   avatarUrl: string;
   coverUrl: string;
@@ -27,7 +30,6 @@ export interface UserProfile {
   readCount: number;
   createdAt: unknown;
   role: "user" | "moderator" | "admin";
-  emailVerified?: boolean;
   status?: string;
   instagram?: string;
   tiktok?: string;
@@ -44,7 +46,6 @@ export async function registerUser(
   await setDoc(doc(db, "users", credential.user.uid), {
     uid: credential.user.uid,
     displayName,
-    email,
     bio: "",
     avatarUrl: "",
     coverUrl: "",
@@ -55,7 +56,6 @@ export async function registerUser(
     readCount: 0,
     createdAt: serverTimestamp(),
     role: "user",
-    emailVerified: false,
   });
   await sendEmailVerification(credential.user);
   return credential.user;
@@ -70,11 +70,9 @@ export async function loginUser(email: string, password: string): Promise<User> 
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {
-    // BUG FIX: emailVerified alanı eklendi (registerUser ile şema tutarlılığı)
     await setDoc(userRef, {
       uid: credential.user.uid,
       displayName: credential.user.displayName || credential.user.email?.split("@")[0] || "Kullanıcı",
-      email: credential.user.email,
       bio: "",
       avatarUrl: credential.user.photoURL || "",
       coverUrl: "",
@@ -85,7 +83,6 @@ export async function loginUser(email: string, password: string): Promise<User> 
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
-      emailVerified: credential.user.emailVerified,
     });
   }
   return credential.user;
@@ -97,11 +94,9 @@ export async function loginWithGoogle(): Promise<User> {
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {
-    // BUG FIX: emailVerified alanı eklendi
     await setDoc(userRef, {
       uid: credential.user.uid,
       displayName: credential.user.displayName || "Kullanıcı",
-      email: credential.user.email,
       bio: "",
       avatarUrl: credential.user.photoURL || "",
       coverUrl: "",
@@ -112,7 +107,6 @@ export async function loginWithGoogle(): Promise<User> {
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
-      emailVerified: credential.user.emailVerified,
     });
   }
   return credential.user;
@@ -132,14 +126,19 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
   if (snap.exists()) {
-    return snap.data() as UserProfile;
+    const data = snap.data();
+    // GÜVENLİK: eski belgelerde e-posta/emailVerified herkese açık okunabiliyordu.
+    // Kullanıcı her oturum açtığında bu PII alanlarını Firestore'dan temizle.
+    if ("email" in data || "emailVerified" in data) {
+      await updateDoc(userRef, { email: deleteField(), emailVerified: deleteField() });
+    }
+    return data as UserProfile;
   }
   // BUG FIX: setDoc sonrası getDoc yapılıyor — serverTimestamp() sentinel değil,
   // Firestore'un çözülmüş gerçek değeri döndürülüyor.
   await setDoc(userRef, {
     uid: user.uid,
     displayName: user.displayName || user.email?.split("@")[0] || "Kullanıcı",
-    email: user.email || "",
     bio: "",
     avatarUrl: user.photoURL || "",
     coverUrl: "",
@@ -150,7 +149,6 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     readCount: 0,
     createdAt: serverTimestamp(),
     role: "user",
-    emailVerified: user.emailVerified,
   });
   const freshSnap = await getDoc(userRef);
   return freshSnap.data() as UserProfile;

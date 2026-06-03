@@ -190,8 +190,10 @@ export async function createChapter(data: Omit<Chapter, "id" | "createdAt" | "up
   return ref.id;
 }
 
-export async function getChaptersByStory(storyId: string): Promise<Chapter[]> {
-  const q = query(collection(db, "chapters"), where("storyId", "==", storyId));
+export async function getChaptersByStory(storyId: string, publishedOnly = false): Promise<Chapter[]> {
+  const constraints = [where("storyId", "==", storyId)];
+  if (publishedOnly) constraints.push(where("status", "==", "published"));
+  const q = query(collection(db, "chapters"), ...constraints);
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Chapter))
