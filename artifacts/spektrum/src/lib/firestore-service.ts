@@ -313,6 +313,87 @@ export async function getDiscoverFeed(): Promise<Story[]> {
     .slice(0, 20);
 }
 
+// ─── NARRATIONS ───────────────────────────────────────────────────────────────
+
+export interface NarrationRequest {
+  id: string;
+  storyId: string;
+  storyTitle: string;
+  narratorId: string;
+  narratorName: string;
+  narratorAvatar: string;
+  authorId: string;
+  status: "pending" | "approved" | "rejected";
+  conversationId?: string;
+  createdAt: Timestamp;
+}
+
+export interface Narration {
+  id: string;
+  storyId: string;
+  storyTitle: string;
+  storyCoverUrl: string;
+  narratorId: string;
+  narratorName: string;
+  narratorAvatar: string;
+  authorId: string;
+  authorName: string;
+  audioUrl: string;
+  durationSeconds: number;
+  createdAt: Timestamp;
+}
+
+export async function createNarrationRequest(data: Omit<NarrationRequest, "id" | "createdAt">): Promise<string> {
+  const ref = await addDoc(collection(db, "narrationRequests"), {
+    ...data,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function getNarrationRequest(storyId: string, narratorId: string): Promise<NarrationRequest | null> {
+  const q = query(
+    collection(db, "narrationRequests"),
+    where("storyId", "==", storyId),
+    where("narratorId", "==", narratorId)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() } as NarrationRequest;
+}
+
+export async function updateNarrationRequest(id: string, status: "approved" | "rejected"): Promise<void> {
+  await updateDoc(doc(db, "narrationRequests", id), { status });
+}
+
+export async function getNarrationsByStory(storyId: string): Promise<Narration[]> {
+  const q = query(collection(db, "narrations"), where("storyId", "==", storyId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Narration))
+    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+}
+
+export async function getNarrationsByNarrator(narratorId: string): Promise<Narration[]> {
+  const q = query(collection(db, "narrations"), where("narratorId", "==", narratorId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as Narration))
+    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+}
+
+export async function uploadNarration(data: Omit<Narration, "id" | "createdAt">): Promise<string> {
+  const ref = await addDoc(collection(db, "narrations"), {
+    ...data,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function deleteNarration(id: string): Promise<void> {
+  await deleteDoc(doc(db, "narrations", id));
+}
+
 // ─── ANONYMOUS QUESTIONS ──────────────────────────────────────────────────────
 
 export interface AnonymousQuestion {

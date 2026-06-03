@@ -57,6 +57,25 @@ export async function uploadUserAvatar(uid: string, file: File): Promise<string>
   return getDownloadURL(storageRef);
 }
 
+export async function uploadNarrationAudio(storyId: string, narratorId: string, file: File): Promise<number> {
+  // Returns duration in seconds via AudioContext
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio(url);
+    audio.addEventListener("loadedmetadata", () => {
+      URL.revokeObjectURL(url);
+      resolve(Math.round(audio.duration) || 0);
+    });
+    audio.addEventListener("error", () => { URL.revokeObjectURL(url); resolve(0); });
+  });
+}
+
+export async function uploadNarrationFile(storyId: string, narratorId: string, file: File): Promise<string> {
+  const storageRef = ref(storage, `narrations/${storyId}/${narratorId}.mp3`);
+  await uploadBytes(storageRef, file, { contentType: "audio/mpeg" });
+  return getDownloadURL(storageRef);
+}
+
 export async function uploadUserCover(uid: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);
   const storageRef = ref(storage, `covers/users/${uid}/cover.webp`);
