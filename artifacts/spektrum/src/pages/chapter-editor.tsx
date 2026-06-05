@@ -15,7 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { createChapter, getChapter, updateChapter, updateChapterStatus, getChaptersByStory, Chapter } from "@/lib/firestore-service";
 import { moderateText } from "@/lib/moderation-service";
-import { correctText, countDiff } from "@/lib/text-corrector";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
@@ -37,32 +36,41 @@ interface AIToolbarProps {
 function AIToolbar({ content, onContentChange }: AIToolbarProps) {
   const { toast } = useToast();
 
-  // ── Düzelt ──
-  const [correctionPreview, setCorrectionPreview] = useState<{ corrected: string; rules: string[]; diffCount: number } | null>(null);
+  // ── Düzelt (gerçek OpenAI API) ──
+  const [correctionPreview, setCorrectionPreview] = useState<{ corrected: string; changes: string[] } | null>(null);
   const [correcting, setCorrecting] = useState(false);
 
-  const handleCorrect = () => {
+  const handleCorrect = async () => {
     if (!content.trim()) {
       toast({ title: "Düzeltilecek metin yok", description: "Önce bir şeyler yaz." });
       return;
     }
     setCorrecting(true);
-    // Kısa bir gecikmeyle UI'ın donmaması için
-    setTimeout(() => {
-      const result = correctText(content);
-      const diff = countDiff(content, result.corrected);
-      if (diff === 0) {
+    try {
+      const res = await fetch("/api/correct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? "Sunucu hatası");
+      }
+      const data = await res.json() as { corrected: string; changes: string[] };
+      if (data.corrected === content || data.corrected.trim() === content.trim()) {
         toast({ title: "✅ Metin zaten temiz!", description: "Herhangi bir düzeltme gerekmedi." });
-        setCorrecting(false);
         return;
       }
-      setCorrectionPreview({
-        corrected: result.corrected,
-        rules: result.changes.map(c => c.rule),
-        diffCount: diff,
+      setCorrectionPreview({ corrected: data.corrected, changes: data.changes });
+    } catch (err) {
+      toast({
+        title: "Düzeltme başarısız",
+        description: err instanceof Error ? err.message : "Bağlantı hatası",
+        variant: "destructive",
       });
+    } finally {
       setCorrecting(false);
-    }, 200);
+    }
   };
 
   const applyCorrection = () => {
@@ -75,12 +83,18 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
   // ── Sesli Yaz ──
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
-  // Stale closure'ı önlemek için içeriği ref'te tut
+  const isListeningRef = useRef(false);
+  const lastResultIndexRef = useRef(0);
+
+  // Stale closure önleme: content ve onContentChange ref'te tutulur
   const contentRef = useRef(content);
+  const onContentChangeRef = useRef(onContentChange);
   useEffect(() => { contentRef.current = content; }, [content]);
+  useEffect(() => { onContentChangeRef.current = onContentChange; }, [onContentChange]);
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    isListeningRef.current = false;
+    try { recognitionRef.current?.abort(); } catch { /* ignored */ }
     recognitionRef.current = null;
     setIsListening(false);
   }, []);
@@ -96,45 +110,85 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
       return;
     }
 
-    const recognition = new SR();
-    recognition.lang = "tr-TR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    isListeningRef.current = true;
+    lastResultIndexRef.current = 0;
+    setIsListening(true);
 
-    recognition.onstart = () => setIsListening(true);
+    const buildRecognition = () => {
+      const rec = new SR();
+      rec.lang = "tr-TR";
+      rec.continuous = true;
+      // interimResults=false → yalnızca kesinleşmiş sonuçlar alınır;
+      // tekrar yazma (5-6x) sorununu çözer
+      rec.interimResults = false;
 
-    recognition.onresult = (event: any) => {
-      let finalTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-      }
-      if (finalTranscript) {
-        const prev = contentRef.current;
-        const sep = prev && !prev.endsWith(" ") && !prev.endsWith("\n") ? " " : "";
-        onContentChange(prev + sep + finalTranscript.trim());
-      }
+      rec.onresult = (event: any) => {
+        let finalTranscript = "";
+        // lastResultIndexRef ile zaten işlenmiş sonuçlar atlanır
+        const startIdx = Math.max(event.resultIndex, lastResultIndexRef.current);
+        for (let i = startIdx; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+            lastResultIndexRef.current = i + 1;
+          }
+        }
+        if (finalTranscript) {
+          const prev = contentRef.current;
+          const sep = prev && !prev.endsWith(" ") && !prev.endsWith("\n") ? " " : "";
+          onContentChangeRef.current(prev + sep + finalTranscript.trim());
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        if (event.error === "not-allowed") {
+          toast({
+            title: "Mikrofon izni reddedildi",
+            description: "Tarayıcı ayarlarından mikrofona izin ver.",
+            variant: "destructive",
+          });
+          isListeningRef.current = false;
+          recognitionRef.current = null;
+          setIsListening(false);
+        }
+        // Diğer hatalar (network, no-speech) → onend tetikler → otomatik yeniden başlar
+      };
+
+      rec.onend = () => {
+        // Mobilde ağ kesintisi / sessizlik sonrası onend tetiklenebilir.
+        // Kullanıcı durdurmadıysa otomatik yeniden başlat.
+        if (isListeningRef.current) {
+          setTimeout(() => {
+            if (isListeningRef.current) {
+              try {
+                rec.start();
+              } catch {
+                // Örnek bozulmuşsa yeni bir tane oluştur
+                const newRec = buildRecognition();
+                recognitionRef.current = newRec;
+                newRec.start();
+              }
+            }
+          }, 250);
+        }
+      };
+
+      return rec;
     };
 
-    recognition.onerror = (event: any) => {
-      if (event.error === "not-allowed") {
-        toast({ title: "Mikrofon izni reddedildi", description: "Tarayıcı ayarlarından mikrofona izin ver.", variant: "destructive" });
-      }
-      stopListening();
-    };
-
-    recognition.onend = () => stopListening();
-
+    const recognition = buildRecognition();
     recognitionRef.current = recognition;
     recognition.start();
-  }, [onContentChange, stopListening, toast]);
+  }, [toast]);
 
   const toggleListening = () => {
     if (isListening) stopListening();
     else startListening();
   };
 
-  // Cleanup on unmount
-  useEffect(() => () => { recognitionRef.current?.stop(); }, []);
+  useEffect(() => () => {
+    isListeningRef.current = false;
+    try { recognitionRef.current?.abort(); } catch { /* ignored */ }
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -175,11 +229,10 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
           {correcting ? "Analiz ediliyor..." : "Yazımı Düzelt"}
         </button>
 
-        {/* Durum bilgisi */}
         {isListening && (
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
-            Türkçe sesi metne çeviriyor... (Chrome/Edge)
+            Türkçe sesi metne çeviriyor...
           </span>
         )}
       </div>
@@ -191,21 +244,28 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="border border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3"
+            className="border border-secondary/40 bg-secondary/8 rounded-xl p-4 space-y-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-secondary flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4" />
-                  {correctionPreview.diffCount} karakter düzeltildi
+                  AI düzeltmeler hazır
                 </p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {correctionPreview.rules.map((rule, i) => (
-                    <span key={i} className="text-xs bg-primary/10 border border-primary/20 text-primary/80 px-2 py-0.5 rounded-full">
-                      {rule}
-                    </span>
-                  ))}
-                </div>
+                {correctionPreview.changes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {correctionPreview.changes.slice(0, 5).map((change, i) => (
+                      <span key={i} className="text-xs bg-secondary/15 border border-secondary/25 text-secondary/80 px-2 py-0.5 rounded-full">
+                        {change}
+                      </span>
+                    ))}
+                    {correctionPreview.changes.length > 5 && (
+                      <span className="text-xs text-muted-foreground px-1">
+                        +{correctionPreview.changes.length - 5} düzeltme
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <button onClick={() => setCorrectionPreview(null)} className="text-muted-foreground hover:text-foreground shrink-0">
                 <X className="w-4 h-4" />
@@ -215,7 +275,7 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
               <button
                 type="button"
                 onClick={applyCorrection}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-semibold hover:bg-secondary/90 transition-colors"
               >
                 <Check className="w-3.5 h-3.5" /> Uygula
               </button>
@@ -231,11 +291,10 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
         )}
       </AnimatePresence>
 
-      {/* Bilgi notu */}
       {!isListening && !correctionPreview && (
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Info className="w-3 h-3 shrink-0" />
-          Sesli yazma Chrome ve Edge'de çalışır. Düzelt butonu imla, noktalama ve büyük harf kurallarını otomatik uygular.
+          Sesli yazma Chrome ve Edge'de çalışır. Düzelt butonu AI ile yazım ve noktalama hatalarını düzeltir.
         </p>
       )}
     </div>
@@ -285,7 +344,6 @@ export default function ChapterEditorPage() {
     setSaving(true);
     try {
       if (chapterId === "new") {
-        // BUG FIX: addDoc yerine createChapter kullanıldı — chapterCount artık doğru güncelleniyor
         const newId = await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
           wordCount, status: "draft",
@@ -313,17 +371,14 @@ export default function ChapterEditorPage() {
       setModerationStatus(result.action === "rejected" ? "rejected" : "pending_review");
       setModerationReason(result.reason);
 
-      // Yüksek riskli içerik anında reddedilir ve kaydedilmez.
       if (result.action === "rejected") {
         toast({ title: "Yayınlanamadı", description: result.reason || "İçerik uyumsuz bulundu.", variant: "destructive" });
         return;
       }
 
-      // Yayına alma yalnızca moderatöre aittir — temiz içerik bile önce incelemeye gönderilir.
       const chapterStatus: Chapter["status"] = "pending_review";
 
       if (chapterId === "new") {
-        // BUG FIX: addDoc yerine createChapter — chapterCount doğru artıyor
         await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
           wordCount, status: chapterStatus,
@@ -385,13 +440,11 @@ export default function ChapterEditorPage() {
 
               <FormField control={form.control} name="content" render={({ field }) => (
                 <FormItem>
-                  {/* ── İçerik başlığı + kelime sayacı ── */}
                   <div className="flex items-center justify-between mb-1">
                     <FormLabel>İçerik</FormLabel>
                     <span className="text-xs text-muted-foreground">{wordCount} kelime</span>
                   </div>
 
-                  {/* ── AI Araç Çubuğu ── */}
                   <div className="mb-3">
                     <AIToolbar
                       content={field.value}
@@ -399,7 +452,6 @@ export default function ChapterEditorPage() {
                     />
                   </div>
 
-                  {/* ── Editör ── */}
                   <FormControl>
                     <textarea
                       {...field}
@@ -454,7 +506,7 @@ export default function ChapterEditorPage() {
                   Taslak Kaydet
                 </button>
                 <button type="submit" disabled={saving}
-                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.4)] disabled:opacity-60"
+                  className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.35)] disabled:opacity-60"
                   data-testid="button-publish-chapter">
                   {saving ? "İşleniyor..." : "Yayınla"}
                 </button>

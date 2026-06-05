@@ -260,10 +260,27 @@ export default function ModeratorPage() {
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-7 h-7 text-primary" />
             <h1 className="text-3xl font-bold font-serif">Moderatör Paneli</h1>
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+              isAdmin
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
+                : "bg-primary/15 border-primary/40 text-primary"
+            }`}>
+              {isAdmin ? "👑 Admin" : "🛡️ Moderatör"}
+            </span>
           </div>
-          <p className="text-muted-foreground">
-            {isAdmin ? "İnceleme ve kullanıcı yönetimi" : "İnceleme bekleyen bölümler"}
+          <p className="text-muted-foreground text-sm">
+            {isAdmin
+              ? "Bölüm inceleme + kullanıcı yönetimi yetkisine sahipsin."
+              : "Bölüm inceleme yetkisine sahipsin. Kullanıcı yönetimi için Admin rolü gerekir."}
           </p>
+          {!isAdmin && (
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 text-xs text-muted-foreground hover:text-primary underline underline-offset-2 transition-colors"
+            >
+              Rol güncellemediyse sayfayı yenile →
+            </button>
+          )}
         </motion.div>
 
         {/* Sekmeler */}
