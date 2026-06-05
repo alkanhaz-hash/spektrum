@@ -71,26 +71,33 @@ export default function WritePage() {
     if (!user || !profile) return;
     setSaving(true);
     try {
-      let coverUrl = story?.coverUrl ?? "";
-
-      if (coverFile) {
-        // Yükleme ÖNCESİ tarayıcıda moderasyon — uygunsuzsa hiç upload edilmez (sıfır kredi).
-        const check = await checkImageSafety(coverFile);
-        if (!check.safe) {
-          toast({ title: "Kapak uygun değil", description: "Kapak görselinde uygunsuz (cinsel/müstehcen) içerik tespit edildi.", variant: "destructive" });
-          setSaving(false);
-          return;
-        }
-        const tempId = storyId || `temp-${Date.now()}`;
-        coverUrl = await uploadStoryCover(user.uid, tempId, coverFile);
-      }
-
       const tags = data.tags ? data.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
 
       if (storyId) {
+        // Mevcut hikaye: cover var ise NSFW kontrolü + doğru ID ile upload
+        let coverUrl = story?.coverUrl ?? "";
+        if (coverFile) {
+          const check = await checkImageSafety(coverFile);
+          if (!check.safe) {
+            toast({ title: "Kapak uygun değil", description: "Kapak görselinde uygunsuz içerik tespit edildi.", variant: "destructive" });
+            setSaving(false);
+            return;
+          }
+          coverUrl = await uploadStoryCover(user.uid, storyId, coverFile);
+        }
         await updateStory(storyId, { title: data.title, summary: data.summary, genre: data.genre, tags, coverUrl });
         toast({ title: "Hikaye güncellendi" });
       } else {
+        // Yeni hikaye: önce NSFW kontrolü (geçerse), sonra hikayeyi oluştur,
+        // ardından gerçek ID ile cover upload et — temp dosya bırakma.
+        if (coverFile) {
+          const check = await checkImageSafety(coverFile);
+          if (!check.safe) {
+            toast({ title: "Kapak uygun değil", description: "Kapak görselinde uygunsuz içerik tespit edildi.", variant: "destructive" });
+            setSaving(false);
+            return;
+          }
+        }
         const newId = await createStory({
           authorId: user.uid,
           authorName: profile.displayName,
@@ -99,9 +106,13 @@ export default function WritePage() {
           summary: data.summary,
           genre: data.genre,
           tags,
-          coverUrl,
+          coverUrl: "",
           status: "draft",
         });
+        if (coverFile) {
+          const coverUrl = await uploadStoryCover(user.uid, newId, coverFile);
+          await updateStory(newId, { coverUrl });
+        }
         toast({ title: "Hikaye oluşturuldu!" });
         setLocation(`/write/${newId}`);
       }

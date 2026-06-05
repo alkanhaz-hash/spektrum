@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useParams, Link } from "wouter";
-import { useEffect, useState, useRef } from "react";
+import { useParams, Link, useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, MessageSquare, Heart, Send, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -103,6 +103,7 @@ function CommentThread({ paragraphIndex, storyId: _storyId, chapterId: _chapterI
 
 export default function ReadPage() {
   const { storyId, chapterId } = useParams<{ storyId: string; chapterId: string }>();
+  const [, setLocation] = useLocation();
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [story, setStory] = useState<Story | null>(null);
@@ -111,8 +112,16 @@ export default function ReadPage() {
   const [comments, setComments] = useState<InlineComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [openThread, setOpenThread] = useState<number | null>(null);
-  const [fontSize, setFontSize] = useState(18);
-  const paragraphRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Font boyutu localStorage'de korunuyor — bölümler arası kaybolmaz
+  const [fontSize, setFontSize] = useState(() => {
+    const saved = localStorage.getItem("spektrum_font_size");
+    return saved ? Number(saved) : 18;
+  });
+
+  // Font boyutu değişince localStorage'e kaydet
+  useEffect(() => {
+    localStorage.setItem("spektrum_font_size", String(fontSize));
+  }, [fontSize]);
 
   useEffect(() => {
     if (!storyId || !chapterId) return;
@@ -123,6 +132,11 @@ export default function ReadPage() {
       getChaptersByStory(storyId, true),
       getInlineComments(chapterId),
     ]).then(([s, ch, allCh, cmts]) => {
+      // Güvenlik: taslak/reddedilen bölüm yazar değilse okunamaz
+      if (ch && ch.status !== "published" && user?.uid !== s?.authorId) {
+        setLocation(`/story/${storyId}`);
+        return;
+      }
       setStory(s);
       setChapter(ch);
       setAllChapters(allCh.filter(c => c.status === "published" || c.id === chapterId));
@@ -200,7 +214,7 @@ export default function ReadPage() {
         {/* Content with inline comments */}
         <div className="space-y-1">
           {paragraphs.map((para, idx) => (
-            <div key={idx} className="relative group" ref={el => { paragraphRefs.current[idx] = el; }}>
+            <div key={idx} className="relative group">
               <div
                 className="relative py-3 pr-10 leading-relaxed cursor-pointer rounded-lg hover:bg-primary/5 transition-colors group"
                 style={{ fontSize: `${fontSize}px` }}
@@ -208,7 +222,7 @@ export default function ReadPage() {
                 data-testid={`paragraph-${idx}`}
               >
                 {para}
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-muted-foreground bg-card border border-border rounded-full px-2 py-1 hover:border-primary/50 hover:text-primary">
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 opacity-30 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-muted-foreground bg-card border border-border rounded-full px-2 py-1 hover:border-primary/50 hover:text-primary">
                   <MessageSquare className="w-3 h-3" />
                   {commentCountForParagraph(idx) > 0 && <span>{commentCountForParagraph(idx)}</span>}
                 </button>

@@ -387,7 +387,7 @@ export default function StoryPage() {
       user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
     ]).then(([s, ch, t, alreadyLiked]) => {
       setStory(s);
-      setChapters(ch.filter(c => c.status === "published"));
+      setChapters(ch); // getChaptersByStory(id, true) zaten published filtresi uyguluyor
       setTalents(t);
       setLiked(alreadyLiked);
       setLoading(false);
