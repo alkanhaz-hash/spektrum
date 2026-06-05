@@ -51,11 +51,12 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isOwner(uid) && request.resource.data.role == 'user';
       // Kullanıcı kendi profilini günceller ama rolünü DEĞİŞTİREMEZ. `.get(...,'user')`
-      // ile eksik `role` alanı (eski belgeler) tolere edilir; aksi halde eksik alan
-      // kural değerlendirmesini hataya düşürüp tüm güncellemeleri reddediyordu.
-      allow update: if (isOwner(uid)
-                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user'))
-                    || isModerator();
+      // ile eksik `role` alanı (eski belgeler) tolere edilir. Moderatörler de profil
+      // düzenleyebilir ama rol alanını değiştiremez — rol değişikliği YALNIZCA
+      // backend Admin SDK endpoint'i (PATCH /api/admin/users/:uid/role) üzerinden
+      // yapılabilir; istemci SDK'sı bu kurallarla kısıtlanır.
+      allow update: if (isOwner(uid) || isModerator())
+                    && request.resource.data.get('role', 'user') == resource.data.get('role', 'user');
       allow delete: if isModerator();
     }
 
