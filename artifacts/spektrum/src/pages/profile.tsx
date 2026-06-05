@@ -16,6 +16,7 @@ import {
   getNarrationsByNarrator, Narration,
   getOrCreateConversation,
   followUser, unfollowUser, isFollowingUser,
+  getFollowers, getFollowing,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -466,6 +467,62 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
   );
 }
 
+// ─── FOLLOW LIST MODAL ────────────────────────────────────────────────────────
+
+function FollowListModal({ uid, type, onClose }: { uid: string; type: "followers" | "following"; onClose: () => void }) {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fn = type === "followers" ? getFollowers : getFollowing;
+    fn(uid).then(setUsers).catch(() => {}).finally(() => setLoading(false));
+  }, [uid, type]);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+        className="w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden max-h-[70vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card">
+          <h2 className="font-bold text-base">{type === "followers" ? "Takipçiler" : "Takip Edilenler"}</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-muted-foreground" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-3">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : users.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              {type === "followers" ? "Henüz takipçi yok." : "Henüz kimse takip edilmiyor."}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {users.map(u => (
+                <Link key={u.uid} href={`/profile/${u.uid}`} onClick={onClose}>
+                  <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0">
+                      {u.avatarUrl
+                        ? <img src={u.avatarUrl} alt={u.displayName} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-sm font-bold text-primary">{u.displayName?.charAt(0) || "?"}</div>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{u.displayName}</p>
+                      {u.bio && <p className="text-xs text-muted-foreground truncate">{u.bio}</p>}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ─── MAIN PROFILE PAGE ────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -485,6 +542,7 @@ export default function ProfilePage() {
   const isOwner = user?.uid === uid;
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [followListModal, setFollowListModal] = useState<"followers" | "following" | null>(null);
 
   useEffect(() => {
     if (!uid || authLoading) return;
@@ -604,6 +662,13 @@ export default function ProfilePage() {
             profile={profile}
             onSave={handleProfileSave}
             onClose={() => setEditOpen(false)}
+          />
+        )}
+        {followListModal && (
+          <FollowListModal
+            uid={uid}
+            type={followListModal}
+            onClose={() => setFollowListModal(null)}
           />
         )}
       </AnimatePresence>
@@ -737,15 +802,21 @@ export default function ProfilePage() {
               <p className="text-muted-foreground text-xs">Hikaye</p>
             </div>
             <div className="w-px h-8 bg-border" />
-            <div className="text-center">
+            <button
+              className="text-center hover:text-primary transition-colors"
+              onClick={() => setFollowListModal("followers")}
+            >
               <p className="font-bold text-lg">{profile.followerCount ?? 0}</p>
-              <p className="text-muted-foreground text-xs">Takipçi</p>
-            </div>
+              <p className="text-muted-foreground text-xs hover:text-primary transition-colors">Takipçi</p>
+            </button>
             <div className="w-px h-8 bg-border" />
-            <div className="text-center">
+            <button
+              className="text-center hover:text-primary transition-colors"
+              onClick={() => setFollowListModal("following")}
+            >
               <p className="font-bold text-lg">{profile.followingCount ?? 0}</p>
-              <p className="text-muted-foreground text-xs">Takip</p>
-            </div>
+              <p className="text-muted-foreground text-xs hover:text-primary transition-colors">Takip</p>
+            </button>
           </div>
 
           {/* Badges */}

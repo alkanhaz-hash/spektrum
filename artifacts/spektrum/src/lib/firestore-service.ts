@@ -597,3 +597,21 @@ export async function isFollowingUser(followerId: string, followedId: string): P
   const snap = await getDoc(doc(db, "follows", `${followerId}_${followedId}`));
   return snap.exists();
 }
+
+export async function getFollowers(uid: string): Promise<UserProfile[]> {
+  const q = query(collection(db, "follows"), where("followedId", "==", uid));
+  const snap = await getDocs(q);
+  const ids = snap.docs.map(d => d.data().followerId as string);
+  if (ids.length === 0) return [];
+  const profiles = await Promise.all(ids.map(id => getDoc(doc(db, "users", id))));
+  return profiles.filter(s => s.exists()).map(s => s.data() as UserProfile);
+}
+
+export async function getFollowing(uid: string): Promise<UserProfile[]> {
+  const q = query(collection(db, "follows"), where("followerId", "==", uid));
+  const snap = await getDocs(q);
+  const ids = snap.docs.map(d => d.data().followedId as string);
+  if (ids.length === 0) return [];
+  const profiles = await Promise.all(ids.map(id => getDoc(doc(db, "users", id))));
+  return profiles.filter(s => s.exists()).map(s => s.data() as UserProfile);
+}

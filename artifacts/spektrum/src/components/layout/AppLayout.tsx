@@ -2,7 +2,8 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { logoutUser } from "@/lib/auth-service";
-import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield } from "lucide-react";
+import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare } from "lucide-react";
+import { getConversations } from "@/lib/firestore-service";
 
 export function Navbar() {
   const { user, profile } = useAuth();
@@ -10,7 +11,17 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [unreadTotal, setUnreadTotal] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user) { setUnreadTotal(0); return; }
+    const unsub = getConversations(user.uid, convs => {
+      const total = convs.reduce((sum, c) => sum + (c.unreadCount?.[user.uid] ?? 0), 0);
+      setUnreadTotal(total);
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +93,15 @@ export function Navbar() {
           {user ? (
             <>
               {/* Mesajlar — masaüstü */}
-              <Link href="/messages" className="hidden md:block transition-colors hover:text-primary text-foreground/60 text-sm font-medium">
+              <Link href="/messages" className="hidden md:flex items-center gap-1.5 relative transition-colors hover:text-primary text-foreground/60 text-sm font-medium">
+                <span className="relative">
+                  <MessageSquare className="w-5 h-5" />
+                  {unreadTotal > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center leading-none">
+                      {unreadTotal > 99 ? "99+" : unreadTotal}
+                    </span>
+                  )}
+                </span>
                 Mesajlar
               </Link>
               {(profile?.role === "moderator" || profile?.role === "admin") && (
@@ -113,8 +132,16 @@ export function Navbar() {
                     </Link>
                     {/* Mobilde mesajlar dropdown'da */}
                     <Link href="/messages" onClick={() => setDropdownOpen(false)} className="md:hidden">
-                      <div className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer border-t border-border">
-                        <span>Mesajlar</span>
+                      <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer border-t border-border">
+                        <span className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-primary" />
+                          Mesajlar
+                        </span>
+                        {unreadTotal > 0 && (
+                          <span className="min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                            {unreadTotal > 99 ? "99+" : unreadTotal}
+                          </span>
+                        )}
                       </div>
                     </Link>
                     {/* Mobilde moderatör/admin paneli */}
