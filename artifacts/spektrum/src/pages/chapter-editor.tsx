@@ -47,16 +47,16 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
     }
     setCorrecting(true);
     try {
-      // 15 saniyelik timeout — mobil ağlarda yavaş bağlantıya karşı
+      // Sunucu proxy üzerinden gönder (3 deneme hakkıyla, rate-limit korumalı)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       let res: Response;
       try {
-        res = await fetch("https://api.languagetool.org/v2/check", {
+        res = await fetch("/api/correct", {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ text: content, language: "tr" }).toString(),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: content }),
           signal: controller.signal,
         });
       } finally {
@@ -64,10 +64,9 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
       }
 
       if (!res.ok) {
-        // Servis geçici olarak yanıt vermiyorsa kullanıcıya bildir
         toast({
           title: "Düzeltme şu an yapılamıyor",
-          description: "LanguageTool servisi meşgul. Birkaç saniye bekleyip tekrar dene.",
+          description: "Servis geçici olarak meşgul. Birkaç saniye bekleyip tekrar dene.",
           variant: "destructive",
         });
         return;
@@ -206,6 +205,9 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
           setTimeout(() => {
             if (!isListeningRef.current) return;
             try {
+              // KRİTİK: Yeni oturum 0'dan başlar; eski sayacı sıfırlamazsak
+              // tüm yeni cümleler "zaten işlendi" sayılır ve atlanır.
+              lastResultIndexRef.current = 0;
               const newRec = buildRecognition();
               recognitionRef.current = newRec;
               newRec.start();
