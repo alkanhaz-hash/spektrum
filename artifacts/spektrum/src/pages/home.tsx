@@ -8,7 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { BookOpen, Clock, MessageSquare, TrendingUp } from "lucide-react";
-import { StatusBar } from "@/components/StatusBar";
 
 export default function HomePage() {
   const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
@@ -59,15 +58,6 @@ export default function HomePage() {
               </Link>
             </div>
           </motion.div>
-        </section>
-
-        {/* 24 Saatlik Durumlar */}
-        <section className="mb-10">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Durumlar</h2>
-          </div>
-          <StatusBar />
         </section>
 
         {/* Trending Section */}
