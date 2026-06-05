@@ -64,12 +64,15 @@ export default function AuthPage() {
     try {
       await loginUser(loginEmail, loginPassword);
       setLocation("/");
-    } catch (err: any) {
-      const msg = err.code === "auth/invalid-credential"
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? "";
+      const msg = code === "auth/invalid-credential"
         ? "E-posta veya şifre hatalı."
-        : err.code === "auth/too-many-requests"
+        : code === "auth/user-not-found" || code === "auth/invalid-email"
+        ? "Bu e-posta ile kayıtlı hesap bulunamadı."
+        : code === "auth/too-many-requests"
         ? "Çok fazla deneme. Lütfen bekleyin veya şifrenizi sıfırlayın."
-        : err.message;
+        : (err as { message?: string })?.message ?? "Bilinmeyen bir hata oluştu.";
       toast({ title: "Giriş başarısız", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);
