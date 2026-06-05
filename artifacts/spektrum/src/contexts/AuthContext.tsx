@@ -1,51 +1,74 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User } from "firebase/auth";
-import { onAuthChange, getUserProfile, UserProfile, ensureUserProfile } from "@/lib/auth-service";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { onAuthChange, UserProfile, ensureUserProfile } from "@/lib/auth-service";
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
-  refreshProfile: async () => {},
+  refreshProfile: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [snapshotUid, setSnapshotUid] = useState<string | null>(null);
 
-  const refreshProfile = async () => {
-    if (user) {
-      const p = await getUserProfile(user.uid);
-      setProfile(p);
-    }
+  const refreshProfile = () => {
+    // onSnapshot zaten canlı güncelliyor; manuel bir şey yapmaya gerek yok.
+    // Geriye dönük uyumluluk için bırakıldı.
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthChange(async (u) => {
+    const unsubAuth = onAuthChange(async (u) => {
       setUser(u);
       if (u) {
         try {
-          const p = await ensureUserProfile(u);
-          setProfile(p);
+          // Backfill: eksik alanlar ilk girişte tamamlanır
+          const initial = await ensureUserProfile(u);
+          setProfile(initial);
+          setSnapshotUid(u.uid);
         } catch (err) {
           console.error("ensureUserProfile failed:", err);
           setProfile(null);
+          setSnapshotUid(null);
         }
       } else {
         setProfile(null);
+        setSnapshotUid(null);
       }
       setLoading(false);
     });
-    return unsubscribe;
+    return unsubAuth;
   }, []);
+
+  // Kullanıcı oturum açıkken Firestore belgesini canlı dinle.
+  // Konsoldan yapılan rol değişiklikleri çıkış-giriş gerektirmeden anında yansır.
+  useEffect(() => {
+    if (!snapshotUid) return;
+    const unsub = onSnapshot(
+      doc(db, "users", snapshotUid),
+      (snap) => {
+        if (snap.exists()) {
+          setProfile(snap.data() as UserProfile);
+        }
+      },
+      (err) => {
+        console.error("profile onSnapshot error:", err);
+      }
+    );
+    return unsub;
+  }, [snapshotUid]);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>

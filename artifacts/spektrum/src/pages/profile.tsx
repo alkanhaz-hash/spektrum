@@ -597,7 +597,19 @@ export default function ProfilePage() {
 
           {/* Name + Status */}
           <div className="mb-3">
-            <h1 className="text-2xl font-bold font-serif">{profile.displayName}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold font-serif">{profile.displayName}</h1>
+              {profile.role === "admin" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold">
+                  👑 Admin
+                </span>
+              )}
+              {profile.role === "moderator" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-xs font-semibold">
+                  🛡️ Moderatör
+                </span>
+              )}
+            </div>
             {profile.status && (
               <div className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />

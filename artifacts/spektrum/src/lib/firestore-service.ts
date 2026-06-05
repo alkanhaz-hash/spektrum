@@ -512,3 +512,32 @@ export const GENRES = [
   "Macera", "Dram", "Psikolojik", "Tarihi", "Gençlik",
   "Gerilim", "Komedi", "Şiir", "Deneme"
 ];
+
+// ─── ADMIN: KULLANICI YÖNETİMİ ────────────────────────────────────────────────
+
+export interface UserSummary {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  role: "user" | "moderator" | "admin";
+}
+
+export async function searchUsersByName(term: string): Promise<UserSummary[]> {
+  const snap = await getDocs(query(collection(db, "users"), limit(200)));
+  const lower = term.trim().toLowerCase();
+  return snap.docs
+    .map(d => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: data.displayName ?? "",
+        avatarUrl: data.avatarUrl ?? "",
+        role: (data.role ?? "user") as UserSummary["role"],
+      };
+    })
+    .filter(u => u.displayName.toLowerCase().includes(lower) || u.uid.toLowerCase().includes(lower));
+}
+
+export async function setUserRole(uid: string, role: "user" | "moderator" | "admin"): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { role });
+}

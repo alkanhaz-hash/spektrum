@@ -1,2 +1,4 @@
 - [Firebase security rules (SPEKTRUM)](firebase-rules.md) — Storage rules can't read Firestore; encode owner/participant in the storage path. Client moderation is bypassable.
 - [Security scan triage (SPEKTRUM)](security-scan-notes.md) — Firebase web key flagged as "secret" is a false positive (public by design); nosemgrep must sit directly above the match line; qs vuln fixed via workspace override.
+- [Firestore rules missing field](firestore-rules-missing-field.md) — .get(field,default) kullanmadan doğrudan alan erişimi eski belgelerde kural hatasına ve tüm güncelleme reddine yol açar.
+- [Moderator role real-time](moderator-role-realtime.md) — onSnapshot ile canlı profil aboneliği; konsol değişiklikleri anında yansır, logout-login gerekmez.
