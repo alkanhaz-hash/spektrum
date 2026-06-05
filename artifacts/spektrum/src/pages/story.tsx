@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Heart, MessageSquare, ChevronRight, User, Palette,
-  Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3
+  Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3,
+  Bookmark, BookmarkCheck, Share2, Check
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +16,7 @@ import {
   getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, unlikeStory, hasUserLikedStory,
   getNarrationsByStory, getNarrationRequest, createNarrationRequest, uploadNarration, deleteNarration,
   getOrCreateConversation, sendMessage,
+  bookmarkStory, unbookmarkStory, isStoryBookmarked, createNotification,
   Story, Chapter, TalentPortfolio, Narration, NarrationRequest,
 } from "@/lib/firestore-service";
 import { uploadNarrationFile, uploadNarrationAudio } from "@/lib/storage-service";
@@ -370,7 +372,7 @@ function NarrationsTab({ story }: { story: Story }) {
 
 export default function StoryPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -378,6 +380,8 @@ export default function StoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -387,11 +391,13 @@ export default function StoryPage() {
       getChaptersByStory(id, true),
       getTalentPortfoliosByStory(id),
       user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
-    ]).then(([s, ch, t, alreadyLiked]) => {
+      user ? isStoryBookmarked(user.uid, id) : Promise.resolve(false),
+    ]).then(([s, ch, t, alreadyLiked, alreadyBookmarked]) => {
       setStory(s);
       setChapters(ch);
       setTalents(t);
       setLiked(alreadyLiked);
+      setBookmarked(alreadyBookmarked);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
@@ -410,9 +416,54 @@ export default function StoryPage() {
         await likeStory(story.id, user.uid);
         setLiked(true);
         setStory(s => s ? { ...s, likeCount: s.likeCount + 1 } : s);
+        if (profile && story.authorId !== user.uid) {
+          createNotification({
+            recipientId: story.authorId,
+            senderId: user.uid,
+            senderName: profile.displayName,
+            senderAvatar: profile.avatarUrl ?? "",
+            type: "like",
+            storyId: story.id,
+            storyTitle: story.title,
+          }).catch(() => {});
+        }
       }
     } catch {
       toast({ title: "Hata", description: "Beğeni güncellenemedi.", variant: "destructive" });
+    }
+  };
+
+  const handleBookmark = async () => {
+    if (!user) { toast({ title: "Giriş gerekli", description: "Kaydetmek için giriş yapmalısın." }); return; }
+    if (!story) return;
+    try {
+      if (bookmarked) {
+        await unbookmarkStory(user.uid, story.id);
+        setBookmarked(false);
+        toast({ title: "Yer imi kaldırıldı" });
+      } else {
+        await bookmarkStory(user.uid, story.id);
+        setBookmarked(true);
+        toast({ title: "Kaydedildi!", description: "Profilindeki 'Kaydedilenler' sekmesinde bulabilirsin." });
+      }
+    } catch {
+      toast({ title: "Hata", variant: "destructive" });
+    }
+  };
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    const title = story?.title ?? "SPEKTRUM";
+    if (navigator.share) {
+      try { await navigator.share({ title, url }); return; } catch { /* kullanıcı iptal etti */ }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      toast({ title: "Link kopyalandı!" });
+    } catch {
+      toast({ title: "Kopyalanamadı", variant: "destructive" });
     }
   };
 
@@ -473,7 +524,7 @@ export default function StoryPage() {
                 <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
               ))}
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground mb-6">
+            <div className="flex items-center flex-wrap gap-4 text-sm text-muted-foreground mb-6">
               <span className="flex items-center gap-1"><BookOpen className="w-4 h-4" /> {story.readCount.toLocaleString("tr-TR")} okuma</span>
               <span className="flex items-center gap-1"><MessageSquare className="w-4 h-4" /> {story.commentCount} yorum</span>
               <button
@@ -484,6 +535,24 @@ export default function StoryPage() {
                 title={liked ? "Beğeniyi geri al" : "Beğen"}
               >
                 <Heart className={`w-4 h-4 ${liked ? "fill-pink-400" : ""}`} /> {story.likeCount}
+              </button>
+              <button
+                onClick={handleBookmark}
+                className={`flex items-center gap-1 transition-colors ${bookmarked ? "text-primary" : "hover:text-primary"}`}
+                title={bookmarked ? "Yer imini kaldır" : "Sonra oku"}
+                data-testid="button-bookmark"
+              >
+                {bookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+                <span className="text-xs">{bookmarked ? "Kaydedildi" : "Kaydet"}</span>
+              </button>
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1 transition-colors hover:text-foreground"
+                title="Paylaş"
+                data-testid="button-share"
+              >
+                {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
+                <span className="text-xs">{copied ? "Kopyalandı!" : "Paylaş"}</span>
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-3">

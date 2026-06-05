@@ -615,3 +615,66 @@ export async function getFollowing(uid: string): Promise<UserProfile[]> {
   const profiles = await Promise.all(ids.map(id => getDoc(doc(db, "users", id))));
   return profiles.filter(s => s.exists()).map(s => s.data() as UserProfile);
 }
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+export interface SpektrumNotification {
+  id: string;
+  recipientId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  type: "follow" | "like" | "comment";
+  storyId?: string;
+  storyTitle?: string;
+  read: boolean;
+  createdAt: Timestamp;
+}
+
+export async function createNotification(data: Omit<SpektrumNotification, "id" | "createdAt" | "read">): Promise<void> {
+  if (data.recipientId === data.senderId) return;
+  await addDoc(collection(db, "notifications"), { ...data, read: false, createdAt: serverTimestamp() });
+}
+
+export function getNotifications(userId: string, callback: (notifs: SpektrumNotification[]) => void): () => void {
+  const q = query(collection(db, "notifications"), where("recipientId", "==", userId), limit(50));
+  return onSnapshot(q, snap => {
+    const notifs = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as SpektrumNotification))
+      .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+    callback(notifs);
+  });
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const q = query(collection(db, "notifications"), where("recipientId", "==", userId), where("read", "==", false));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => updateDoc(d.ref, { read: true })));
+}
+
+// ─── BOOKMARKS ────────────────────────────────────────────────────────────────
+
+export async function bookmarkStory(userId: string, storyId: string): Promise<void> {
+  await setDoc(doc(db, "bookmarks", `${userId}_${storyId}`), { userId, storyId, createdAt: serverTimestamp() });
+}
+
+export async function unbookmarkStory(userId: string, storyId: string): Promise<void> {
+  await deleteDoc(doc(db, "bookmarks", `${userId}_${storyId}`));
+}
+
+export async function isStoryBookmarked(userId: string, storyId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "bookmarks", `${userId}_${storyId}`));
+  return snap.exists();
+}
+
+export async function getBookmarkedStories(userId: string): Promise<Story[]> {
+  const q = query(collection(db, "bookmarks"), where("userId", "==", userId));
+  const snap = await getDocs(q);
+  const storyIds = snap.docs.map(d => d.data().storyId as string);
+  if (storyIds.length === 0) return [];
+  const storySnaps = await Promise.all(storyIds.map(id => getDoc(doc(db, "stories", id))));
+  return storySnaps
+    .filter(s => s.exists())
+    .map(s => ({ id: s.id, ...s.data() } as Story))
+    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+}

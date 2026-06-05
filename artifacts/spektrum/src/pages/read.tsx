@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getStory, getChapter, getChaptersByStory, getInlineComments,
   addInlineComment, likeInlineComment, incrementUserReadCount, incrementChapterReadCount,
+  createNotification,
   Story, Chapter, InlineComment
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
@@ -164,6 +165,17 @@ export default function ReadPage() {
       await addInlineComment({ storyId, chapterId, paragraphIndex, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
       const updated = await getInlineComments(chapterId);
       setComments(updated);
+      if (story && story.authorId !== user.uid) {
+        createNotification({
+          recipientId: story.authorId,
+          senderId: user.uid,
+          senderName: profile.displayName,
+          senderAvatar: profile.avatarUrl ?? "",
+          type: "comment",
+          storyId: storyId,
+          storyTitle: story.title,
+        }).catch(() => {});
+      }
     } catch {
       toast({ title: "Yorum gönderilemedi", description: "Lütfen tekrar dene.", variant: "destructive" });
     }

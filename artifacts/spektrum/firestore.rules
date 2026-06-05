@@ -209,6 +209,23 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.targetUid) || isModerator();
     }
 
+    // ─── BOOKMARKS ──────────────────────────────────────────────────────────
+    match /bookmarks/{bookmarkId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ─── NOTIFICATIONS ──────────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn()
+                    && resource.data.recipientId == request.auth.uid
+                    && changedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+    }
+
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

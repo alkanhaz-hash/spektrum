@@ -2,8 +2,8 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { logoutUser } from "@/lib/auth-service";
-import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare } from "lucide-react";
-import { getConversations } from "@/lib/firestore-service";
+import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare, Bell } from "lucide-react";
+import { getConversations, getNotifications, markAllNotificationsRead, SpektrumNotification } from "@/lib/firestore-service";
 
 export function Navbar() {
   const { user, profile } = useAuth();
@@ -12,13 +12,26 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
+  const [notifs, setNotifs] = useState<SpektrumNotification[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) { setUnreadTotal(0); return; }
     const unsub = getConversations(user.uid, convs => {
       const total = convs.reduce((sum, c) => sum + (c.unreadCount?.[user.uid] ?? 0), 0);
       setUnreadTotal(total);
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user) { setNotifCount(0); setNotifs([]); return; }
+    const unsub = getNotifications(user.uid, list => {
+      setNotifs(list);
+      setNotifCount(list.filter(n => !n.read).length);
     });
     return () => unsub();
   }, [user?.uid]);
@@ -30,11 +43,14 @@ export function Navbar() {
     setLocation(t ? `/search?q=${encodeURIComponent(t)}` : "/search");
   };
 
-  // Dropdown dışına tıklama/dokunma ile kapat (mousedown + touchstart)
+  // Dropdown + bildirim paneli dışına tıklama ile kapat
   useEffect(() => {
     function handleOutside(e: MouseEvent | TouchEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
       }
     }
     document.addEventListener("mousedown", handleOutside);
@@ -110,6 +126,61 @@ export function Navbar() {
                 </Link>
               )}
 
+              {/* Bildirimler — masaüstü */}
+              <div className="hidden md:block relative" ref={notifRef}>
+                <button
+                  onClick={() => {
+                    const opening = !notifOpen;
+                    setNotifOpen(opening);
+                    if (opening && user && notifCount > 0) {
+                      markAllNotificationsRead(user.uid).catch(() => {});
+                      setNotifCount(0);
+                    }
+                  }}
+                  className="relative text-foreground/60 hover:text-primary transition-colors p-1"
+                  aria-label="Bildirimler"
+                >
+                  <Bell className="w-5 h-5" />
+                  {notifCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center leading-none">
+                      {notifCount > 99 ? "99+" : notifCount}
+                    </span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <div className="absolute right-0 mt-2 w-80 rounded-xl border border-border bg-card shadow-xl z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                      <span className="font-semibold text-sm">Bildirimler</span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto divide-y divide-border/50">
+                      {notifs.length === 0 ? (
+                        <div className="py-10 text-center text-muted-foreground text-sm">Henüz bildirim yok.</div>
+                      ) : (
+                        notifs.slice(0, 20).map(n => (
+                          <div key={n.id} className={`flex items-start gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors ${!n.read ? "bg-primary/5" : ""}`}>
+                            <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0 mt-0.5">
+                              {n.senderAvatar
+                                ? <img src={n.senderAvatar} alt={n.senderName} className="w-full h-full object-cover" />
+                                : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-primary">{n.senderName.charAt(0)}</div>
+                              }
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs leading-relaxed break-words">
+                                <span className="font-semibold">{n.senderName}</span>
+                                {n.type === "follow" && " seni takip etmeye başladı."}
+                                {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
+                                {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
+                              </p>
+                              {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Profil dropdown */}
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -130,6 +201,53 @@ export function Navbar() {
                         <span>Profilim</span>
                       </div>
                     </Link>
+                    {/* Mobilde bildirimler dropdown'da */}
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        if (user && notifCount > 0) {
+                          markAllNotificationsRead(user.uid).catch(() => {});
+                          setNotifCount(0);
+                        }
+                        setNotifOpen(v => !v);
+                      }}
+                      className="md:hidden w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors border-t border-border"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-primary" />
+                        Bildirimler
+                      </span>
+                      {notifCount > 0 && (
+                        <span className="min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                          {notifCount > 99 ? "99+" : notifCount}
+                        </span>
+                      )}
+                    </button>
+                    {/* Mobil bildirim paneli */}
+                    {notifOpen && (
+                      <div className="md:hidden border-t border-border max-h-64 overflow-y-auto divide-y divide-border/50">
+                        {notifs.length === 0 ? (
+                          <div className="py-6 text-center text-muted-foreground text-xs">Henüz bildirim yok.</div>
+                        ) : (
+                          notifs.slice(0, 10).map(n => (
+                            <div key={n.id} className={`flex items-start gap-2 px-4 py-2.5 text-xs ${!n.read ? "bg-primary/5" : ""}`}>
+                              <div className="w-6 h-6 rounded-full bg-primary/10 overflow-hidden shrink-0 mt-0.5">
+                                {n.senderAvatar
+                                  ? <img src={n.senderAvatar} alt={n.senderName} className="w-full h-full object-cover" />
+                                  : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-primary">{n.senderName.charAt(0)}</div>
+                                }
+                              </div>
+                              <p className="break-words leading-relaxed">
+                                <span className="font-semibold">{n.senderName}</span>
+                                {n.type === "follow" && " seni takip etmeye başladı."}
+                                {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
+                                {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                     {/* Mobilde mesajlar dropdown'da */}
                     <Link href="/messages" onClick={() => setDropdownOpen(false)} className="md:hidden">
                       <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer border-t border-border">

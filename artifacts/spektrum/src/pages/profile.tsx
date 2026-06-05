@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Users, Edit3, Instagram, Globe, Camera,
-  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Mic, Play, Pause
+  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Mic, Play, Pause, Bookmark
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   getOrCreateConversation,
   followUser, unfollowUser, isFollowingUser,
   getFollowers, getFollowing,
+  getBookmarkedStories, createNotification,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -535,7 +536,9 @@ export default function ProfilePage() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"stories" | "narrations" | "qa">("stories");
+  const [activeTab, setActiveTab] = useState<"stories" | "narrations" | "qa" | "bookmarks">("stories");
+  const [bookmarkedStories, setBookmarkedStories] = useState<Story[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = useState(false);
   const [narrations, setNarrations] = useState<Narration[]>([]);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -574,6 +577,15 @@ export default function ProfilePage() {
     isFollowingUser(user.uid, uid).then(setFollowing).catch(() => {});
   }, [user, uid, isOwner]);
 
+  useEffect(() => {
+    if (activeTab !== "bookmarks" || !user || !isOwner) return;
+    setBookmarksLoading(true);
+    getBookmarkedStories(user.uid)
+      .then(setBookmarkedStories)
+      .catch(() => {})
+      .finally(() => setBookmarksLoading(false));
+  }, [activeTab, user?.uid, isOwner]);
+
   const handleFollow = async () => {
     if (!user) { setLocation("/auth"); return; }
     setFollowLoading(true);
@@ -586,6 +598,15 @@ export default function ProfilePage() {
         await followUser(user.uid, uid);
         setFollowing(true);
         setProfile(p => p ? { ...p, followerCount: (p.followerCount ?? 0) + 1 } : p);
+        if (myProfile) {
+          createNotification({
+            recipientId: uid,
+            senderId: user.uid,
+            senderName: myProfile.displayName,
+            senderAvatar: myProfile.avatarUrl ?? "",
+            type: "follow",
+          }).catch(() => {});
+        }
       }
     } catch {
       toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
@@ -833,11 +854,12 @@ export default function ProfilePage() {
           )}
 
           {/* ── Tabs ── */}
-          <div className="flex gap-1 border-b border-border mb-6">
+          <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
             {[
               { key: "stories", label: "Hikayeleri", icon: <BookOpen className="w-4 h-4" /> },
               { key: "narrations", label: "Sesli Kitaplar", icon: <Mic className="w-4 h-4" /> },
               { key: "qa", label: "Soru & Cevap", icon: <MessageSquarePlus className="w-4 h-4" /> },
+              ...(isOwner ? [{ key: "bookmarks", label: "Kaydedilenler", icon: <Bookmark className="w-4 h-4" /> }] : []),
             ].map(tab => (
               <button key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
@@ -916,6 +938,40 @@ export default function ProfilePage() {
           {activeTab === "qa" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <QASection profile={profile} isOwner={isOwner} />
+            </motion.div>
+          )}
+
+          {/* ── Kaydedilenler Tab ── */}
+          {activeTab === "bookmarks" && isOwner && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              {bookmarksLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {[1, 2, 3].map(i => <div key={i} className="aspect-[2/3] rounded-xl bg-muted animate-pulse" />)}
+                </div>
+              ) : bookmarkedStories.length === 0 ? (
+                <div className="py-16 text-center border border-dashed border-border rounded-2xl">
+                  <Bookmark className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">Henüz kaydettiğin hikaye yok.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasında "Kaydet" butonuna basarak buraya ekleyebilirsin.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {bookmarkedStories.map((s, i) => (
+                    <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                      <Link href={`/story/${s.id}`}>
+                        <div className="group cursor-pointer">
+                          <div className="aspect-[2/3] rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border overflow-hidden mb-2 group-hover:border-primary/50 transition-all group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.2)]">
+                            {s.coverUrl && <img src={s.coverUrl} alt={s.title} className="w-full h-full object-cover" />}
+                          </div>
+                          <h3 className="text-sm font-semibold group-hover:text-primary transition-colors truncate">{s.title}</h3>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{s.authorName}</p>
+                          <Badge variant="outline" className="text-xs border-primary/20 text-primary/70 mt-1">{s.genre}</Badge>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </div>
