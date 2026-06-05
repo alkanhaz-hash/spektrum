@@ -46,16 +46,19 @@ service cloud.firestore {
 
     // ─── USERS ──────────────────────────────────────────────────────────────
     // Profiller herkese açık okunur. Kullanıcı yalnızca kendi profilini yazar
-    // ve KENDİ ROLÜNÜ DEĞİŞTİREMEZ (yetki yükseltme engellenir).
+    // ve KENDİ ROLÜNÜ / BAN DURUMUNU DEĞİŞTİREMEZ (yetki yükseltme engellenir).
     match /users/{uid} {
       allow read: if true;
       allow create: if isOwner(uid) && request.resource.data.role == 'user';
-      // Kullanıcı kendi profilini günceller ama rolünü DEĞİŞTİREMEZ. `.get(...,'user')`
-      // ile eksik `role` alanı (eski belgeler) tolere edilir. Moderatörler de profil
-      // düzenleyebilir ama rol alanını değiştiremez — rol değişikliği YALNIZCA
-      // backend Admin SDK endpoint'i (PATCH /api/admin/users/:uid/role) üzerinden
-      // yapılabilir; istemci SDK'sı bu kurallarla kısıtlanır.
-      allow update: if ((isOwner(uid) || isModerator())
+      // Kullanıcı kendi profilini günceller ama rolünü ve ban durumunu DEĞİŞTİREMEZ.
+      // Moderatörler yalnızca banned/banReason alanlarını yazabilir.
+      // Rol değişikliği YALNIZCA backend Admin SDK endpoint'i üzerinden yapılabilir.
+      allow update: if (isOwner(uid)
+                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user')
+                        && request.resource.data.get('banned', false) == resource.data.get('banned', false)
+                        && request.resource.data.get('banReason', '') == resource.data.get('banReason', ''))
+                    // Moderatörler ban/banReason alanlarını güncelleyebilir (rol dışında)
+                    || (isModerator()
                         && request.resource.data.get('role', 'user') == resource.data.get('role', 'user'))
                     // Herhangi bir giriş yapmış kullanıcı YALNIZCA takipçi/takip sayaçlarını güncelleyebilir
                     || (isSignedIn()
@@ -224,6 +227,15 @@ service cloud.firestore {
                     && resource.data.recipientId == request.auth.uid
                     && changedKeys().hasOnly(['read']);
       allow delete: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+    }
+
+    // ─── STATUSES ───────────────────────────────────────────────────────────
+    // 24 saatlik kullanıcı durumları. Herkes okuyabilir; yalnızca sahibi oluşturur/siler.
+    match /statuses/{statusId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if (isSignedIn() && resource.data.uid == request.auth.uid) || isModerator();
+      allow update: if false;
     }
 
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────

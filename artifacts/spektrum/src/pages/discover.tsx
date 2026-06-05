@@ -172,7 +172,20 @@ export default function DiscoverPage() {
                     <FirestoreStoryCard key={s.id} story={s} delay={i * 0.05} />
                   ))}
                 {!storiesLoading && filtered.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4 text-center">Bu türde henüz hikaye yok.</p>
+                  <div className="flex flex-col items-center py-8 text-center gap-3">
+                    <BookOpen className="w-8 h-8 text-muted-foreground/20" />
+                    <p className="text-sm text-muted-foreground">
+                      {selectedGenre ? `"${selectedGenre}" türünde henüz hikaye yok.` : "Henüz yayınlanmış hikaye yok."}
+                    </p>
+                    {selectedGenre && (
+                      <button
+                        onClick={() => setSelectedGenre(null)}
+                        className="text-xs text-primary hover:text-primary/80 transition-colors underline underline-offset-2"
+                      >
+                        Filtreyi temizle → Tüm hikayeleri gör
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

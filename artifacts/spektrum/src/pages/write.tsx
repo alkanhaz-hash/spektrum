@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Upload, Plus, ChevronRight, BookOpen, Edit3 } from "lucide-react";
+import { Upload, Plus, ChevronRight, BookOpen, Edit3, ShieldOff } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -134,6 +134,24 @@ export default function WritePage() {
       <AppLayout>
         <div className="container mx-auto px-4 py-10 max-w-2xl space-y-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (profile?.banned) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto px-4 py-20 flex items-center justify-center">
+          <div className="max-w-md w-full p-8 rounded-2xl border border-red-500/30 bg-red-500/5 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+              <ShieldOff className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold">Hesabın Askıya Alındı</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {profile.banReason || "Topluluk kurallarını ihlal ettiğin için hesabın geçici olarak askıya alındı. Daha fazla bilgi için destek ile iletişime geç."}
+            </p>
+          </div>
         </div>
       </AppLayout>
     );

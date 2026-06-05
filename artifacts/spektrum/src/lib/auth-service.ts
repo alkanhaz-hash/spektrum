@@ -41,6 +41,8 @@ export interface UserProfile {
   website?: string;
   pinterest?: string;
   snapchat?: string;
+  banned?: boolean;
+  banReason?: string;
 }
 
 export async function registerUser(

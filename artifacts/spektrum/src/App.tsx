@@ -1,8 +1,9 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import React, { useEffect } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import NotFound from "@/pages/not-found";
 
 import AuthPage from "@/pages/auth";
@@ -16,6 +17,23 @@ import ChapterEditorPage from "@/pages/chapter-editor";
 import ProfilePage from "@/pages/profile";
 import MessagesPage from "@/pages/messages";
 import ModeratorPage from "@/pages/moderator";
+
+// ─── AUTH GUARD ──────────────────────────────────────────────────────────────
+function withAuth<P extends object>(Component: React.ComponentType<P>) {
+  return function AuthGuarded(props: P) {
+    const { user, loading } = useAuth();
+    const [, setLocation] = useLocation();
+    useEffect(() => {
+      if (!loading && !user) setLocation("/auth");
+    }, [user, loading]);
+    if (loading || !user) return null;
+    return <Component {...props} />;
+  };
+}
+
+const GuardedWrite = withAuth(WritePage);
+const GuardedChapterEditor = withAuth(ChapterEditorPage);
+const GuardedMessages = withAuth(MessagesPage);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,12 +54,12 @@ function Router() {
       <Route path="/search" component={SearchPage} />
       <Route path="/story/:id" component={StoryPage} />
       <Route path="/read/:storyId/:chapterId" component={ReadPage} />
-      <Route path="/write" component={WritePage} />
-      <Route path="/write/:storyId" component={WritePage} />
-      <Route path="/write/:storyId/chapter/:chapterId" component={ChapterEditorPage} />
+      <Route path="/write" component={GuardedWrite} />
+      <Route path="/write/:storyId" component={GuardedWrite} />
+      <Route path="/write/:storyId/chapter/:chapterId" component={GuardedChapterEditor} />
       <Route path="/profile/:uid" component={ProfilePage} />
-      <Route path="/messages" component={MessagesPage} />
-      <Route path="/messages/:conversationId" component={MessagesPage} />
+      <Route path="/messages" component={GuardedMessages} />
+      <Route path="/messages/:conversationId" component={GuardedMessages} />
       <Route path="/moderator" component={ModeratorPage} />
       <Route component={NotFound} />
     </Switch>

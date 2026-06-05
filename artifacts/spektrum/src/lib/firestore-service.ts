@@ -678,3 +678,75 @@ export async function getBookmarkedStories(userId: string): Promise<Story[]> {
     .map(s => ({ id: s.id, ...s.data() } as Story))
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
 }
+
+// ─── STATUSES ─────────────────────────────────────────────────────────────────
+
+export interface UserStatus {
+  id: string;
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  text: string;
+  imageUrl?: string;
+  expiresAt: Timestamp;
+  createdAt: Timestamp;
+}
+
+export function getActiveStatuses(callback: (statuses: UserStatus[]) => void): () => void {
+  const q = query(
+    collection(db, "statuses"),
+    where("expiresAt", ">", Timestamp.now()),
+    limit(50)
+  );
+  return onSnapshot(q, snap => {
+    const statuses = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as UserStatus))
+      .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+    callback(statuses);
+  });
+}
+
+export async function createStatus(data: {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  text: string;
+  imageUrl?: string;
+}): Promise<string> {
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const ref = await addDoc(collection(db, "statuses"), {
+    ...data,
+    expiresAt,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function deleteStatus(statusId: string): Promise<void> {
+  await deleteDoc(doc(db, "statuses", statusId));
+}
+
+// ─── BAN ──────────────────────────────────────────────────────────────────────
+
+export async function banUser(uid: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { banned: true, banReason: reason });
+}
+
+export async function unbanUser(uid: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { banned: false, banReason: "" });
+}
+
+export async function searchUsersForMod(term: string): Promise<UserProfile[]> {
+  if (!term.trim()) return [];
+  const lower = term.toLowerCase();
+  const q = query(
+    collection(db, "users"),
+    where("displayName", ">=", term),
+    where("displayName", "<=", term + "\uf8ff"),
+    limit(15)
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ uid: d.id, ...d.data() } as UserProfile))
+    .filter(u => u.displayName?.toLowerCase().includes(lower));
+}

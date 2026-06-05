@@ -2,13 +2,15 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle, XCircle, Eye, Users, Search } from "lucide-react";
+import { Shield, CheckCircle, XCircle, Eye, Users, Search, Ban, ShieldOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, getStory, Chapter,
+  banUser, unbanUser, searchUsersForMod,
 } from "@/lib/firestore-service";
+import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
@@ -262,12 +264,157 @@ function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () =
   );
 }
 
+// ─── Kullanıcı Askıya Alma (moderatör + admin) ───────────────────────────────
+
+function BanTab() {
+  const { toast } = useToast();
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [banReason, setBanReason] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const t = term.trim();
+    if (!t) { setResults([]); setSearched(false); return; }
+    setLoading(true);
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const users = await searchUsersForMod(t);
+        if (!cancelled) { setResults(users); setSearched(true); }
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [term]);
+
+  const handleBan = async (u: UserProfile) => {
+    const reason = banReason[u.uid]?.trim() || "Topluluk kurallarını ihlal";
+    setSaving(u.uid);
+    try {
+      await banUser(u.uid, reason);
+      setResults(prev => prev.map(r => r.uid === u.uid ? { ...r, banned: true, banReason: reason } : r));
+      toast({ title: `${u.displayName} askıya alındı` });
+    } catch {
+      toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleUnban = async (u: UserProfile) => {
+    setSaving(u.uid);
+    try {
+      await unbanUser(u.uid);
+      setResults(prev => prev.map(r => r.uid === u.uid ? { ...r, banned: false, banReason: "" } : r));
+      toast({ title: `${u.displayName} yasağı kaldırıldı` });
+    } catch {
+      toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground mb-4">Kullanıcıyı askıya al veya yasağını kaldır. Askıya alınan kullanıcılar içerik üretemez.</p>
+      <div className="relative mb-6">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <input
+          value={term}
+          onChange={e => setTerm(e.target.value)}
+          placeholder="Kullanıcı adı ara..."
+          className="w-full bg-card border border-border rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      </div>
+
+      {loading && <Skeleton className="h-16 rounded-xl" />}
+
+      {!loading && searched && results.length === 0 && (
+        <p className="text-muted-foreground text-sm text-center py-8">Kullanıcı bulunamadı.</p>
+      )}
+
+      {!loading && results.length > 0 && (
+        <div className="space-y-3">
+          {results.map(u => (
+            <div key={u.uid} className={`p-4 rounded-xl border ${u.banned ? "border-red-500/30 bg-red-500/5" : "border-border bg-card"}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  {u.avatarUrl
+                    ? <img src={u.avatarUrl} alt={u.displayName} className="w-full h-full object-cover" />
+                    : <span className="text-sm font-bold text-muted-foreground">{u.displayName?.charAt(0)}</span>
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{u.displayName}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-xs border rounded-full px-2 py-0.5 ${ROLE_COLORS[u.role] ?? ROLE_COLORS.user}`}>
+                      {ROLE_LABELS[u.role] ?? u.role}
+                    </span>
+                    {u.banned && (
+                      <span className="text-xs border border-red-500/40 text-red-400 bg-red-500/10 rounded-full px-2 py-0.5 flex items-center gap-1">
+                        <Ban className="w-3 h-3" /> Askıya Alındı
+                      </span>
+                    )}
+                  </div>
+                  {u.banned && u.banReason && (
+                    <p className="text-xs text-red-400/70 mt-1 truncate">Sebep: {u.banReason}</p>
+                  )}
+                </div>
+              </div>
+
+              {!u.banned && (
+                <div className="flex gap-2">
+                  <input
+                    value={banReason[u.uid] ?? ""}
+                    onChange={e => setBanReason(prev => ({ ...prev, [u.uid]: e.target.value }))}
+                    placeholder="Askıya alma sebebi (isteğe bağlı)"
+                    className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                  />
+                  <button
+                    onClick={() => handleBan(u)}
+                    disabled={saving === u.uid || u.role === "admin"}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    {saving === u.uid ? "İşleniyor..." : "Askıya Al"}
+                  </button>
+                </div>
+              )}
+
+              {u.banned && (
+                <button
+                  onClick={() => handleUnban(u)}
+                  disabled={saving === u.uid}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+                >
+                  <ShieldOff className="w-3.5 h-3.5" />
+                  {saving === u.uid ? "İşleniyor..." : "Yasağı Kaldır"}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!searched && (
+        <p className="text-muted-foreground text-sm text-center py-8">Aramak için kullanıcı adı yaz.</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 
 export default function ModeratorPage() {
   const [, setLocation] = useLocation();
   const { user, profile, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<"review" | "users">("review");
+  const [tab, setTab] = useState<"review" | "users" | "ban">("review");
 
   useEffect(() => {
     if (authLoading) return; // auth yüklenene kadar bekle — erken yönlendirmeyi önler
@@ -312,18 +459,25 @@ export default function ModeratorPage() {
         </motion.div>
 
         {/* Sekmeler */}
-        <div className="flex gap-1 border-b border-border mb-6">
+        <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
           <button
             onClick={() => setTab("review")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
               tab === "review" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             }`}>
             <Eye className="w-4 h-4" /> Bölüm İnceleme
           </button>
+          <button
+            onClick={() => setTab("ban")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              tab === "ban" ? "border-red-500 text-red-400" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}>
+            <Ban className="w-4 h-4" /> Kullanıcı Askıya Al
+          </button>
           {isAdmin && (
             <button
               onClick={() => setTab("users")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                 tab === "users" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}>
               <Users className="w-4 h-4" /> Kullanıcı Yönetimi
@@ -332,6 +486,7 @@ export default function ModeratorPage() {
         </div>
 
         {tab === "review" && <ReviewTab />}
+        {tab === "ban" && <BanTab />}
         {tab === "users" && isAdmin && user && (
           <UsersTab currentUid={user.uid} getToken={() => user.getIdToken()} />
         )}

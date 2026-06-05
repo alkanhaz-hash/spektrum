@@ -87,6 +87,13 @@ export async function uploadTalentWork(userId: string, file: File): Promise<stri
   return getDownloadURL(storageRef);
 }
 
+export async function uploadStatusImage(uid: string, file: File): Promise<string> {
+  const webpBlob = await convertToWebP(file);
+  const storageRef = ref(storage, `statuses/${uid}/${Date.now()}.webp`);
+  await uploadBytes(storageRef, webpBlob, { contentType: "image/webp" });
+  return getDownloadURL(storageRef);
+}
+
 /**
  * Firebase Storage download URL'sinden storage path'ini çıkararak dosyayı siler.
  * BUG FIX: refFromURL() modüler SDK'da (v9+) bulunmaz.

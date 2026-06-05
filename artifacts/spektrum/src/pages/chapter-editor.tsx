@@ -7,7 +7,7 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, AlertTriangle, CheckCircle, Clock,
-  Mic, MicOff, Sparkles, Check, X, Info
+  Mic, MicOff, Sparkles, Check, X, Info, ShieldOff
 } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -354,7 +354,7 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
 export default function ChapterEditorPage() {
   const { storyId, chapterId } = useParams<{ storyId: string; chapterId: string }>();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(chapterId !== "new");
@@ -462,6 +462,24 @@ export default function ChapterEditorPage() {
       </div>
     </AppLayout>
   );
+
+  if (profile?.banned) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto px-4 py-20 flex items-center justify-center">
+          <div className="max-w-md w-full p-8 rounded-2xl border border-red-500/30 bg-red-500/5 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+              <ShieldOff className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-xl font-bold">Hesabın Askıya Alındı</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {profile.banReason || "Topluluk kurallarını ihlal ettiğin için hesabın geçici olarak askıya alındı."}
+            </p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
