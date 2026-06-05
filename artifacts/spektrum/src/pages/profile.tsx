@@ -15,6 +15,7 @@ import {
   getAnsweredQuestions, getUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
   getNarrationsByNarrator, Narration,
   getOrCreateConversation,
+  followUser, unfollowUser, isFollowingUser,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -482,6 +483,8 @@ export default function ProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
 
   const isOwner = user?.uid === uid;
+  const [following, setFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
     if (!uid || authLoading) return;
@@ -507,6 +510,31 @@ export default function ProfilePage() {
     };
     fetch();
   }, [uid, authLoading, isOwner]);
+
+  useEffect(() => {
+    if (!user || !uid || isOwner) return;
+    isFollowingUser(user.uid, uid).then(setFollowing).catch(() => {});
+  }, [user, uid, isOwner]);
+
+  const handleFollow = async () => {
+    if (!user) { setLocation("/auth"); return; }
+    setFollowLoading(true);
+    try {
+      if (following) {
+        await unfollowUser(user.uid, uid);
+        setFollowing(false);
+        setProfile(p => p ? { ...p, followerCount: Math.max(0, (p.followerCount ?? 1) - 1) } : p);
+      } else {
+        await followUser(user.uid, uid);
+        setFollowing(true);
+        setProfile(p => p ? { ...p, followerCount: (p.followerCount ?? 0) + 1 } : p);
+      }
+    } catch {
+      toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   const handleMessageUser = async () => {
     if (!user || !myProfile || !profile) return;
@@ -614,15 +642,28 @@ export default function ProfilePage() {
                 </button>
               </Link>
             )}
-            {!isOwner && user && (
-              <button
-                onClick={handleMessageUser}
-                disabled={messaging}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.3)] disabled:opacity-60"
-              >
-                <Send className="w-3.5 h-3.5" />
-                {messaging ? "Açılıyor..." : "Mesaj At"}
-              </button>
+            {!isOwner && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFollow}
+                  disabled={followLoading}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-60 ${
+                    following
+                      ? "bg-card border border-border text-foreground hover:border-destructive/50 hover:text-destructive"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_0_16px_hsl(var(--primary)/0.3)]"
+                  }`}
+                >
+                  {following ? "Takip Ediliyor" : "Takip Et"}
+                </button>
+                <button
+                  onClick={user ? handleMessageUser : () => setLocation("/auth")}
+                  disabled={messaging}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-card border border-border text-sm font-semibold hover:border-primary/50 transition-all disabled:opacity-60"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {messaging ? "Açılıyor..." : "Mesaj At"}
+                </button>
+              </div>
             )}
           </div>
 

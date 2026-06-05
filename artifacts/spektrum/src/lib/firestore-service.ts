@@ -558,3 +558,26 @@ export async function searchUsersByName(term: string): Promise<UserSummary[]> {
 export async function setUserRole(uid: string, role: "user" | "moderator" | "admin"): Promise<void> {
   await updateDoc(doc(db, "users", uid), { role });
 }
+
+// ─── TAKİP SİSTEMİ ────────────────────────────────────────────────────────────
+
+export async function followUser(followerId: string, followedId: string): Promise<void> {
+  await setDoc(doc(db, "follows", `${followerId}_${followedId}`), {
+    followerId,
+    followedId,
+    createdAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, "users", followedId), { followerCount: increment(1) });
+  await updateDoc(doc(db, "users", followerId), { followingCount: increment(1) });
+}
+
+export async function unfollowUser(followerId: string, followedId: string): Promise<void> {
+  await deleteDoc(doc(db, "follows", `${followerId}_${followedId}`));
+  await updateDoc(doc(db, "users", followedId), { followerCount: increment(-1) });
+  await updateDoc(doc(db, "users", followerId), { followingCount: increment(-1) });
+}
+
+export async function isFollowingUser(followerId: string, followedId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "follows", `${followerId}_${followedId}`));
+  return snap.exists();
+}
