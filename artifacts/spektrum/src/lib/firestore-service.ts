@@ -148,13 +148,11 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
     .slice(0, pageSize);
 }
 
-// Tüm hikayelerde başlık/yazar/özet/etiket araması (istemci taraflı filtre).
-// Status filtresi yok — hikayeler başlık/özet düzeyinde moderasyon gerektirmez;
-// bölüm moderasyonu zaten içeriği korur.
+// Yayınlanmış hikayelerde başlık/yazar/özet/etiket araması (istemci taraflı filtre).
 export async function searchStories(term: string): Promise<Story[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
-  const q = query(collection(db, "stories"), limit(300));
+  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(300));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
@@ -377,9 +375,7 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  // Status filtresi yok — hikayeler taslak olarak oluşsa da keşif feed'inde görünür.
-  // updatedAt'a göre sıralama: en son güncellenen önce gelir.
-  const q = query(collection(db, "stories"), limit(60));
+  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(60));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))

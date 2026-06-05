@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, getStory, Chapter,
-  searchUsersByName, setUserRole, UserSummary,
+  searchUsersByName, UserSummary,
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -121,7 +121,7 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "text-amber-400 border-amber-400/40",
 };
 
-function UsersTab({ currentUid }: { currentUid: string }) {
+function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () => Promise<string> }) {
   const { toast } = useToast();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<UserSummary[]>([]);
@@ -149,12 +149,24 @@ function UsersTab({ currentUid }: { currentUid: string }) {
     }
     setSaving(u.uid);
     try {
-      await setUserRole(u.uid, newRole);
+      const token = await getToken();
+      const res = await fetch(`/api/admin/users/${u.uid}/role`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "İzin reddedildi");
+      }
       setResults(prev => prev.map(r => r.uid === u.uid ? { ...r, role: newRole } : r));
       toast({ title: newRole === "moderator" ? `${u.displayName} moderatör yapıldı` : `${u.displayName} rolü kaldırıldı` });
     } catch (err: unknown) {
-      const code = (err as { code?: string }).code;
-      toast({ title: "Hata", description: code ?? "İzin reddedildi.", variant: "destructive" });
+      const msg = (err as Error).message ?? "Bilinmeyen hata";
+      toast({ title: "Hata", description: msg, variant: "destructive" });
     } finally {
       setSaving(null);
     }
@@ -304,7 +316,9 @@ export default function ModeratorPage() {
         </div>
 
         {tab === "review" && <ReviewTab />}
-        {tab === "users" && isAdmin && user && <UsersTab currentUid={user.uid} />}
+        {tab === "users" && isAdmin && user && (
+          <UsersTab currentUid={user.uid} getToken={() => user.getIdToken()} />
+        )}
       </div>
     </AppLayout>
   );
