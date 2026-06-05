@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Image, Smile, ChevronLeft } from "lucide-react";
@@ -127,12 +127,14 @@ export default function MessagesPage() {
               <button onClick={() => setLocation("/messages")} className="md:hidden text-muted-foreground hover:text-foreground" data-testid="button-back-convs">
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary overflow-hidden">
-                {otherUid && activeConv?.participantAvatars[otherUid]
-                  ? <img src={activeConv.participantAvatars[otherUid]} alt={otherName || ""} className="w-full h-full object-cover" />
-                  : otherName?.charAt(0) || "?"}
-              </div>
-              <span className="font-semibold">{otherName}</span>
+              <Link href={otherUid ? `/profile/${otherUid}` : "#"} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary overflow-hidden">
+                  {otherUid && activeConv?.participantAvatars[otherUid]
+                    ? <img src={activeConv.participantAvatars[otherUid]} alt={otherName || ""} className="w-full h-full object-cover" />
+                    : otherName?.charAt(0) || "?"}
+                </div>
+                <span className="font-semibold">{otherName}</span>
+              </Link>
             </div>
 
             {/* Messages */}
