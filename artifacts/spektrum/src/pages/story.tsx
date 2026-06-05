@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { Timestamp } from "firebase/firestore";
 import {
-  getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, hasUserLikedStory,
+  getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, unlikeStory, hasUserLikedStory,
   getNarrationsByStory, getNarrationRequest, createNarrationRequest, uploadNarration, deleteNarration,
   getOrCreateConversation, sendMessage,
   Story, Chapter, TalentPortfolio, Narration, NarrationRequest,
@@ -401,13 +401,18 @@ export default function StoryPage() {
 
   const handleLike = async () => {
     if (!user || !story) return;
-    if (liked) return;
     try {
-      await likeStory(story.id, user.uid);
-      setLiked(true);
-      setStory(s => s ? { ...s, likeCount: s.likeCount + 1 } : s);
+      if (liked) {
+        await unlikeStory(story.id, user.uid);
+        setLiked(false);
+        setStory(s => s ? { ...s, likeCount: Math.max(0, s.likeCount - 1) } : s);
+      } else {
+        await likeStory(story.id, user.uid);
+        setLiked(true);
+        setStory(s => s ? { ...s, likeCount: s.likeCount + 1 } : s);
+      }
     } catch {
-      toast({ title: "Hata", description: "Beğeni kaydedilemedi.", variant: "destructive" });
+      toast({ title: "Hata", description: "Beğeni güncellenemedi.", variant: "destructive" });
     }
   };
 
@@ -473,9 +478,10 @@ export default function StoryPage() {
               <span className="flex items-center gap-1"><MessageSquare className="w-4 h-4" /> {story.commentCount} yorum</span>
               <button
                 onClick={handleLike}
-                disabled={liked || !user}
-                className={`flex items-center gap-1 transition-colors ${liked ? "text-pink-400" : "hover:text-pink-400"}`}
+                disabled={!user}
+                className={`flex items-center gap-1 transition-colors ${liked ? "text-pink-400 hover:text-pink-300" : "hover:text-pink-400"}`}
                 data-testid="button-like"
+                title={liked ? "Beğeniyi geri al" : "Beğen"}
               >
                 <Heart className={`w-4 h-4 ${liked ? "fill-pink-400" : ""}`} /> {story.likeCount}
               </button>

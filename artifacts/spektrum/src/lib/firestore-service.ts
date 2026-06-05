@@ -195,6 +195,18 @@ export async function likeStory(storyId: string, userId: string) {
   await addDoc(collection(db, "storyLikes"), { storyId, userId, createdAt: serverTimestamp() });
 }
 
+export async function unlikeStory(storyId: string, userId: string) {
+  const existingQ = query(
+    collection(db, "storyLikes"),
+    where("storyId", "==", storyId),
+    where("userId", "==", userId)
+  );
+  const existing = await getDocs(existingQ);
+  if (existing.empty) return;
+  await deleteDoc(existing.docs[0].ref);
+  await updateDoc(doc(db, "stories", storyId), { likeCount: increment(-1) });
+}
+
 export async function hasUserLikedStory(storyId: string, userId: string): Promise<boolean> {
   const q = query(
     collection(db, "storyLikes"),
