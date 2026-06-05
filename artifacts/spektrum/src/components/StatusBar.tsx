@@ -151,11 +151,16 @@ function StatusCreate({ onClose }: { onClose: () => void }) {
     }
     setSubmitting(true);
     try {
+      // Moderasyon — API erişilemezse durdurma, geç
       if (text.trim()) {
-        const result = await moderateText(text);
-        if (result.action === "rejected") {
-          toast({ title: "Durum yayınlanamadı", description: "İçerik politikalarına aykırı.", variant: "destructive" });
-          return;
+        try {
+          const result = await moderateText(text);
+          if (result.action === "rejected") {
+            toast({ title: "Durum yayınlanamadı", description: "İçerik politikalarına aykırı.", variant: "destructive" });
+            return;
+          }
+        } catch {
+          // Moderasyon API'si yanıt vermedi — yayınlamaya devam et
         }
       }
       let imageUrl: string | undefined;
@@ -171,8 +176,11 @@ function StatusCreate({ onClose }: { onClose: () => void }) {
       });
       toast({ title: "Durum yayınlandı!", description: "24 saat sonra otomatik silinir." });
       onClose();
-    } catch {
-      toast({ title: "Hata", description: "Durum yayınlanamadı.", variant: "destructive" });
+    } catch (err) {
+      const msg = (err as { code?: string })?.code === "permission-denied"
+        ? "İzin reddedildi. Sayfayı yenileyip tekrar dene."
+        : "Durum yayınlanamadı. Tekrar dene.";
+      toast({ title: "Hata", description: msg, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
