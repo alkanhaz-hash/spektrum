@@ -327,8 +327,15 @@ export async function sendMessage(data: Omit<Message, "id" | "createdAt">) {
   const convSnap = await getDoc(doc(db, "conversations", data.conversationId));
   const participants = (convSnap.data()?.participants ?? []) as string[];
   const otherId = participants.find(p => p !== data.senderId);
+  const lastMessagePreview = data.text
+    ? data.text
+    : data.mediaType === "image"
+    ? "📷 Fotoğraf"
+    : data.mediaType === "gif"
+    ? "GIF"
+    : "";
   const convUpdate: Record<string, unknown> = {
-    lastMessage: data.text || (data.mediaType === "image" ? "📷 Fotoğraf" : "GIF"),
+    lastMessage: lastMessagePreview,
     lastMessageAt: serverTimestamp(),
   };
   if (otherId) convUpdate[`unreadCount.${otherId}`] = increment(1);
@@ -343,7 +350,7 @@ export async function markConversationRead(conversationId: string, userId: strin
 }
 
 export function listenMessages(conversationId: string, callback: (msgs: Message[]) => void) {
-  const q = query(collection(db, "messages"), where("conversationId", "==", conversationId), limit(100));
+  const q = query(collection(db, "messages"), where("conversationId", "==", conversationId), limit(200));
   return onSnapshot(q, snap => {
     const sorted = snap.docs
       .map(d => ({ id: d.id, ...d.data() } as Message))
@@ -370,12 +377,13 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  // Status filtresi kaldırıldı — hikayeler taslak olarak oluşsa da keşif feed'inde görünür.
+  // Status filtresi yok — hikayeler taslak olarak oluşsa da keşif feed'inde görünür.
+  // updatedAt'a göre sıralama: en son güncellenen önce gelir.
   const q = query(collection(db, "stories"), limit(60));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
-    .sort((a, b) => (b.commentCount ?? 0) - (a.commentCount ?? 0))
+    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
     .slice(0, 20);
 }
 

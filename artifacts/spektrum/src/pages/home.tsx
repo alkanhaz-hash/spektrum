@@ -118,7 +118,7 @@ export default function HomePage() {
         <section>
           <div className="flex items-center gap-2 mb-6">
             <Clock className="text-secondary w-5 h-5" />
-            <h2 className="text-2xl font-bold font-serif">Son Güncellemeler</h2>
+            <h2 className="text-2xl font-bold font-serif">Yeni Eklenenler</h2>
           </div>
           
           {discoverLoading ? (

@@ -52,7 +52,6 @@ export default function SearchPage() {
         <div className="relative mb-6">
           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
-            autoFocus
             value={term}
             onChange={e => setTerm(e.target.value)}
             placeholder="Kitap adı, yazar veya etiket ara..."

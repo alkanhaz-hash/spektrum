@@ -2,7 +2,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useGetTrendingStories } from "@workspace/api-client-react";
 import { getDiscoverFeed, Story, GENRES } from "@/lib/firestore-service";
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { motion } from "framer-motion";
 import { TrendingUp, MessageSquare, BookOpen, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -79,9 +79,14 @@ export default function DiscoverPage() {
   const { data: trending, isLoading: trendingLoading } = useGetTrendingStories();
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(
-    () => new URLSearchParams(window.location.search).get("genre")
-  );
+  const searchString = useSearch();
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+
+  // URL'deki ?genre= parametresi değiştiğinde (home → discover gibi navigasyonlarda) güncelle
+  useEffect(() => {
+    const genre = new URLSearchParams(searchString).get("genre");
+    setSelectedGenre(genre);
+  }, [searchString]);
 
   useEffect(() => {
     getDiscoverFeed().then(res => {
