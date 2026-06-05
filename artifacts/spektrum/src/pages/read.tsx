@@ -152,7 +152,7 @@ export default function ReadPage() {
         if (user) incrementUserReadCount(user.uid).catch(() => {});
       }
     }).catch(() => setLoading(false));
-  }, [storyId, chapterId]);
+  }, [storyId, chapterId, user?.uid, profile?.role]);
 
   const paragraphs = chapter?.content.split(/\n+/).filter(p => p.trim()) ?? [];
 
@@ -160,9 +160,13 @@ export default function ReadPage() {
 
   const handleAddComment = async (text: string, paragraphIndex: number) => {
     if (!user || !profile || !storyId || !chapterId) return;
-    await addInlineComment({ storyId, chapterId, paragraphIndex, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
-    const updated = await getInlineComments(chapterId);
-    setComments(updated);
+    try {
+      await addInlineComment({ storyId, chapterId, paragraphIndex, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
+      const updated = await getInlineComments(chapterId);
+      setComments(updated);
+    } catch {
+      toast({ title: "Yorum gönderilemedi", description: "Lütfen tekrar dene.", variant: "destructive" });
+    }
   };
 
   const handleLike = async (commentId: string, liked: boolean) => {

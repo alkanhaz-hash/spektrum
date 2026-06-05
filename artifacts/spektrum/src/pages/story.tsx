@@ -376,10 +376,12 @@ export default function StoryPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [talents, setTalents] = useState<TalentPortfolio[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [liked, setLiked] = useState(false);
 
   useEffect(() => {
     if (!id) return;
+    setLoadError(false);
     Promise.all([
       getStory(id),
       getChaptersByStory(id, true),
@@ -387,11 +389,14 @@ export default function StoryPage() {
       user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
     ]).then(([s, ch, t, alreadyLiked]) => {
       setStory(s);
-      setChapters(ch); // getChaptersByStory(id, true) zaten published filtresi uyguluyor
+      setChapters(ch);
       setTalents(t);
       setLiked(alreadyLiked);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setLoading(false);
+      setLoadError(true);
+    });
   }, [id, user?.uid]);
 
   const handleLike = async () => {
@@ -414,6 +419,18 @@ export default function StoryPage() {
           <Skeleton className="h-8 w-64 mb-3" />
           <Skeleton className="h-4 w-48 mb-6" />
           <Skeleton className="h-32 rounded-xl" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppLayout>
+        <div className="container mx-auto px-4 py-20 text-center">
+          <p className="text-destructive font-medium mb-2">Hikaye yüklenemedi</p>
+          <p className="text-muted-foreground text-sm mb-4">Bağlantı hatası olabilir. Lütfen tekrar dene.</p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm">Yenile</button>
         </div>
       </AppLayout>
     );
