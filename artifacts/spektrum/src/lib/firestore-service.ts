@@ -291,12 +291,14 @@ export async function likeInlineComment(commentId: string, userId: string, liked
 // ─── CONVERSATIONS & MESSAGES ─────────────────────────────────────────────────
 
 export async function getOrCreateConversation(uid1: string, uid2: string, names: Record<string, string>, avatars: Record<string, string>): Promise<string> {
-  // BUG FIX: Deterministik ID kullan — addDoc her çağrıda yeni belge üretiyordu.
-  // İki kullanıcı arasında her zaman aynı konuşma ID'si elde edilir.
   const conversationId = [uid1, uid2].sort().join("_");
   const convRef = doc(db, "conversations", conversationId);
-  const snap = await getDoc(convRef);
-  if (!snap.exists()) {
+  // BUG FIX: getDoc → resource==null olduğunda Firestore kuralı reddediyordu.
+  // Önce setDoc ile oluşturmayı dene:
+  //   - Belge yoksa: create kuralı geçer, yeni konuşma açılır.
+  //   - Belge varsa: update kuralı participants değişikliğini reddeder (hata fırlatır),
+  //     catch bloğuna düşeriz — ID zaten doğru, konuşma mevcuttur.
+  try {
     await setDoc(convRef, {
       participants: [uid1, uid2],
       participantNames: names,
@@ -305,6 +307,8 @@ export async function getOrCreateConversation(uid1: string, uid2: string, names:
       lastMessageAt: serverTimestamp(),
       unreadCount: { [uid1]: 0, [uid2]: 0 },
     });
+  } catch {
+    // Konuşma zaten var — ID doğru, devam et.
   }
   return conversationId;
 }

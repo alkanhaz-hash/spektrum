@@ -55,8 +55,13 @@ service cloud.firestore {
       // düzenleyebilir ama rol alanını değiştiremez — rol değişikliği YALNIZCA
       // backend Admin SDK endpoint'i (PATCH /api/admin/users/:uid/role) üzerinden
       // yapılabilir; istemci SDK'sı bu kurallarla kısıtlanır.
-      allow update: if (isOwner(uid) || isModerator())
-                    && request.resource.data.get('role', 'user') == resource.data.get('role', 'user');
+      allow update: if ((isOwner(uid) || isModerator())
+                        && request.resource.data.get('role', 'user') == resource.data.get('role', 'user'))
+                    // Herhangi bir giriş yapmış kullanıcı YALNIZCA takipçi/takip sayaçlarını güncelleyebilir
+                    || (isSignedIn()
+                        && changedKeys().hasOnly(['followerCount', 'followingCount'])
+                        && counterDeltaOk('followerCount')
+                        && counterDeltaOk('followingCount'));
       allow delete: if isModerator();
     }
 
@@ -126,12 +131,22 @@ service cloud.firestore {
       allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
     }
 
+    // ─── FOLLOWS ────────────────────────────────────────────────────────────
+    // Takip eden kendi kaydını oluşturur/siler. ID formatı: {followerId}_{followedId}
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.followerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.followerId == request.auth.uid;
+    }
+
     // ─── CONVERSATIONS ──────────────────────────────────────────────────────
     // Yalnızca katılımcılar okur/yazar. Güncellemede `participants` DEĞİŞTİRİLEMEZ
     // (yabancı kullanıcı ekleyip mesajları okuma yetkisi yükseltmesi engellenir);
     // yalnızca son mesaj alanları ve okunmamış sayacı yazılabilir.
+    // NOT: resource == null kontrolü — henüz oluşturulmamış konuşma belgesi için
+    // getDoc izin hatasını önler (getOrCreateConversation akışı).
     match /conversations/{conversationId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participants);
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
       allow update: if isSignedIn()
                     && request.auth.uid in resource.data.participants
