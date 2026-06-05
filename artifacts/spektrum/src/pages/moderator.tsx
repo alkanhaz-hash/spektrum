@@ -8,10 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, getStory, Chapter,
-  searchUsersByName, UserSummary,
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+
+interface UserSummary {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  role: "user" | "moderator" | "admin";
+}
 
 interface PendingItem extends Chapter {
   storyTitle?: string;
@@ -133,14 +139,24 @@ function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () =
     const t = term.trim();
     if (!t) { setResults([]); setSearched(false); return; }
     setLoading(true);
-    const handle = setTimeout(() => {
-      searchUsersByName(t)
-        .then(r => { setResults(r); setSearched(true); })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(t)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Arama başarısız");
+        const data = await res.json() as UserSummary[];
+        if (!cancelled) { setResults(data); setSearched(true); }
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }, 300);
-    return () => clearTimeout(handle);
-  }, [term]);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [term, getToken]);
 
   const handleRoleChange = async (u: UserSummary, newRole: "user" | "moderator") => {
     if (u.uid === currentUid) {
