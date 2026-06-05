@@ -4,8 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { loginUser, registerUser, loginWithGoogle, resetPassword } from "@/lib/auth-service";
-import { useState } from "react";
+import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword } from "@/lib/auth-service";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { SiGoogle } from "react-icons/si";
@@ -18,6 +18,13 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>("auth");
+
+  // Mobil Google redirect'ten dönüşü yakala
+  useEffect(() => {
+    getGoogleRedirectResult()
+      .then(user => { if (user) setLocation("/"); })
+      .catch(() => {}); // Redirect sonucu yoksa sessizce geç
+  }, []);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -67,13 +74,15 @@ export default function AuthPage() {
   const handleGoogle = async () => {
     setLoading(true);
     try {
-      await loginWithGoogle();
-      setLocation("/");
+      const user = await loginWithGoogle();
+      // Masaüstü: user döner → yönlendir
+      // Mobil: null döner (sayfa redirect oluyor) → bekle, useEffect yakalar
+      if (user) setLocation("/");
     } catch (err: any) {
-      toast({ title: "Hata", description: err.message, variant: "destructive" });
-    } finally {
+      toast({ title: "Google ile giriş başarısız", description: err.message, variant: "destructive" });
       setLoading(false);
     }
+    // Mobil redirect durumunda setLoading(false) çağrılmaz — sayfa zaten yenilenir
   };
 
   const handleReset = async (e: React.FormEvent) => {

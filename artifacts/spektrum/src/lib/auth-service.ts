@@ -9,9 +9,14 @@ import {
   User,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
+
+// Mobil cihaz tespiti (User-Agent tabanlı)
+const isMobileDevice = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
 // GÜVENLİK NOTU: e-posta (ve emailVerified) artık Firestore `users` belgesinde
 // TUTULMAZ. `users` belgeleri herkese açık okunabilir (profil ad/avatar/bio için);
@@ -90,17 +95,15 @@ export async function loginUser(email: string, password: string): Promise<User> 
   return credential.user;
 }
 
-export async function loginWithGoogle(): Promise<User> {
-  const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(auth, provider);
-  const userRef = doc(db, "users", credential.user.uid);
+async function ensureGoogleProfile(user: User): Promise<void> {
+  const userRef = doc(db, "users", user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {
     await setDoc(userRef, {
-      uid: credential.user.uid,
-      displayName: credential.user.displayName || "Kullanıcı",
+      uid: user.uid,
+      displayName: user.displayName || "Kullanıcı",
       bio: "",
-      avatarUrl: credential.user.photoURL || "",
+      avatarUrl: user.photoURL || "",
       coverUrl: "",
       genre: "",
       followerCount: 0,
@@ -111,7 +114,26 @@ export async function loginWithGoogle(): Promise<User> {
       role: "user",
     });
   }
+}
+
+export async function loginWithGoogle(): Promise<User | null> {
+  const provider = new GoogleAuthProvider();
+  if (isMobileDevice()) {
+    // Mobilde popup bloke edilebilir — redirect kullan, sayfa yeniden yüklenir
+    await signInWithRedirect(auth, provider);
+    return null; // Sayfa redirect olacak, buraya ulaşılmaz
+  }
+  const credential = await signInWithPopup(auth, provider);
+  await ensureGoogleProfile(credential.user);
   return credential.user;
+}
+
+// Mobil Google redirect'ten döndükten sonra sonucu yakala
+export async function getGoogleRedirectResult(): Promise<User | null> {
+  const result = await getRedirectResult(auth);
+  if (!result) return null;
+  await ensureGoogleProfile(result.user);
+  return result.user;
 }
 
 export async function logoutUser(): Promise<void> {
