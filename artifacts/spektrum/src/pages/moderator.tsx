@@ -242,8 +242,8 @@ export default function ModeratorPage() {
   const [tab, setTab] = useState<"review" | "users">("review");
 
   useEffect(() => {
+    if (authLoading) return; // auth yüklenene kadar bekle — erken yönlendirmeyi önler
     if (!user) { setLocation("/auth"); return; }
-    if (authLoading) return;
     if (!profile || (profile.role !== "moderator" && profile.role !== "admin")) {
       setLocation("/");
     }

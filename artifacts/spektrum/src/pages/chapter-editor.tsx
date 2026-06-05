@@ -388,7 +388,10 @@ export default function ChapterEditorPage() {
 
   const saveDraft = async () => {
     const data = form.getValues();
-    if (!data.title || !data.content) return;
+    if (!data.title || !data.content) {
+      toast({ title: "Eksik alan", description: "Taslak kaydedebilmek için başlık ve içerik doldurulmalı." });
+      return;
+    }
     setSaving(true);
     try {
       if (chapterId === "new") {

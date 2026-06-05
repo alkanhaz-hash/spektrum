@@ -132,8 +132,11 @@ export default function ReadPage() {
       getChaptersByStory(storyId, true),
       getInlineComments(chapterId),
     ]).then(([s, ch, allCh, cmts]) => {
-      // Güvenlik: taslak/reddedilen bölüm yazar değilse okunamaz
-      if (ch && ch.status !== "published" && user?.uid !== s?.authorId) {
+      // Güvenlik: taslak/reddedilen bölüm yalnızca yazar ve moderatör/admin görebilir
+      if (ch && ch.status !== "published"
+          && user?.uid !== s?.authorId
+          && profile?.role !== "moderator"
+          && profile?.role !== "admin") {
         setLocation(`/story/${storyId}`);
         return;
       }

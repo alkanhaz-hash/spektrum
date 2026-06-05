@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,6 +14,7 @@ import {
   getStoriesByAuthor, Story,
   getAnsweredQuestions, getUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
   getNarrationsByNarrator, Narration,
+  getOrCreateConversation,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -468,8 +469,10 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
 
 export default function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
-  const { user, loading: authLoading, refreshProfile } = useAuth();
+  const [, setLocation] = useLocation();
+  const { user, profile: myProfile, loading: authLoading, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const [messaging, setMessaging] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
@@ -504,6 +507,24 @@ export default function ProfilePage() {
     };
     fetch();
   }, [uid, authLoading, isOwner]);
+
+  const handleMessageUser = async () => {
+    if (!user || !myProfile || !profile) return;
+    setMessaging(true);
+    try {
+      const convId = await getOrCreateConversation(
+        user.uid,
+        uid,
+        { [user.uid]: myProfile.displayName, [uid]: profile.displayName },
+        { [user.uid]: myProfile.avatarUrl ?? "", [uid]: profile.avatarUrl ?? "" },
+      );
+      setLocation(`/messages/${convId}`);
+    } catch {
+      toast({ title: "Hata", description: "Konuşma başlatılamadı.", variant: "destructive" });
+    } finally {
+      setMessaging(false);
+    }
+  };
 
   const handleProfileSave = async (updated: UserProfile) => {
     setProfile(updated);
@@ -592,6 +613,16 @@ export default function ProfilePage() {
                   <Edit3 className="w-3.5 h-3.5" /> Yaz
                 </button>
               </Link>
+            )}
+            {!isOwner && user && (
+              <button
+                onClick={handleMessageUser}
+                disabled={messaging}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.3)] disabled:opacity-60"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {messaging ? "Açılıyor..." : "Mesaj At"}
+              </button>
             )}
           </div>
 

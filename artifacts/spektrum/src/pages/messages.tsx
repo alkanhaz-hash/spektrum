@@ -127,8 +127,10 @@ export default function MessagesPage() {
               <button onClick={() => setLocation("/messages")} className="md:hidden text-muted-foreground hover:text-foreground" data-testid="button-back-convs">
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-                {otherName?.charAt(0) || "?"}
+              <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary overflow-hidden">
+                {otherUid && activeConv?.participantAvatars[otherUid]
+                  ? <img src={activeConv.participantAvatars[otherUid]} alt={otherName || ""} className="w-full h-full object-cover" />
+                  : otherName?.charAt(0) || "?"}
               </div>
               <span className="font-semibold">{otherName}</span>
             </div>
@@ -155,10 +157,12 @@ export default function MessagesPage() {
 
             {/* Input */}
             <div className="p-4 border-t border-border bg-card">
+              {/* Emoji picker dış tıklama overlay */}
+              {showEmoji && <div className="fixed inset-0 z-10" onClick={() => setShowEmoji(false)} />}
               <AnimatePresence>
                 {showEmoji && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                    className="flex flex-wrap gap-2 mb-3 p-3 bg-background rounded-xl border border-border">
+                    className="relative z-20 flex flex-wrap gap-2 mb-3 p-3 bg-background rounded-xl border border-border">
                     {EMOJIS.map(e => (
                       <button key={e} onClick={() => { setText(t => t + e); setShowEmoji(false); }}
                         className="text-xl hover:scale-110 transition-transform" data-testid={`emoji-${e}`}>{e}</button>
