@@ -43,6 +43,8 @@ export interface UserProfile {
   snapchat?: string;
   banned?: boolean;
   banReason?: string;
+  /** false → yeni Google kullanıcısı, takma ad henüz seçilmedi. undefined/true → tamam. */
+  nicknameSet?: boolean;
 }
 
 export async function registerUser(
@@ -65,6 +67,7 @@ export async function registerUser(
     readCount: 0,
     createdAt: serverTimestamp(),
     role: "user",
+    nicknameSet: true,
   });
   await sendEmailVerification(credential.user);
   return credential.user;
@@ -114,6 +117,7 @@ async function ensureGoogleProfile(user: User): Promise<void> {
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
+      nicknameSet: false,
     });
   }
 }

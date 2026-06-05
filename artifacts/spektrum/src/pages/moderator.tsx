@@ -132,7 +132,7 @@ const ROLE_COLORS: Record<string, string> = {
 function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () => Promise<string> }) {
   const { toast } = useToast();
   const [term, setTerm] = useState("");
-  const [results, setResults] = useState<UserSummary[]>([]);
+  const [results, setResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
@@ -144,23 +144,18 @@ function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () =
     let cancelled = false;
     const handle = setTimeout(async () => {
       try {
-        const token = await getToken();
-        const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(t)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Arama başarısız");
-        const data = await res.json() as UserSummary[];
-        if (!cancelled) { setResults(data); setSearched(true); }
+        const users = await searchUsersForMod(t);
+        if (!cancelled) { setResults(users); setSearched(true); }
       } catch {
         if (!cancelled) setResults([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 300);
+    }, 350);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [term, getToken]);
+  }, [term]);
 
-  const handleRoleChange = async (u: UserSummary, newRole: "user" | "moderator") => {
+  const handleRoleChange = async (u: UserProfile, newRole: "user" | "moderator") => {
     if (u.uid === currentUid) {
       toast({ title: "Kendi rolünü değiştiremezsin.", variant: "destructive" });
       return;

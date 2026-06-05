@@ -239,9 +239,20 @@ export default function AuthPage() {
 
                 <TabsContent value="register">
                   <form onSubmit={handleRegister} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="reg-name">Kullanıcı Adı</Label>
-                      <Input id="reg-name" type="text" value={regName} onChange={e => setRegName(e.target.value)} required placeholder="kullanici_adi" className="bg-background/50" />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="reg-name">Takma Ad <span className="text-muted-foreground font-normal">(Nickname)</span></Label>
+                      <Input
+                        id="reg-name"
+                        type="text"
+                        value={regName}
+                        onChange={e => setRegName(e.target.value)}
+                        required
+                        minLength={3}
+                        maxLength={30}
+                        placeholder="takma_adın"
+                        className="bg-background/50"
+                      />
+                      <p className="text-xs text-muted-foreground">Diğer kullanıcılar seni bu isimle arayacak ve profilinde görünecek.</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-email">E-posta</Label>

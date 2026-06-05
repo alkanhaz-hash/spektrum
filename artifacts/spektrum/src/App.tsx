@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { NicknameSetupModal } from "@/components/NicknameSetupModal";
 import NotFound from "@/pages/not-found";
 
 import AuthPage from "@/pages/auth";
@@ -66,13 +67,30 @@ function Router() {
   );
 }
 
+function NicknameGate({ children }: { children: React.ReactNode }) {
+  const { user, profile } = useAuth();
+  if (user && profile && profile.nicknameSet === false) {
+    return (
+      <NicknameSetupModal
+        uid={user.uid}
+        onComplete={() => {
+          // onSnapshot zaten Firestore'u canlı izliyor; ayrıca state güncellemesi gerekmez
+        }}
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
+            <NicknameGate>
+              <Router />
+            </NicknameGate>
           </WouterRouter>
           <Toaster />
         </TooltipProvider>
