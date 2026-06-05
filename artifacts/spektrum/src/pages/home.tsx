@@ -7,18 +7,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { Clock, MessageSquare, TrendingUp } from "lucide-react";
+import { BookOpen, Clock, MessageSquare, TrendingUp } from "lucide-react";
 
 export default function HomePage() {
-  const { data: trending, isLoading: trendingLoading } = useGetTrendingStories();
+  const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
   const [discoverStories, setDiscoverStories] = useState<Story[]>([]);
   const [discoverLoading, setDiscoverLoading] = useState(true);
+  const [discoverError, setDiscoverError] = useState(false);
 
   useEffect(() => {
     getDiscoverFeed().then(res => {
       setDiscoverStories(res);
       setDiscoverLoading(false);
-    }).catch(() => setDiscoverLoading(false));
+    }).catch(() => {
+      setDiscoverLoading(false);
+      setDiscoverError(true);
+    });
   }, []);
 
   return (
@@ -67,9 +71,16 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
             </div>
+          ) : trendingError || !trending?.length ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
+              <TrendingUp className="w-10 h-10 opacity-20" />
+              <p className="text-sm">
+                {trendingError ? "Trend verisi yüklenemedi. Lütfen sayfayı yenile." : "Henüz trend hikaye yok."}
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {trending?.map((story, i) => (
+              {trending.map((story, i) => (
                 <motion.div
                   key={story.storyId}
                   initial={{ opacity: 0, y: 20 }}
@@ -124,6 +135,13 @@ export default function HomePage() {
           {discoverLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-64 rounded-xl" />)}
+            </div>
+          ) : discoverError || !discoverStories.length ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
+              <BookOpen className="w-10 h-10 opacity-20" />
+              <p className="text-sm">
+                {discoverError ? "Hikayeler yüklenemedi. Lütfen sayfayı yenile." : "Henüz yayınlanmış hikaye yok."}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">

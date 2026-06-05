@@ -8,22 +8,45 @@ import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, rese
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { SiGoogle } from "react-icons/si";
 import { Mail, CheckCircle, ArrowLeft } from "lucide-react";
 
 type View = "auth" | "forgot" | "verify-email";
 
+function googleErrorMsg(code: string, fallback: string): string {
+  if (code === "auth/account-exists-with-different-credential")
+    return "Bu e-posta başka bir yöntemle (e-posta/şifre) kayıtlı. O yöntemle giriş yap.";
+  if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request")
+    return "Google girişi iptal edildi.";
+  if (code === "auth/network-request-failed")
+    return "Bağlantı hatası. İnternet bağlantını kontrol et.";
+  return fallback;
+}
+
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<View>("auth");
+
+  // Zaten giriş yapmış kullanıcıyı ana sayfaya yönlendir
+  useEffect(() => {
+    if (!authLoading && user) setLocation("/");
+  }, [user, authLoading]);
 
   // Mobil Google redirect'ten dönüşü yakala
   useEffect(() => {
     getGoogleRedirectResult()
-      .then(user => { if (user) setLocation("/"); })
-      .catch(() => {}); // Redirect sonucu yoksa sessizce geç
+      .then(u => { if (u) setLocation("/"); })
+      .catch((err: unknown) => {
+        const code = (err as { code?: string })?.code ?? "";
+        const msg = (err as { message?: string })?.message ?? "Google ile giriş başarısız.";
+        if (code && code !== "auth/redirect-cancelled-by-user") {
+          toast({ title: "Google girişi başarısız", description: googleErrorMsg(code, msg), variant: "destructive" });
+        }
+      });
   }, []);
 
   const [loginEmail, setLoginEmail] = useState("");
@@ -74,12 +97,14 @@ export default function AuthPage() {
   const handleGoogle = async () => {
     setLoading(true);
     try {
-      const user = await loginWithGoogle();
+      const u = await loginWithGoogle();
       // Masaüstü: user döner → yönlendir
       // Mobil: null döner (sayfa redirect oluyor) → bekle, useEffect yakalar
-      if (user) setLocation("/");
-    } catch (err: any) {
-      toast({ title: "Google ile giriş başarısız", description: err.message, variant: "destructive" });
+      if (u) setLocation("/");
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? "";
+      const msg = (err as { message?: string })?.message ?? "Google ile giriş başarısız.";
+      toast({ title: "Google ile giriş başarısız", description: googleErrorMsg(code, msg), variant: "destructive" });
       setLoading(false);
     }
     // Mobil redirect durumunda setLoading(false) çağrılmaz — sayfa zaten yenilenir
@@ -92,10 +117,11 @@ export default function AuthPage() {
       await resetPassword(resetEmail);
       toast({ title: "Şifre sıfırlama e-postası gönderildi!", description: `${resetEmail} adresine bakın.` });
       setView("auth");
-    } catch (err: any) {
-      const msg = err.code === "auth/user-not-found"
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code ?? "";
+      const msg = code === "auth/user-not-found" || code === "auth/invalid-email"
         ? "Bu e-posta ile kayıtlı hesap bulunamadı."
-        : err.message;
+        : (err as { message?: string })?.message ?? "Bilinmeyen bir hata oluştu.";
       toast({ title: "Hata", description: msg, variant: "destructive" });
     } finally {
       setLoading(false);

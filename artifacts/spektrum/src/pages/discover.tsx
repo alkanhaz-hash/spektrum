@@ -76,7 +76,7 @@ function FirestoreStoryCard({ story, delay = 0 }: { story: Story; delay?: number
 }
 
 export default function DiscoverPage() {
-  const { data: trending, isLoading: trendingLoading } = useGetTrendingStories();
+  const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
   const searchString = useSearch();
@@ -109,14 +109,29 @@ export default function DiscoverPage() {
           {/* Trending column */}
           <div className="lg:col-span-2 space-y-6">
             <div>
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-5 h-5 text-primary" />
                 <h2 className="text-xl font-bold font-serif">Son 24 Saatin Yıldızları</h2>
               </div>
+              <p className="text-xs text-muted-foreground mb-4">Tüm türler · son 24 saat · tür filtresi uygulanmaz</p>
               <div className="space-y-3">
                 {trendingLoading
                   ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)
-                  : (trending ?? []).slice(0, 10).map((s, i) => (
+                  : trendingError
+                  ? (
+                    <div className="flex flex-col items-center py-10 text-center text-muted-foreground gap-2">
+                      <TrendingUp className="w-8 h-8 opacity-20" />
+                      <p className="text-sm">Trend verisi yüklenemedi. Lütfen sayfayı yenile.</p>
+                    </div>
+                  )
+                  : !(trending?.length)
+                  ? (
+                    <div className="flex flex-col items-center py-10 text-center text-muted-foreground gap-2">
+                      <TrendingUp className="w-8 h-8 opacity-20" />
+                      <p className="text-sm">Son 24 saatte henüz trend hikaye yok.</p>
+                    </div>
+                  )
+                  : trending.slice(0, 10).map((s, i) => (
                     <StoryCard key={s.storyId} story={s} rank={i + 1} delay={i * 0.05} />
                   ))}
               </div>
