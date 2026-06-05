@@ -36,7 +36,7 @@ interface AIToolbarProps {
 function AIToolbar({ content, onContentChange }: AIToolbarProps) {
   const { toast } = useToast();
 
-  // ── Düzelt (gerçek OpenAI API) ──
+  // ── Düzelt (LanguageTool — ücretsiz, API key yok) ──
   const [correctionPreview, setCorrectionPreview] = useState<{ corrected: string; changes: string[] } | null>(null);
   const [correcting, setCorrecting] = useState(false);
 
@@ -47,25 +47,49 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
     }
     setCorrecting(true);
     try {
-      const res = await fetch("/api/correct", {
+      const res = await fetch("https://api.languagetool.org/v2/check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: content }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ text: content, language: "tr" }).toString(),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error ?? "Sunucu hatası");
-      }
-      const data = await res.json() as { corrected: string; changes: string[] };
-      if (data.corrected === content || data.corrected.trim() === content.trim()) {
+      if (!res.ok) throw new Error("LanguageTool bağlantı hatası");
+
+      const data = await res.json() as {
+        matches: { offset: number; length: number; message: string; replacements: { value: string }[] }[];
+      };
+
+      // Yalnızca otomatik uygulanabilir düzeltmeler (en az 1 öneri olan)
+      const applicable = (data.matches ?? []).filter(m => m.replacements.length > 0);
+
+      if (applicable.length === 0) {
         toast({ title: "✅ Metin zaten temiz!", description: "Herhangi bir düzeltme gerekmedi." });
         return;
       }
-      setCorrectionPreview({ corrected: data.corrected, changes: data.changes });
+
+      // Offset bozulmaması için sondan başa uygula
+      const sorted = [...applicable].sort((a, b) => b.offset - a.offset);
+      let corrected = content;
+      const changes: string[] = [];
+
+      for (const match of sorted) {
+        const original = corrected.slice(match.offset, match.offset + match.length);
+        const replacement = match.replacements[0].value;
+        if (original !== replacement) {
+          corrected = corrected.slice(0, match.offset) + replacement + corrected.slice(match.offset + match.length);
+          changes.push(`"${original}" → "${replacement}"`);
+        }
+      }
+
+      if (changes.length === 0) {
+        toast({ title: "✅ Metin zaten temiz!", description: "Herhangi bir düzeltme gerekmedi." });
+        return;
+      }
+
+      setCorrectionPreview({ corrected, changes: changes.reverse() });
     } catch (err) {
       toast({
         title: "Düzeltme başarısız",
-        description: err instanceof Error ? err.message : "Bağlantı hatası",
+        description: err instanceof Error ? err.message : "İnternet bağlantısını kontrol et.",
         variant: "destructive",
       });
     } finally {
