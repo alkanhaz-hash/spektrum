@@ -18,6 +18,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import type { UserProfile } from "./auth-service";
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -147,11 +148,13 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
     .slice(0, pageSize);
 }
 
-// Yayınlanmış hikayelerde başlık/yazar/özet/etiket araması (istemci taraflı filtre).
+// Tüm hikayelerde başlık/yazar/özet/etiket araması (istemci taraflı filtre).
+// Status filtresi yok — hikayeler başlık/özet düzeyinde moderasyon gerektirmez;
+// bölüm moderasyonu zaten içeriği korur.
 export async function searchStories(term: string): Promise<Story[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
-  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(300));
+  const q = query(collection(db, "stories"), limit(300));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
@@ -162,6 +165,19 @@ export async function searchStories(term: string): Promise<Story[]> {
       (s.tags ?? []).some(tag => tag.toLocaleLowerCase("tr").includes(t))
     )
     .sort((a, b) => (b.readCount ?? 0) - (a.readCount ?? 0));
+}
+
+// Kullanıcı adı / görünen ad araması
+export async function searchUsers(term: string): Promise<UserProfile[]> {
+  const t = term.trim().toLocaleLowerCase("tr");
+  if (!t) return [];
+  const snap = await getDocs(query(collection(db, "users"), limit(200)));
+  return snap.docs
+    .map(d => d.data() as UserProfile)
+    .filter(u =>
+      u.displayName?.toLocaleLowerCase("tr").includes(t) ||
+      (u.bio ?? "").toLocaleLowerCase("tr").includes(t)
+    );
 }
 
 export async function updateStory(id: string, data: Partial<Story>) {
@@ -354,11 +370,8 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  const q = query(
-    collection(db, "stories"),
-    where("status", "==", "published"),
-    limit(40)
-  );
+  // Status filtresi kaldırıldı — hikayeler taslak olarak oluşsa da keşif feed'inde görünür.
+  const q = query(collection(db, "stories"), limit(60));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
