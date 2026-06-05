@@ -47,12 +47,31 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
     }
     setCorrecting(true);
     try {
-      const res = await fetch("https://api.languagetool.org/v2/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ text: content, language: "tr" }).toString(),
-      });
-      if (!res.ok) throw new Error("LanguageTool bağlantı hatası");
+      // 15 saniyelik timeout — mobil ağlarda yavaş bağlantıya karşı
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      let res: Response;
+      try {
+        res = await fetch("https://api.languagetool.org/v2/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ text: content, language: "tr" }).toString(),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!res.ok) {
+        // Servis geçici olarak yanıt vermiyorsa kullanıcıya bildir
+        toast({
+          title: "Düzeltme şu an yapılamıyor",
+          description: "LanguageTool servisi meşgul. Birkaç saniye bekleyip tekrar dene.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       const data = await res.json() as {
         matches: { offset: number; length: number; message: string; replacements: { value: string }[] }[];
@@ -87,9 +106,12 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
 
       setCorrectionPreview({ corrected, changes: changes.reverse() });
     } catch (err) {
+      const isAbort = err instanceof Error && err.name === "AbortError";
       toast({
         title: "Düzeltme başarısız",
-        description: err instanceof Error ? err.message : "İnternet bağlantısını kontrol et.",
+        description: isAbort
+          ? "Bağlantı zaman aşımına uğradı. İnternet bağlantını kontrol edip tekrar dene."
+          : "İnternet bağlantını kontrol edip tekrar dene.",
         variant: "destructive",
       });
     } finally {
@@ -178,21 +200,21 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
       };
 
       rec.onend = () => {
-        // Mobilde ağ kesintisi / sessizlik sonrası onend tetiklenebilir.
-        // Kullanıcı durdurmadıysa otomatik yeniden başlat.
+        // Mobilde onend her cümle sonrası tetiklenir (continuous=true olsa bile).
+        // Aynı örneği yeniden başlatmak güvensiz — her zaman yeni örnek oluştur.
         if (isListeningRef.current) {
           setTimeout(() => {
-            if (isListeningRef.current) {
-              try {
-                rec.start();
-              } catch {
-                // Örnek bozulmuşsa yeni bir tane oluştur
-                const newRec = buildRecognition();
-                recognitionRef.current = newRec;
-                newRec.start();
-              }
+            if (!isListeningRef.current) return;
+            try {
+              const newRec = buildRecognition();
+              recognitionRef.current = newRec;
+              newRec.start();
+            } catch {
+              // Başlatma hatası — kullanıcı durdurmuş sayılır
+              isListeningRef.current = false;
+              setIsListening(false);
             }
-          }, 250);
+          }, 150);
         }
       };
 
