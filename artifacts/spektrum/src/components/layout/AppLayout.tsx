@@ -2,7 +2,7 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { logoutUser } from "@/lib/auth-service";
-import { LogOut, User, Search, Menu, X, Compass, PenLine } from "lucide-react";
+import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield } from "lucide-react";
 
 export function Navbar() {
   const { user, profile } = useAuth();
@@ -117,6 +117,15 @@ export function Navbar() {
                         <span>Mesajlar</span>
                       </div>
                     </Link>
+                    {/* Mobilde moderatör/admin paneli */}
+                    {(profile?.role === "moderator" || profile?.role === "admin") && (
+                      <Link href="/moderator" onClick={() => setDropdownOpen(false)} className="md:hidden">
+                        <div className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer border-t border-border text-primary">
+                          <Shield className="w-4 h-4" />
+                          <span>Panel</span>
+                        </div>
+                      </Link>
+                    )}
                     <div className="border-t border-border" />
                     <button
                       onClick={handleLogout}
@@ -176,6 +185,16 @@ export function Navbar() {
               <PenLine className="w-4 h-4" />
               Yaz
             </Link>
+            {(profile?.role === "moderator" || profile?.role === "admin") && (
+              <Link
+                href="/moderator"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Shield className="w-4 h-4" />
+                Panel
+              </Link>
+            )}
           </nav>
         </div>
       )}
