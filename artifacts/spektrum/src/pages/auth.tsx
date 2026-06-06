@@ -55,6 +55,8 @@ export default function AuthPage() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+  const [regBirthDate, setRegBirthDate] = useState("");
+  const [regGender, setRegGender] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [kvkkAccepted, setKvkkAccepted] = useState(false);
 
@@ -90,7 +92,7 @@ export default function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await registerUser(regEmail, regPassword, regName);
+      await registerUser(regEmail, regPassword, regName, regBirthDate, regGender);
       setView("verify-email");
     } catch (err: any) {
       const msg = err.code === "auth/email-already-in-use"
@@ -283,6 +285,34 @@ export default function AuthPage() {
                     <div className="space-y-2">
                       <Label htmlFor="reg-password">Şifre</Label>
                       <Input id="reg-password" type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={6} className="bg-background/50" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-birth">Doğum Tarihi</Label>
+                      <Input
+                        id="reg-birth"
+                        type="date"
+                        value={regBirthDate}
+                        onChange={e => setRegBirthDate(e.target.value)}
+                        required
+                        max={new Date(Date.now() - 13 * 365.25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]}
+                        className="bg-background/50"
+                      />
+                      <p className="text-xs text-muted-foreground">En az 13 yaşında olmalısın.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-gender">Cinsiyet</Label>
+                      <select
+                        id="reg-gender"
+                        value={regGender}
+                        onChange={e => setRegGender(e.target.value)}
+                        required
+                        className="w-full bg-background/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">Seç...</option>
+                        <option value="kadin">Kadın</option>
+                        <option value="erkek">Erkek</option>
+                        <option value="belirtmiyorum">Belirtmek istemiyorum</option>
+                      </select>
                     </div>
                     {/* Onay kutuları */}
                     <div className="space-y-3 pt-1">

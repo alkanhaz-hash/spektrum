@@ -57,7 +57,9 @@ function appUrl() {
 export async function registerUser(
   email: string,
   password: string,
-  displayName: string
+  displayName: string,
+  birthDate: string,
+  gender: string
 ): Promise<User> {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(credential.user, { displayName });
@@ -75,6 +77,8 @@ export async function registerUser(
     createdAt: serverTimestamp(),
     role: "user",
     nicknameSet: true,
+    birthDate,
+    gender,
   });
   // E-posta doğrulama zorunlu — hata olursa kayıt başarısız sayılır
   await sendEmailVerification(credential.user, {
