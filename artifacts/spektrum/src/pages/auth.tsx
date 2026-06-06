@@ -222,12 +222,12 @@ export default function AuthPage() {
 
         {/* Main Auth */}
         {view === "auth" && (
-          <Card className="w-full max-w-md relative z-10 border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl">
-            <CardHeader className="text-center space-y-2">
+          <Card className="w-full max-w-md relative z-10 border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl max-h-[92vh] flex flex-col">
+            <CardHeader className="text-center space-y-2 flex-shrink-0">
               <CardTitle className="text-3xl font-serif tracking-tight">SPEKTRUM</CardTitle>
               <CardDescription>Sözcüklerin neon ışığında parladığı yer.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-y-auto flex-1">
               <Tabs defaultValue="login" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-6">
                   <TabsTrigger value="login">Giriş Yap</TabsTrigger>

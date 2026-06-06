@@ -43,6 +43,8 @@ export interface UserProfile {
   snapchat?: string;
   banned?: boolean;
   banReason?: string;
+  birthDate?: string;
+  gender?: string;
   /** false → yeni Google kullanıcısı, takma ad henüz seçilmedi. undefined/true → tamam. */
   nicknameSet?: boolean;
 }
