@@ -47,6 +47,11 @@ export interface UserProfile {
   nicknameSet?: boolean;
 }
 
+// Üretim URL'si — e-posta linklerinin gideceği yer
+function appUrl() {
+  return typeof window !== "undefined" ? window.location.origin : "";
+}
+
 export async function registerUser(
   email: string,
   password: string,
@@ -69,12 +74,23 @@ export async function registerUser(
     role: "user",
     nicknameSet: true,
   });
-  await sendEmailVerification(credential.user);
+  // E-posta doğrulama — linke tıklayınca uygulamaya geri döner
+  try {
+    await sendEmailVerification(credential.user, {
+      url: appUrl() + "/auth",
+      handleCodeInApp: false,
+    });
+  } catch {
+    // Doğrulama maili gönderilemese de kayıt tamamlanır
+  }
   return credential.user;
 }
 
 export async function resetPassword(email: string): Promise<void> {
-  await sendPasswordResetEmail(auth, email);
+  await sendPasswordResetEmail(auth, email, {
+    url: appUrl() + "/auth",
+    handleCodeInApp: false,
+  });
 }
 
 export async function loginUser(email: string, password: string): Promise<User> {

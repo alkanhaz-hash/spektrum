@@ -18,6 +18,8 @@ import ChapterEditorPage from "@/pages/chapter-editor";
 import ProfilePage from "@/pages/profile";
 import MessagesPage from "@/pages/messages";
 import ModeratorPage from "@/pages/moderator";
+import TermsPage from "@/pages/terms";
+import KvkkPage from "@/pages/kvkk";
 
 // ─── AUTH GUARD ──────────────────────────────────────────────────────────────
 function withAuth<P extends object>(Component: React.ComponentType<P>) {
@@ -62,6 +64,8 @@ function Router() {
       <Route path="/messages" component={GuardedMessages} />
       <Route path="/messages/:conversationId" component={GuardedMessages} />
       <Route path="/moderator" component={ModeratorPage} />
+      <Route path="/terms" component={TermsPage} />
+      <Route path="/kvkk" component={KvkkPage} />
       <Route component={NotFound} />
     </Switch>
   );

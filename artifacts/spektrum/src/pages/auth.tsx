@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword } from "@/lib/auth-service";
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { SiGoogle } from "react-icons/si";
@@ -55,6 +55,8 @@ export default function AuthPage() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [kvkkAccepted, setKvkkAccepted] = useState(false);
 
   const [resetEmail, setResetEmail] = useState("");
 
@@ -262,7 +264,44 @@ export default function AuthPage() {
                       <Label htmlFor="reg-password">Şifre</Label>
                       <Input id="reg-password" type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={6} className="bg-background/50" />
                     </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    {/* Onay kutuları */}
+                    <div className="space-y-3 pt-1">
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className="relative mt-0.5 flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={termsAccepted}
+                            onChange={e => setTermsAccepted(e.target.checked)}
+                            className="sr-only"
+                          />
+                          <div className={`w-4 h-4 rounded border transition-colors ${termsAccepted ? "bg-primary border-primary" : "border-border bg-background/50 group-hover:border-primary/50"}`}>
+                            {termsAccepted && <svg viewBox="0 0 10 8" className="w-full p-0.5 text-primary-foreground fill-none stroke-current stroke-2"><polyline points="1,4 4,7 9,1" /></svg>}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground leading-relaxed">
+                          <Link href="/terms" className="text-primary hover:underline font-medium" target="_blank">Kullanıcı Sözleşmesi</Link>'ni okudum ve onaylıyorum.
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className="relative mt-0.5 flex-shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={kvkkAccepted}
+                            onChange={e => setKvkkAccepted(e.target.checked)}
+                            className="sr-only"
+                          />
+                          <div className={`w-4 h-4 rounded border transition-colors ${kvkkAccepted ? "bg-primary border-primary" : "border-border bg-background/50 group-hover:border-primary/50"}`}>
+                            {kvkkAccepted && <svg viewBox="0 0 10 8" className="w-full p-0.5 text-primary-foreground fill-none stroke-current stroke-2"><polyline points="1,4 4,7 9,1" /></svg>}
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground leading-relaxed">
+                          <Link href="/kvkk" className="text-primary hover:underline font-medium" target="_blank">KVKK Aydınlatma Metni</Link>'ni okudum, kişisel verilerimin işlenmesini onaylıyorum.
+                        </span>
+                      </label>
+                    </div>
+
+                    <Button type="submit" className="w-full" disabled={loading || !termsAccepted || !kvkkAccepted}>
                       {loading ? "Kayıt olunuyor..." : "Kayıt Ol"}
                     </Button>
                   </form>
