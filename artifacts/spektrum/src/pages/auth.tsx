@@ -32,22 +32,14 @@ export default function AuthPage() {
   const [view, setView] = useState<View>("auth");
 
   // Zaten giriş yapmış kullanıcıyı ana sayfaya yönlendir
+  // E-posta kullanıcısı ama henüz doğrulanmamışsa yönlendirme yapma
   useEffect(() => {
-    if (!authLoading && user) setLocation("/");
+    if (!authLoading && user) {
+      const isEmailUser = user.providerData.some(p => p.providerId === "password");
+      if (isEmailUser && !user.emailVerified) return;
+      setLocation("/");
+    }
   }, [user, authLoading]);
-
-  // Mobil Google redirect'ten dönüşü yakala
-  useEffect(() => {
-    getGoogleRedirectResult()
-      .then(u => { if (u) setLocation("/"); })
-      .catch((err: unknown) => {
-        const code = (err as { code?: string })?.code ?? "";
-        const msg = (err as { message?: string })?.message ?? "Google ile giriş başarısız.";
-        if (code && code !== "auth/redirect-cancelled-by-user") {
-          toast({ title: "Google girişi başarısız", description: googleErrorMsg(code, msg), variant: "destructive" });
-        }
-      });
-  }, []);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");

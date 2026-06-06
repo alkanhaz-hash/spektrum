@@ -157,22 +157,16 @@ async function ensureGoogleProfile(user: User): Promise<void> {
 
 export async function loginWithGoogle(): Promise<User | null> {
   const provider = new GoogleAuthProvider();
-  if (isMobileDevice()) {
-    // Mobilde popup bloke edilebilir — redirect kullan, sayfa yeniden yüklenir
-    await signInWithRedirect(auth, provider);
-    return null; // Sayfa redirect olacak, buraya ulaşılmaz
-  }
+  // Popup her platformda (mobil dahil) çalışır; redirect Replit proxy ortamında
+  // dönüş URL'sini algılayamadığından her zaman popup kullanıyoruz.
   const credential = await signInWithPopup(auth, provider);
   await ensureGoogleProfile(credential.user);
   return credential.user;
 }
 
-// Mobil Google redirect'ten döndükten sonra sonucu yakala
+// Artık redirect kullanmıyoruz — geriye dönük uyumluluk için boş bırakıldı
 export async function getGoogleRedirectResult(): Promise<User | null> {
-  const result = await getRedirectResult(auth);
-  if (!result) return null;
-  await ensureGoogleProfile(result.user);
-  return result.user;
+  return null;
 }
 
 export async function logoutUser(): Promise<void> {

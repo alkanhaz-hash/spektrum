@@ -22,14 +22,23 @@ import TermsPage from "@/pages/terms";
 import KvkkPage from "@/pages/kvkk";
 
 // ─── AUTH GUARD ──────────────────────────────────────────────────────────────
+function isEmailUnverified(user: import("firebase/auth").User) {
+  return (
+    user.providerData.some(p => p.providerId === "password") &&
+    !user.emailVerified
+  );
+}
+
 function withAuth<P extends object>(Component: React.ComponentType<P>) {
   return function AuthGuarded(props: P) {
     const { user, loading } = useAuth();
     const [, setLocation] = useLocation();
     useEffect(() => {
-      if (!loading && !user) setLocation("/auth");
+      if (!loading) {
+        if (!user || isEmailUnverified(user)) setLocation("/auth");
+      }
     }, [user, loading]);
-    if (loading || !user) return null;
+    if (loading || !user || isEmailUnverified(user)) return null;
     return <Component {...props} />;
   };
 }
