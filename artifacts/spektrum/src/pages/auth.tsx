@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword, resendVerificationEmail } from "@/lib/auth-service";
+import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword, resendVerificationEmail, logoutUser } from "@/lib/auth-service";
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -175,7 +175,14 @@ export default function AuthPage() {
               >
                 {loading ? "Gönderiliyor..." : "Doğrulama Mailini Tekrar Gönder"}
               </Button>
-              <Button className="w-full" variant="ghost" onClick={() => setView("auth")}>
+              <Button
+                className="w-full"
+                variant="ghost"
+                onClick={async () => {
+                  try { await logoutUser(); } catch { /* zaten çıkış yapılmış */ }
+                  setView("auth");
+                }}
+              >
                 Giriş Sayfasına Dön
               </Button>
             </CardContent>

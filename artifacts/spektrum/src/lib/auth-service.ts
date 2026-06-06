@@ -107,7 +107,8 @@ export async function resetPassword(email: string): Promise<void> {
 export async function loginUser(email: string, password: string): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
   if (!credential.user.emailVerified) {
-    await auth.signOut();
+    // signOut YAPMIYORUZ — kullanıcı oturumda kalıyor ki "Tekrar Gönder" çalışsın.
+    // withAuth guard doğrulanmamış kullanıcıyı korumalı sayfalara almaz.
     const err = new Error("E-posta adresin henüz doğrulanmamış. Lütfen gelen kutunu kontrol et.");
     (err as any).code = "auth/email-not-verified";
     throw err;
