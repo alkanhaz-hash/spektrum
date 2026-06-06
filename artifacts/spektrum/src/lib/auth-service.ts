@@ -74,16 +74,21 @@ export async function registerUser(
     role: "user",
     nicknameSet: true,
   });
-  // E-posta doğrulama — linke tıklayınca uygulamaya geri döner
-  try {
-    await sendEmailVerification(credential.user, {
-      url: appUrl() + "/auth",
-      handleCodeInApp: false,
-    });
-  } catch {
-    // Doğrulama maili gönderilemese de kayıt tamamlanır
-  }
+  // E-posta doğrulama zorunlu — hata olursa kayıt başarısız sayılır
+  await sendEmailVerification(credential.user, {
+    url: appUrl() + "/auth",
+    handleCodeInApp: false,
+  });
   return credential.user;
+}
+
+export async function resendVerificationEmail(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Oturum bulunamadı.");
+  await sendEmailVerification(currentUser, {
+    url: appUrl() + "/auth",
+    handleCodeInApp: false,
+  });
 }
 
 export async function resetPassword(email: string): Promise<void> {
@@ -95,6 +100,12 @@ export async function resetPassword(email: string): Promise<void> {
 
 export async function loginUser(email: string, password: string): Promise<User> {
   const credential = await signInWithEmailAndPassword(auth, email, password);
+  if (!credential.user.emailVerified) {
+    await auth.signOut();
+    const err = new Error("E-posta adresin henüz doğrulanmamış. Lütfen gelen kutunu kontrol et.");
+    (err as any).code = "auth/email-not-verified";
+    throw err;
+  }
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) {

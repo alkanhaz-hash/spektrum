@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword } from "@/lib/auth-service";
+import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword, resendVerificationEmail } from "@/lib/auth-service";
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -68,14 +68,19 @@ export default function AuthPage() {
       setLocation("/");
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code ?? "";
-      const msg = code === "auth/invalid-credential"
-        ? "E-posta veya şifre hatalı."
-        : code === "auth/user-not-found" || code === "auth/invalid-email"
-        ? "Bu e-posta ile kayıtlı hesap bulunamadı."
-        : code === "auth/too-many-requests"
-        ? "Çok fazla deneme. Lütfen bekleyin veya şifrenizi sıfırlayın."
-        : (err as { message?: string })?.message ?? "Bilinmeyen bir hata oluştu.";
-      toast({ title: "Giriş başarısız", description: msg, variant: "destructive" });
+      if (code === "auth/email-not-verified") {
+        setRegEmail(loginEmail);
+        setView("verify-email");
+      } else {
+        const msg = code === "auth/invalid-credential"
+          ? "E-posta veya şifre hatalı."
+          : code === "auth/user-not-found" || code === "auth/invalid-email"
+          ? "Bu e-posta ile kayıtlı hesap bulunamadı."
+          : code === "auth/too-many-requests"
+          ? "Çok fazla deneme. Lütfen bekleyin veya şifrenizi sıfırlayın."
+          : (err as { message?: string })?.message ?? "Bilinmeyen bir hata oluştu.";
+        toast({ title: "Giriş başarısız", description: msg, variant: "destructive" });
+      }
     } finally {
       setLoading(false);
     }
@@ -156,14 +161,29 @@ export default function AuthPage() {
             <CardContent className="space-y-4">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm text-muted-foreground">
                 <CheckCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                <span>E-postayı göremiyorsan spam/junk klasörüne bak.</span>
+                <span>E-postayı göremiyorsan spam/junk klasörüne bak. Doğrulamadan giriş yapılamaz.</span>
               </div>
-              <Button className="w-full" onClick={() => setLocation("/")}>
-                Ana Sayfaya Git
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await resendVerificationEmail();
+                    toast({ title: "Mail tekrar gönderildi!", description: "Gelen kutunu kontrol et." });
+                  } catch (err: any) {
+                    toast({ title: "Gönderilemedi", description: err.message, variant: "destructive" });
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                {loading ? "Gönderiliyor..." : "Doğrulama Mailini Tekrar Gönder"}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                Doğrulamadan da giriş yapabilirsin. Bazı özellikler kısıtlı olabilir.
-              </p>
+              <Button className="w-full" variant="ghost" onClick={() => setView("auth")}>
+                Giriş Sayfasına Dön
+              </Button>
             </CardContent>
           </Card>
         )}
