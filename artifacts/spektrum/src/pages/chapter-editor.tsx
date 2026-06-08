@@ -7,7 +7,7 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, AlertTriangle, CheckCircle, Clock,
-  Mic, MicOff, Sparkles, Check, X, Info, ShieldOff
+  Mic, MicOff, Info, ShieldOff
 } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -35,95 +35,6 @@ interface AIToolbarProps {
 
 function AIToolbar({ content, onContentChange }: AIToolbarProps) {
   const { toast } = useToast();
-
-  // ── Düzelt (LanguageTool — ücretsiz, API key yok) ──
-  const [correctionPreview, setCorrectionPreview] = useState<{ corrected: string; changes: string[] } | null>(null);
-  const [correcting, setCorrecting] = useState(false);
-
-  const handleCorrect = async () => {
-    if (!content.trim()) {
-      toast({ title: "Düzeltilecek metin yok", description: "Önce bir şeyler yaz." });
-      return;
-    }
-    setCorrecting(true);
-    try {
-      // Sunucu proxy üzerinden gönder (3 deneme hakkıyla, rate-limit korumalı)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-      let res: Response;
-      try {
-        res = await fetch("/api/correct", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: content }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!res.ok) {
-        toast({
-          title: "Düzeltme şu an yapılamıyor",
-          description: "Servis geçici olarak meşgul. Birkaç saniye bekleyip tekrar dene.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const data = await res.json() as {
-        matches: { offset: number; length: number; message: string; replacements: { value: string }[] }[];
-      };
-
-      // Yalnızca otomatik uygulanabilir düzeltmeler (en az 1 öneri olan)
-      const applicable = (data.matches ?? []).filter(m => m.replacements.length > 0);
-
-      if (applicable.length === 0) {
-        toast({ title: "✅ Metin zaten temiz!", description: "Herhangi bir düzeltme gerekmedi." });
-        return;
-      }
-
-      // Offset bozulmaması için sondan başa uygula
-      const sorted = [...applicable].sort((a, b) => b.offset - a.offset);
-      let corrected = content;
-      const changes: string[] = [];
-
-      for (const match of sorted) {
-        const original = corrected.slice(match.offset, match.offset + match.length);
-        const replacement = match.replacements[0].value;
-        if (original !== replacement) {
-          corrected = corrected.slice(0, match.offset) + replacement + corrected.slice(match.offset + match.length);
-          changes.push(`"${original}" → "${replacement}"`);
-        }
-      }
-
-      if (changes.length === 0) {
-        toast({ title: "✅ Metin zaten temiz!", description: "Herhangi bir düzeltme gerekmedi." });
-        return;
-      }
-
-      setCorrectionPreview({ corrected, changes: changes.reverse() });
-    } catch (err) {
-      const isAbort = err instanceof Error && err.name === "AbortError";
-      toast({
-        title: "Düzeltme başarısız",
-        description: isAbort
-          ? "Bağlantı zaman aşımına uğradı. İnternet bağlantını kontrol edip tekrar dene."
-          : "İnternet bağlantını kontrol edip tekrar dene.",
-        variant: "destructive",
-      });
-    } finally {
-      setCorrecting(false);
-    }
-  };
-
-  const applyCorrection = () => {
-    if (!correctionPreview) return;
-    onContentChange(correctionPreview.corrected);
-    setCorrectionPreview(null);
-    toast({ title: "✨ Düzeltmeler uygulandı!" });
-  };
 
   // ── Sesli Yaz ──
   const [isListening, setIsListening] = useState(false);
@@ -266,17 +177,6 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
           )}
         </button>
 
-        {/* AI Düzelt */}
-        <button
-          type="button"
-          onClick={handleCorrect}
-          disabled={correcting || !!correctionPreview}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border border-border bg-card hover:border-primary/50 hover:text-primary transition-all disabled:opacity-50"
-        >
-          <Sparkles className="w-4 h-4" />
-          {correcting ? "Analiz ediliyor..." : "Yazımı Düzelt"}
-        </button>
-
         {isListening && (
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
@@ -285,64 +185,10 @@ function AIToolbar({ content, onContentChange }: AIToolbarProps) {
         )}
       </div>
 
-      {/* Düzeltme Önizlemesi */}
-      <AnimatePresence>
-        {correctionPreview && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="border border-secondary/40 bg-secondary/8 rounded-xl p-4 space-y-3"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-secondary flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4" />
-                  AI düzeltmeler hazır
-                </p>
-                {correctionPreview.changes.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {correctionPreview.changes.slice(0, 5).map((change, i) => (
-                      <span key={i} className="text-xs bg-secondary/15 border border-secondary/25 text-secondary/80 px-2 py-0.5 rounded-full">
-                        {change}
-                      </span>
-                    ))}
-                    {correctionPreview.changes.length > 5 && (
-                      <span className="text-xs text-muted-foreground px-1">
-                        +{correctionPreview.changes.length - 5} düzeltme
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button onClick={() => setCorrectionPreview(null)} className="text-muted-foreground hover:text-foreground shrink-0">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={applyCorrection}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-semibold hover:bg-secondary/90 transition-colors"
-              >
-                <Check className="w-3.5 h-3.5" /> Uygula
-              </button>
-              <button
-                type="button"
-                onClick={() => setCorrectionPreview(null)}
-                className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
-              >
-                İptal
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {!isListening && !correctionPreview && (
+      {!isListening && (
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Info className="w-3 h-3 shrink-0" />
-          Sesli yazma Chrome ve Edge'de çalışır. Düzelt butonu AI ile yazım ve noktalama hatalarını düzeltir.
+          Sesli yazma Chrome ve Edge'de çalışır.
         </p>
       )}
     </div>
