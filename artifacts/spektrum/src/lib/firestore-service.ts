@@ -17,6 +17,7 @@ import {
   arrayUnion,
   arrayRemove,
   Timestamp,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { UserProfile } from "./auth-service";
@@ -121,6 +122,8 @@ export async function createStory(data: Omit<Story, "id" | "createdAt" | "update
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  // Yazar belgesindeki hikaye sayacını artır
+  await updateDoc(doc(db, "users", data.authorId), { storyCount: increment(1) });
   return ref.id;
 }
 
@@ -174,12 +177,23 @@ export async function searchUsers(term: string): Promise<UserProfile[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
   const snap = await getDocs(query(collection(db, "users"), limit(200)));
-  return snap.docs
+  const filtered = snap.docs
     .map(d => d.data() as UserProfile)
     .filter(u =>
       u.displayName?.toLocaleLowerCase("tr").includes(t) ||
       (u.bio ?? "").toLocaleLowerCase("tr").includes(t)
     );
+  // Gerçek yayınlanmış hikaye ve takipçi sayılarını al
+  const enriched = await Promise.all(
+    filtered.map(async u => {
+      const [storySnap, followerSnap] = await Promise.all([
+        getCountFromServer(query(collection(db, "stories"), where("authorId", "==", u.uid), where("status", "==", "published"))),
+        getCountFromServer(query(collection(db, "follows"), where("followedId", "==", u.uid))),
+      ]);
+      return { ...u, storyCount: storySnap.data().count, followerCount: followerSnap.data().count };
+    })
+  );
+  return enriched;
 }
 
 export async function updateStory(id: string, data: Partial<Story>) {
