@@ -5,6 +5,13 @@ import { logoutUser } from "@/lib/auth-service";
 import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare, Bell } from "lucide-react";
 import { getConversations, getNotifications, markAllNotificationsRead, SpektrumNotification } from "@/lib/firestore-service";
 
+function getNotifUrl(n: SpektrumNotification): string {
+  if (n.type === "follow") return `/profile/${n.senderId}`;
+  if (n.type === "like" || n.type === "comment") return n.storyId ? `/story/${n.storyId}` : `/profile/${n.senderId}`;
+  if (n.type === "qa_answer") return `/profile/${n.senderId}`;
+  return "#";
+}
+
 export function Navbar() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -157,7 +164,11 @@ export function Navbar() {
                         <div className="py-10 text-center text-muted-foreground text-sm">Henüz bildirim yok.</div>
                       ) : (
                         notifs.slice(0, 20).map(n => (
-                          <div key={n.id} className={`flex items-start gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors ${!n.read ? "bg-primary/5" : ""}`}>
+                          <button
+                            key={n.id}
+                            className={`w-full text-left flex items-start gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors cursor-pointer ${!n.read ? "bg-primary/5" : ""}`}
+                            onClick={() => { setNotifOpen(false); setLocation(getNotifUrl(n)); }}
+                          >
                             <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0 mt-0.5">
                               {n.senderAvatar
                                 ? <img src={n.senderAvatar} alt={n.senderName} className="w-full h-full object-cover" />
@@ -174,7 +185,7 @@ export function Navbar() {
                               </p>
                               {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
                             </div>
-                          </div>
+                          </button>
                         ))
                       )}
                     </div>
@@ -231,7 +242,11 @@ export function Navbar() {
                           <div className="py-6 text-center text-muted-foreground text-xs">Henüz bildirim yok.</div>
                         ) : (
                           notifs.slice(0, 10).map(n => (
-                            <div key={n.id} className={`flex items-start gap-2 px-4 py-2.5 text-xs ${!n.read ? "bg-primary/5" : ""}`}>
+                            <button
+                              key={n.id}
+                              className={`w-full text-left flex items-start gap-2 px-4 py-2.5 text-xs cursor-pointer hover:bg-muted/50 transition-colors ${!n.read ? "bg-primary/5" : ""}`}
+                              onClick={() => { setDropdownOpen(false); setNotifOpen(false); setLocation(getNotifUrl(n)); }}
+                            >
                               <div className="w-6 h-6 rounded-full bg-primary/10 overflow-hidden shrink-0 mt-0.5">
                                 {n.senderAvatar
                                   ? <img src={n.senderAvatar} alt={n.senderName} className="w-full h-full object-cover" />
@@ -245,7 +260,7 @@ export function Navbar() {
                                 {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
                                 {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
                               </p>
-                            </div>
+                            </button>
                           ))
                         )}
                       </div>
