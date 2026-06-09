@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getUserProfile, updateUserProfile, ensureUserProfile, UserProfile } from "@/lib/auth-service";
 import {
   getStoriesByAuthor, Story,
-  getAnsweredQuestions, getUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
+  listenAnsweredQuestions, listenUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
   getNarrationsByNarrator, Narration,
   getOrCreateConversation,
   followUser, unfollowUser, isFollowingUser,
@@ -309,14 +309,31 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
   const [answeringId, setAnsweringId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      getAnsweredQuestions(profile.uid),
-      isOwner ? getUnansweredQuestions(profile.uid) : Promise.resolve([]),
-    ]).then(([ans, pen]) => {
-      setAnswered(ans);
-      setPending(pen);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    let unsubAnswered: (() => void) | null = null;
+    let unsubPending: (() => void) | null = null;
+    let answeredReady = false;
+    let pendingReady = !isOwner;
+
+    const checkReady = () => { if (answeredReady && pendingReady) setLoading(false); };
+
+    unsubAnswered = listenAnsweredQuestions(profile.uid, list => {
+      setAnswered(list);
+      answeredReady = true;
+      checkReady();
+    });
+
+    if (isOwner) {
+      unsubPending = listenUnansweredQuestions(profile.uid, list => {
+        setPending(list);
+        pendingReady = true;
+        checkReady();
+      });
+    }
+
+    return () => {
+      unsubAnswered?.();
+      unsubPending?.();
+    };
   }, [profile.uid, isOwner]);
 
   const handleSend = async () => {
@@ -342,12 +359,12 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
     const ans = answerText[qid];
     if (!ans?.trim()) return;
     try {
-      await answerQuestion(qid, ans.trim());
-      const q = pending.find(p => p.id === qid);
-      if (q) {
-        setPending(prev => prev.filter(p => p.id !== qid));
-        setAnswered(prev => [{ ...q, answer: ans.trim(), isAnswered: true }, ...prev]);
+      const modResult = await moderateText(ans.trim(), "tr");
+      if (modResult.action === "rejected") {
+        toast({ title: "Yanıt gönderilemedi", description: "Uygunsuz içerik tespit edildi.", variant: "destructive" });
+        return;
       }
+      await answerQuestion(qid, ans.trim());
       setAnsweringId(null);
       toast({ title: "Yanıtlandı!" });
     } catch {

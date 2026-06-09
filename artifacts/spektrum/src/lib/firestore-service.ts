@@ -592,6 +592,32 @@ export async function getUnansweredQuestions(targetUid: string): Promise<Anonymo
     .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
 }
 
+export function listenAnsweredQuestions(
+  targetUid: string,
+  cb: (questions: AnonymousQuestion[]) => void,
+): () => void {
+  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", true));
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
+      .sort((a, b) => (b.answeredAt?.seconds ?? 0) - (a.answeredAt?.seconds ?? 0));
+    cb(list);
+  });
+}
+
+export function listenUnansweredQuestions(
+  targetUid: string,
+  cb: (questions: AnonymousQuestion[]) => void,
+): () => void {
+  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", false));
+  return onSnapshot(q, snap => {
+    const list = snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
+      .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+    cb(list);
+  });
+}
+
 export async function answerQuestion(questionId: string, answer: string): Promise<void> {
   await updateDoc(doc(db, "anonymousQuestions", questionId), {
     answer,
