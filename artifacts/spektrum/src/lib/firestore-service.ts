@@ -420,10 +420,11 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  const q = query(collection(db, "stories"), where("chapterCount", ">", 0), limit(60));
+  const q = query(collection(db, "stories"), limit(200));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
+    .filter(s => (s.chapterCount ?? 0) > 0)
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
 }
 
