@@ -167,7 +167,7 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
 export async function searchStories(term: string): Promise<Story[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
-  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(300));
+  const q = query(collection(db, "stories"), where("chapterCount", ">", 0), limit(300));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
@@ -419,7 +419,7 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
 export async function getDiscoverFeed(): Promise<Story[]> {
-  const q = query(collection(db, "stories"), where("status", "==", "published"), limit(60));
+  const q = query(collection(db, "stories"), where("chapterCount", ">", 0), limit(60));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))

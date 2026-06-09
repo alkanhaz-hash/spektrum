@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getPendingChapters, updateChapterStatus, getStory, Chapter,
+  getPendingChapters, updateChapterStatus, updateStory, getStory, Chapter,
   banUser, unbanUser, searchUsersForMod, createNotification,
 } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
@@ -62,6 +62,9 @@ function ReviewTab() {
       await updateChapterStatus(chapterId, decision);
       const item = items.find(i => i.id === chapterId);
       setItems(prev => prev.filter(i => i.id !== chapterId));
+      if (decision === "published" && item?.storyId) {
+        updateStory(item.storyId, { status: "published" }).catch(() => {});
+      }
       toast({ title: decision === "published" ? "Bölüm onaylandı" : "Bölüm reddedildi" });
       if (item?.authorId && user && modProfile) {
         createNotification({

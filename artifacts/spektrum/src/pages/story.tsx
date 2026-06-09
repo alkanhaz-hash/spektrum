@@ -463,7 +463,7 @@ export default function StoryPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="chapters">
-          <TabsList className="bg-card border border-border mb-6">
+          <TabsList className="bg-card border border-border mb-6 overflow-x-auto">
             <TabsTrigger value="chapters" data-testid="tab-chapters">
               Bölümler ({chapters.length})
             </TabsTrigger>

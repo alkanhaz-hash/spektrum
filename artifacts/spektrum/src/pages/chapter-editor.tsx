@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import { createChapter, getChapter, updateChapter, updateChapterStatus, getChaptersByStory, Chapter } from "@/lib/firestore-service";
+import { createChapter, getChapter, updateChapter, updateChapterStatus, updateStory, getChaptersByStory, Chapter } from "@/lib/firestore-service";
 import { moderateText } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -317,6 +317,7 @@ export default function ChapterEditorPage() {
       }
 
       if (chapterStatus === "published") {
+        updateStory(storyId, { status: "published" }).catch(() => {});
         toast({ title: "Bölüm yayınlandı! 🎉", description: "İçerik onaylandı ve okuyucularla paylaşıldı." });
       } else {
         toast({ title: "Moderatör incelemesine gönderildi", description: "Bölüm onaylanınca yayınlanacak." });
