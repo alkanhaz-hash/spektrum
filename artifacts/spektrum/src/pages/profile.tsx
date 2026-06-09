@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Users, Edit3, Instagram, Globe, Camera,
-  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Mic, Play, Pause, Bookmark
+  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Mic, Play, Pause, Bookmark, Flag
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import {
   getOrCreateConversation,
   followUser, unfollowUser, isFollowingUser,
   getFollowers, getFollowing,
-  getBookmarkedStories, createNotification,
+  getBookmarkedStories, createNotification, reportContent,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -633,6 +633,17 @@ export default function ProfilePage() {
     }
   };
 
+  const handleReportUser = async () => {
+    if (!user) { toast({ title: "Giriş gerekli" }); return; }
+    if (!profile || isOwner) return;
+    try {
+      await reportContent({ reportedId: uid, reportedType: "user", reporterId: user.uid });
+      toast({ title: "Kullanıcı şikayet edildi", description: "Moderatörler inceleyecek." });
+    } catch {
+      toast({ title: "Şikayet gönderilemedi", variant: "destructive" });
+    }
+  };
+
   const handleProfileSave = async (updated: UserProfile) => {
     setProfile(updated);
     await refreshProfile();
@@ -749,6 +760,15 @@ export default function ProfilePage() {
                   <Send className="w-3.5 h-3.5" />
                   {messaging ? "Açılıyor..." : "Mesaj At"}
                 </button>
+                {user && (
+                  <button
+                    onClick={handleReportUser}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-sm text-muted-foreground/60 hover:text-red-400 hover:border-red-500/30 transition-all"
+                    title="Kullanıcıyı şikayet et"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
           </div>

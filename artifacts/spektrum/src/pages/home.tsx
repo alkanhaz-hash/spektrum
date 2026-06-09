@@ -8,7 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { BookOpen, Clock, MessageSquare, TrendingUp, Pen } from "lucide-react";
-import { StatusBar } from "@/components/StatusBar";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function HomePage() {
@@ -62,13 +61,6 @@ export default function HomePage() {
             </div>
           </motion.div>
         </section>
-
-        {/* Status Bar */}
-        {user && (
-          <section className="mb-10">
-            <StatusBar />
-          </section>
-        )}
 
         {/* Trending Section */}
         <section className="mb-16">

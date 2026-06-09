@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Heart, MessageSquare, ChevronRight, User, Palette,
   Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3,
-  Bookmark, BookmarkCheck, Share2, Check
+  Bookmark, BookmarkCheck, Share2, Check, Flag
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +15,7 @@ import { Timestamp } from "firebase/firestore";
 import {
   getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, unlikeStory, hasUserLikedStory,
   getNarrationsByStory, getNarrationRequest, createNarrationRequest, uploadNarration, deleteNarration,
-  getOrCreateConversation, sendMessage,
+  getOrCreateConversation, sendMessage, reportContent,
   bookmarkStory, unbookmarkStory, isStoryBookmarked, createNotification,
   Story, Chapter, TalentPortfolio, Narration, NarrationRequest,
 } from "@/lib/firestore-service";
@@ -382,6 +382,7 @@ export default function StoryPage() {
   const [liked, setLiked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -448,6 +449,20 @@ export default function StoryPage() {
       }
     } catch {
       toast({ title: "Hata", variant: "destructive" });
+    }
+  };
+
+  const handleReport = async (type: "story") => {
+    if (!user) { toast({ title: "Giriş gerekli" }); return; }
+    if (!story || reporting) return;
+    setReporting(true);
+    try {
+      await reportContent({ reportedId: story.id, reportedType: type, reporterId: user.uid });
+      toast({ title: "Şikayet iletildi", description: "Moderatörler inceleyecek." });
+    } catch {
+      toast({ title: "Şikayet gönderilemedi", variant: "destructive" });
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -554,6 +569,18 @@ export default function StoryPage() {
                 {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
                 <span className="text-xs">{copied ? "Kopyalandı!" : "Paylaş"}</span>
               </button>
+              {user && user.uid !== story.authorId && (
+                <button
+                  onClick={() => handleReport("story")}
+                  disabled={reporting}
+                  className="flex items-center gap-1 text-muted-foreground/50 hover:text-red-400 transition-colors disabled:opacity-40"
+                  title="Hikayeyi şikayet et"
+                  data-testid="button-report-story"
+                >
+                  <Flag className="w-4 h-4" />
+                  <span className="text-xs">Şikayet</span>
+                </button>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {chapters.length > 0 && (

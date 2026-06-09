@@ -319,6 +319,23 @@ export default function ReadPage() {
               </div>
               <button onClick={() => setFontSize(f => Math.max(14, f - 2))} className="text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors">A-</button>
               <button onClick={() => setFontSize(f => Math.min(26, f + 2))} className="text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors">A+</button>
+              {user && story && user.uid !== story.authorId && (
+                <button
+                  onClick={async () => {
+                    if (!chapterId) return;
+                    try {
+                      await reportContent({ reportedId: chapterId, reportedType: "chapter", reporterId: user.uid });
+                      toast({ title: "Bölüm şikayet edildi", description: "Moderatörler inceleyecek." });
+                    } catch {
+                      toast({ title: "Şikayet gönderilemedi", variant: "destructive" });
+                    }
+                  }}
+                  className="text-muted-foreground/50 hover:text-red-400 transition-colors p-1"
+                  title="Bölümü şikayet et"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
