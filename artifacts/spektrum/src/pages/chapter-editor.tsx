@@ -1,6 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useParams, useLocation } from "wouter";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -230,7 +230,28 @@ export default function ChapterEditorPage() {
       .catch(() => setLoading(false));
   }, [chapterId, user]);
 
-  const wordCount = form.watch("content").split(/\s+/).filter(Boolean).length;
+  const contentVal = form.watch("content");
+  const titleVal = form.watch("title");
+  const wordCount = useMemo(() => contentVal.split(/\s+/).filter(Boolean).length, [contentVal]);
+
+  const [autoSaveLabel, setAutoSaveLabel] = useState<"saved" | "saving" | null>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!titleVal || !contentVal || chapterId === "new") return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaveLabel("saving");
+      try {
+        await updateChapter(chapterId, { title: titleVal, content: contentVal, status: "draft", wordCount });
+        setAutoSaveLabel("saved");
+        setTimeout(() => setAutoSaveLabel(null), 2500);
+      } catch {
+        setAutoSaveLabel(null);
+      }
+    }, 3000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [contentVal, titleVal]);
 
   const saveDraft = async () => {
     const data = form.getValues();
@@ -265,15 +286,19 @@ export default function ChapterEditorPage() {
 
     try {
       const result = await moderateText(data.content, "tr");
-      setModerationStatus(result.action === "rejected" ? "rejected" : "pending_review");
-      setModerationReason(result.reason);
 
       if (result.action === "rejected") {
+        setModerationStatus("rejected");
+        setModerationReason(result.reason);
         toast({ title: "Yayınlanamadı", description: result.reason || "İçerik uyumsuz bulundu.", variant: "destructive" });
         return;
       }
 
-      const chapterStatus: Chapter["status"] = "pending_review";
+      const chapterStatus: Chapter["status"] =
+        result.action === "approved" ? "published" : "pending_review";
+
+      setModerationStatus(chapterStatus === "published" ? "approved" : "pending_review");
+      setModerationReason(result.reason);
 
       if (chapterId === "new") {
         await createChapter({
@@ -291,7 +316,11 @@ export default function ChapterEditorPage() {
         });
       }
 
-      toast({ title: "Moderatör incelemesine gönderildi", description: "Bölüm onaylanınca yayınlanacak." });
+      if (chapterStatus === "published") {
+        toast({ title: "Bölüm yayınlandı! 🎉", description: "İçerik onaylandı ve okuyucularla paylaşıldı." });
+      } else {
+        toast({ title: "Moderatör incelemesine gönderildi", description: "Bölüm onaylanınca yayınlanacak." });
+      }
       setTimeout(() => setLocation(`/write/${storyId}`), 1500);
     } catch {
       toast({ title: "Hata", description: "Yayınlama sırasında bir sorun oluştu.", variant: "destructive" });
@@ -357,7 +386,17 @@ export default function ChapterEditorPage() {
                 <FormItem>
                   <div className="flex items-center justify-between mb-1">
                     <FormLabel>İçerik</FormLabel>
-                    <span className="text-xs text-muted-foreground">{wordCount} kelime</span>
+                    <div className="flex items-center gap-3">
+                      {autoSaveLabel === "saving" && (
+                        <span className="text-xs text-muted-foreground animate-pulse">kaydediliyor…</span>
+                      )}
+                      {autoSaveLabel === "saved" && (
+                        <span className="text-xs text-green-500 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> otomatik kaydedildi
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">{wordCount} kelime</span>
+                    </div>
                   </div>
 
                   <div className="mb-3">
