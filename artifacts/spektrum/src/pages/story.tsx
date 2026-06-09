@@ -463,15 +463,17 @@ export default function StoryPage() {
 
         {/* Tabs */}
         <Tabs defaultValue="chapters">
-          <TabsList className="bg-card border border-border mb-6 overflow-x-auto">
-            <TabsTrigger value="chapters" data-testid="tab-chapters">
-              Bölümler ({chapters.length})
-            </TabsTrigger>
-            <TabsTrigger value="narrations">
-              <Mic className="w-4 h-4 mr-1" /> Sesli
-            </TabsTrigger>
-            {/* Yetenek sekmesi geçici olarak gizlendi */}
-          </TabsList>
+          <div className="overflow-x-auto mb-6">
+            <TabsList className="bg-card border border-border w-max">
+              <TabsTrigger value="chapters" data-testid="tab-chapters">
+                Bölümler ({chapters.length})
+              </TabsTrigger>
+              <TabsTrigger value="narrations">
+                <Mic className="w-4 h-4 mr-1" /> Sesli
+              </TabsTrigger>
+              {/* Yetenek sekmesi geçici olarak gizlendi */}
+            </TabsList>
+          </div>
 
           <TabsContent value="chapters">
             <div className="space-y-2">

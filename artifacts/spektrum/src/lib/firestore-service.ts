@@ -167,15 +167,16 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
 export async function searchStories(term: string): Promise<Story[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
-  const q = query(collection(db, "stories"), where("chapterCount", ">", 0), limit(300));
+  const q = query(collection(db, "stories"), limit(500));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
     .filter(s =>
-      s.title.toLocaleLowerCase("tr").includes(t) ||
-      s.authorName.toLocaleLowerCase("tr").includes(t) ||
-      (s.summary ?? "").toLocaleLowerCase("tr").includes(t) ||
-      (s.tags ?? []).some(tag => tag.toLocaleLowerCase("tr").includes(t))
+      (s.chapterCount ?? 0) > 0 &&
+      (s.title.toLocaleLowerCase("tr").includes(t) ||
+       s.authorName.toLocaleLowerCase("tr").includes(t) ||
+       (s.summary ?? "").toLocaleLowerCase("tr").includes(t) ||
+       (s.tags ?? []).some(tag => tag.toLocaleLowerCase("tr").includes(t)))
     )
     .sort((a, b) => (b.readCount ?? 0) - (a.readCount ?? 0));
 }
