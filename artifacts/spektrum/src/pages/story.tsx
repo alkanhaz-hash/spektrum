@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  BookOpen, Heart, MessageSquare, ChevronRight, User, Palette,
+  BookOpen, Heart, MessageSquare, ChevronRight, User,
   Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3,
   Bookmark, BookmarkCheck, Share2, Check, Flag
 } from "lucide-react";
@@ -12,11 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, unlikeStory, hasUserLikedStory,
+  getStory, getChaptersByStory, likeStory, unlikeStory, hasUserLikedStory,
   getNarrationsByStory, uploadNarration, deleteNarration,
   reportContent,
   bookmarkStory, unbookmarkStory, isStoryBookmarked, createNotification,
-  Story, Chapter, TalentPortfolio, Narration,
+  Story, Chapter, Narration,
 } from "@/lib/firestore-service";
 import { uploadNarrationFile, uploadNarrationAudio } from "@/lib/storage-service";
 import { useToast } from "@/hooks/use-toast";
@@ -239,7 +239,6 @@ export default function StoryPage() {
   const { toast } = useToast();
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [talents, setTalents] = useState<TalentPortfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -253,13 +252,11 @@ export default function StoryPage() {
     Promise.all([
       getStory(id),
       getChaptersByStory(id, true),
-      getTalentPortfoliosByStory(id),
       user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
       user ? isStoryBookmarked(user.uid, id) : Promise.resolve(false),
-    ]).then(([s, ch, t, alreadyLiked, alreadyBookmarked]) => {
+    ]).then(([s, ch, alreadyLiked, alreadyBookmarked]) => {
       setStory(s);
       setChapters(ch);
-      setTalents(t);
       setLiked(alreadyLiked);
       setBookmarked(alreadyBookmarked);
       setLoading(false);
@@ -473,9 +470,7 @@ export default function StoryPage() {
             <TabsTrigger value="narrations">
               <Mic className="w-4 h-4 mr-1" /> Sesli
             </TabsTrigger>
-            <TabsTrigger value="talent" data-testid="tab-talent">
-              <Palette className="w-4 h-4 mr-1" /> Yetenek ({talents.length})
-            </TabsTrigger>
+            {/* Yetenek sekmesi geçici olarak gizlendi */}
           </TabsList>
 
           <TabsContent value="chapters">
@@ -502,39 +497,7 @@ export default function StoryPage() {
             <NarrationsTab story={story} />
           </TabsContent>
 
-          <TabsContent value="talent">
-            {talents.length === 0 && (
-              <div className="py-12 text-center border border-dashed border-border rounded-2xl">
-                <Palette className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">Bu hikaye için henüz kapak tasarımı sunulmamış.</p>
-                <p className="text-sm text-muted-foreground mt-1">Sen de çizer/tasarımcıysan katkıda bulunabilirsin.</p>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {talents.map((t, i) => (
-                <motion.div key={t.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
-                  className="p-4 rounded-xl border border-border bg-card">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-                      {t.userName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">{t.userName}</p>
-                      <p className="text-xs text-muted-foreground">{t.style}</p>
-                    </div>
-                  </div>
-                  {t.coverDesigns.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {t.coverDesigns.slice(0, 2).map((url, idx) => (
-                        <img key={idx} src={url} alt="Tasarım" className="rounded-lg aspect-[2/3] object-cover" />
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground line-clamp-2">{t.bio}</p>
-                </motion.div>
-              ))}
-            </div>
-          </TabsContent>
+          {/* Yetenek sekmesi içeriği geçici olarak gizlendi */}
         </Tabs>
       </div>
     </AppLayout>

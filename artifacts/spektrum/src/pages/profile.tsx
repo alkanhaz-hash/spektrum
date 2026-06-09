@@ -922,7 +922,7 @@ export default function ProfilePage() {
             ].map(tab => (
               <button key={tab.key}
                 onClick={() => {
-                  setActiveTab(tab.key as any);
+                  setActiveTab(tab.key as "stories" | "narrations" | "qa" | "bookmarks");
                   if (tab.key === "bookmarks") setBookmarksKey(k => k + 1);
                 }}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -984,7 +984,7 @@ export default function ProfilePage() {
                 <div className="py-16 text-center border border-dashed border-border rounded-2xl">
                   <Mic className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-muted-foreground">{isOwner ? "Henüz bir hikaye seslendirmemişsin." : "Yayınlanmış seslendirme yok."}</p>
-                  {isOwner && <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasından izin isteyerek başlayabilirsin.</p>}
+                  {isOwner && <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasından sesli anlatım ekleyebilirsin.</p>}
                 </div>
               ) : (
                 <div className="space-y-4">
