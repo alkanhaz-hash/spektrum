@@ -10,6 +10,7 @@ import {
   query,
   where,
   limit,
+  orderBy,
   onSnapshot,
   serverTimestamp,
   increment,
@@ -60,6 +61,8 @@ export interface InlineComment {
   storyId: string;
   chapterId: string;
   paragraphIndex: number;
+  /** Paragrafın ilk 60 karakteri — yazar içeriği düzenlese bile yorum doğru paragrafa bağlı kalır. */
+  paragraphAnchor?: string;
   authorId: string;
   authorName: string;
   authorAvatar: string;
@@ -89,6 +92,18 @@ export interface Conversation {
   lastMessage: string;
   lastMessageAt: Timestamp;
   unreadCount: Record<string, number>;
+}
+
+export interface UserStatus {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  imageUrl: string;
+  caption?: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+  viewedBy: string[];
 }
 
 export interface TalentPortfolio {
@@ -297,6 +312,19 @@ export async function likeInlineComment(commentId: string, userId: string, liked
   await updateDoc(doc(db, "inlineComments", commentId), {
     likeCount: increment(liked ? 1 : -1),
     likedBy: liked ? arrayUnion(userId) : arrayRemove(userId),
+  });
+}
+
+export async function reportContent(data: {
+  reportedId: string;
+  reportedType: "comment" | "story" | "chapter" | "user";
+  reporterId: string;
+  reason?: string;
+}): Promise<void> {
+  await addDoc(collection(db, "reports"), {
+    ...data,
+    status: "pending",
+    createdAt: serverTimestamp(),
   });
 }
 
@@ -677,6 +705,45 @@ export async function getBookmarkedStories(userId: string): Promise<Story[]> {
     .filter(s => s.exists())
     .map(s => ({ id: s.id, ...s.data() } as Story))
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+}
+
+// ─── STATUS (24h) ─────────────────────────────────────────────────────────────
+
+export async function createUserStatus(data: {
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  imageUrl: string;
+  caption?: string;
+}): Promise<string> {
+  const now = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000);
+  const ref = await addDoc(collection(db, "statuses"), {
+    ...data,
+    createdAt: serverTimestamp(),
+    expiresAt,
+    viewedBy: [],
+  });
+  return ref.id;
+}
+
+export async function getActiveStatuses(): Promise<UserStatus[]> {
+  const q = query(
+    collection(db, "statuses"),
+    where("expiresAt", ">", Timestamp.now()),
+    orderBy("expiresAt", "asc"),
+    limit(50)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as UserStatus));
+}
+
+export async function markStatusViewed(statusId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, "statuses", statusId), { viewedBy: arrayUnion(userId) });
+}
+
+export async function deleteUserStatus(statusId: string): Promise<void> {
+  await deleteDoc(doc(db, "statuses", statusId));
 }
 
 // ─── BAN ──────────────────────────────────────────────────────────────────────

@@ -7,10 +7,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { BookOpen, Clock, MessageSquare, TrendingUp } from "lucide-react";
+import { BookOpen, Clock, MessageSquare, TrendingUp, Pen } from "lucide-react";
+import { StatusBar } from "@/components/StatusBar";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function HomePage() {
   const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
+  const { user } = useAuth();
   const [discoverStories, setDiscoverStories] = useState<Story[]>([]);
   const [discoverLoading, setDiscoverLoading] = useState(true);
   const [discoverError, setDiscoverError] = useState(false);
@@ -59,6 +62,13 @@ export default function HomePage() {
             </div>
           </motion.div>
         </section>
+
+        {/* Status Bar */}
+        {user && (
+          <section className="mb-10">
+            <StatusBar />
+          </section>
+        )}
 
         {/* Trending Section */}
         <section className="mb-16">
@@ -142,6 +152,13 @@ export default function HomePage() {
               <p className="text-sm">
                 {discoverError ? "Hikayeler yüklenemedi. Lütfen sayfayı yenile." : "Henüz yayınlanmış hikaye yok."}
               </p>
+              {!discoverError && (
+                <Link href="/write">
+                  <button className="flex items-center gap-2 mt-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm transition-all hover:shadow-[0_0_14px_hsl(var(--primary)/0.3)]">
+                    <Pen className="w-4 h-4" /> İlk Hikayeyi Sen Yaz
+                  </button>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">

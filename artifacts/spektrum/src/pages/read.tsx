@@ -2,37 +2,43 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useParams, Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, MessageSquare, Heart, Send, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, Heart, Send, X, List, Flag, UserPlus, UserCheck, BookOpen } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getStory, getChapter, getChaptersByStory, getInlineComments,
   addInlineComment, likeInlineComment, incrementUserReadCount, incrementChapterReadCount,
-  createNotification,
+  createNotification, reportContent, followUser, unfollowUser, isFollowingUser,
   Story, Chapter, InlineComment
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
 
 interface CommentThreadProps {
   paragraphIndex: number;
+  paragraphAnchor: string;
   storyId: string;
   chapterId: string;
   comments: InlineComment[];
   onClose: () => void;
-  onAddComment: (text: string, paragraphIndex: number) => Promise<void>;
+  onAddComment: (text: string, paragraphIndex: number, paragraphAnchor: string) => Promise<void>;
   onLike: (commentId: string, liked: boolean) => void;
+  onReport: (commentId: string) => void;
   userId?: string;
 }
 
-function CommentThread({ paragraphIndex, storyId: _storyId, chapterId: _chapterId, comments, onClose, onAddComment, onLike, userId }: CommentThreadProps) {
+function CommentThread({ paragraphIndex, paragraphAnchor, storyId: _storyId, chapterId: _chapterId, comments, onClose, onAddComment, onLike, onReport, userId }: CommentThreadProps) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const threadComments = comments.filter(c => c.paragraphIndex === paragraphIndex);
+
+  // Anchor metin eşleşmesi öncelikli; eski yorumlar index ile eşleşir
+  const threadComments = comments.filter(c =>
+    c.paragraphAnchor ? c.paragraphAnchor === paragraphAnchor : c.paragraphIndex === paragraphIndex
+  );
 
   const handleSubmit = async () => {
     if (!text.trim() || submitting) return;
     setSubmitting(true);
-    await onAddComment(text.trim(), paragraphIndex);
+    await onAddComment(text.trim(), paragraphIndex, paragraphAnchor);
     setText("");
     setSubmitting(false);
   };
@@ -61,8 +67,17 @@ function CommentThread({ paragraphIndex, storyId: _storyId, chapterId: _chapterI
               {c.authorName.charAt(0)}
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="text-xs font-semibold">{c.authorName}</span>
+                {userId && userId !== c.authorId && (
+                  <button
+                    onClick={() => onReport(c.id)}
+                    className="text-muted-foreground/50 hover:text-red-400 transition-colors"
+                    title="Yorumu bildir"
+                  >
+                    <Flag className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <p className="text-sm text-foreground/90">{c.text}</p>
               <button
@@ -113,6 +128,9 @@ export default function ReadPage() {
   const [comments, setComments] = useState<InlineComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [openThread, setOpenThread] = useState<number | null>(null);
+  const [showToc, setShowToc] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
   // Font boyutu localStorage'de korunuyor — bölümler arası kaybolmaz
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem("spektrum_font_size");
@@ -123,6 +141,13 @@ export default function ReadPage() {
   useEffect(() => {
     localStorage.setItem("spektrum_font_size", String(fontSize));
   }, [fontSize]);
+
+  // Yazar takip durumu
+  useEffect(() => {
+    if (!user || !story) return;
+    if (user.uid === story.authorId) return;
+    isFollowingUser(user.uid, story.authorId).then(setIsFollowing).catch(() => {});
+  }, [user?.uid, story?.authorId]);
 
   useEffect(() => {
     if (!storyId || !chapterId) return;
@@ -157,12 +182,21 @@ export default function ReadPage() {
 
   const paragraphs = chapter?.content.split(/\n+/).filter(p => p.trim()) ?? [];
 
-  const commentCountForParagraph = (idx: number) => comments.filter(c => c.paragraphIndex === idx).length;
+  // Paragraf anchor'ı: ilk 60 karakter
+  const getParagraphAnchor = (para: string) => para.trim().slice(0, 60);
 
-  const handleAddComment = async (text: string, paragraphIndex: number) => {
+  // Anchor eşleşmesi öncelikli, yoksa index
+  const commentCountForParagraph = (idx: number) => {
+    const anchor = paragraphs[idx] ? getParagraphAnchor(paragraphs[idx]) : "";
+    return comments.filter(c =>
+      c.paragraphAnchor ? c.paragraphAnchor === anchor : c.paragraphIndex === idx
+    ).length;
+  };
+
+  const handleAddComment = async (text: string, paragraphIndex: number, paragraphAnchor: string) => {
     if (!user || !profile || !storyId || !chapterId) return;
     try {
-      await addInlineComment({ storyId, chapterId, paragraphIndex, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
+      await addInlineComment({ storyId, chapterId, paragraphIndex, paragraphAnchor, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
       const updated = await getInlineComments(chapterId);
       setComments(updated);
       if (story && story.authorId !== user.uid) {
@@ -178,6 +212,34 @@ export default function ReadPage() {
       }
     } catch {
       toast({ title: "Yorum gönderilemedi", description: "Lütfen tekrar dene.", variant: "destructive" });
+    }
+  };
+
+  const handleReport = async (commentId: string) => {
+    if (!user) { toast({ title: "Giriş gerekli" }); return; }
+    try {
+      await reportContent({ reportedId: commentId, reportedType: "comment", reporterId: user.uid });
+      toast({ title: "Yorum bildirildi", description: "Moderatörler inceleyecek." });
+    } catch {
+      toast({ title: "Bildirilemedi", variant: "destructive" });
+    }
+  };
+
+  const handleFollow = async () => {
+    if (!user || !story) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await unfollowUser(user.uid, story.authorId);
+        setIsFollowing(false);
+      } else {
+        await followUser(user.uid, story.authorId);
+        setIsFollowing(true);
+      }
+    } catch {
+      toast({ title: "İşlem başarısız", variant: "destructive" });
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -220,10 +282,41 @@ export default function ReadPage() {
             </span>
           </Link>
           <h1 className="text-2xl font-bold font-serif">{chapter.title}</h1>
-          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
             <span>Bölüm {chapter.order}</span>
             <span>{chapter.wordCount.toLocaleString("tr-TR")} kelime</span>
             <div className="flex items-center gap-2 ml-auto">
+              {/* İçindekiler */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowToc(v => !v)}
+                  className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors"
+                  title="İçindekiler"
+                >
+                  <List className="w-3.5 h-3.5" /> İçindekiler
+                </button>
+                <AnimatePresence>
+                  {showToc && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      className="absolute right-0 top-full mt-2 w-64 bg-card border border-border rounded-xl shadow-2xl z-30 max-h-72 overflow-y-auto"
+                    >
+                      <div className="p-2 space-y-0.5">
+                        {allChapters.map((ch, i) => (
+                          <Link key={ch.id} href={`/read/${storyId}/${ch.id}`} onClick={() => setShowToc(false)}>
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors ${ch.id === chapterId ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted text-foreground/80"}`}>
+                              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{i + 1}. {ch.title}</span>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
               <button onClick={() => setFontSize(f => Math.max(14, f - 2))} className="text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors">A-</button>
               <button onClick={() => setFontSize(f => Math.min(26, f + 2))} className="text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors">A+</button>
             </div>
@@ -231,44 +324,49 @@ export default function ReadPage() {
         </div>
 
         {/* Content with inline comments */}
-        <div className="space-y-1">
-          {paragraphs.map((para, idx) => (
-            <div key={idx} className="relative group">
-              <div
-                className="relative py-3 pr-10 leading-relaxed cursor-pointer rounded-lg hover:bg-primary/5 transition-colors group"
-                style={{ fontSize: `${fontSize}px` }}
-                onClick={() => setOpenThread(openThread === idx ? null : idx)}
-                data-testid={`paragraph-${idx}`}
-              >
-                {para}
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 opacity-30 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-muted-foreground bg-card border border-border rounded-full px-2 py-1 hover:border-primary/50 hover:text-primary">
-                  <MessageSquare className="w-3 h-3" />
-                  {commentCountForParagraph(idx) > 0 && <span>{commentCountForParagraph(idx)}</span>}
-                </button>
-              </div>
-
-              {commentCountForParagraph(idx) > 0 && openThread !== idx && (
-                <div className="flex items-center gap-1 text-xs text-primary/60 pl-2 pb-1 cursor-pointer" onClick={() => setOpenThread(idx)}>
-                  <MessageSquare className="w-3 h-3" /> {commentCountForParagraph(idx)} yorum
+        <div className="space-y-1" onClick={() => setShowToc(false)}>
+          {paragraphs.map((para, idx) => {
+            const anchor = getParagraphAnchor(para);
+            return (
+              <div key={idx} className="relative group">
+                <div
+                  className="relative py-3 pr-10 leading-relaxed cursor-pointer rounded-lg hover:bg-primary/5 transition-colors group"
+                  style={{ fontSize: `${fontSize}px` }}
+                  onClick={() => setOpenThread(openThread === idx ? null : idx)}
+                  data-testid={`paragraph-${idx}`}
+                >
+                  {para}
+                  <button className="absolute right-2 top-1/2 -translate-y-1/2 opacity-30 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-muted-foreground bg-card border border-border rounded-full px-2 py-1 hover:border-primary/50 hover:text-primary">
+                    <MessageSquare className="w-3 h-3" />
+                    {commentCountForParagraph(idx) > 0 && <span>{commentCountForParagraph(idx)}</span>}
+                  </button>
                 </div>
-              )}
 
-              <AnimatePresence>
-                {openThread === idx && (
-                  <CommentThread
-                    paragraphIndex={idx}
-                    storyId={storyId!}
-                    chapterId={chapterId!}
-                    comments={comments}
-                    onClose={() => setOpenThread(null)}
-                    onAddComment={handleAddComment}
-                    onLike={handleLike}
-                    userId={user?.uid}
-                  />
+                {commentCountForParagraph(idx) > 0 && openThread !== idx && (
+                  <div className="flex items-center gap-1 text-xs text-primary/60 pl-2 pb-1 cursor-pointer" onClick={() => setOpenThread(idx)}>
+                    <MessageSquare className="w-3 h-3" /> {commentCountForParagraph(idx)} yorum
+                  </div>
                 )}
-              </AnimatePresence>
-            </div>
-          ))}
+
+                <AnimatePresence>
+                  {openThread === idx && (
+                    <CommentThread
+                      paragraphIndex={idx}
+                      paragraphAnchor={anchor}
+                      storyId={storyId!}
+                      chapterId={chapterId!}
+                      comments={comments}
+                      onClose={() => setOpenThread(null)}
+                      onAddComment={handleAddComment}
+                      onLike={handleLike}
+                      onReport={handleReport}
+                      userId={user?.uid}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
 
         {/* Chapter nav */}
@@ -287,11 +385,30 @@ export default function ReadPage() {
               </button>
             </Link>
           ) : (
-            <Link href={`/story/${storyId}`}>
-              <button className="px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors">Hikayeye Dön</button>
-            </Link>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {user && story && user.uid !== story.authorId && (
+                <button
+                  onClick={handleFollow}
+                  disabled={followLoading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isFollowing ? "border border-border hover:border-red-400/50 hover:text-red-400 text-muted-foreground" : "bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:shadow-[0_0_12px_hsl(var(--secondary)/0.4)]"}`}
+                >
+                  {isFollowing ? <><UserCheck className="w-4 h-4" /> Takip Ediliyor</> : <><UserPlus className="w-4 h-4" /> Yazarı Takip Et</>}
+                </button>
+              )}
+              <Link href={`/story/${storyId}`}>
+                <button className="px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors">Hikayeye Dön</button>
+              </Link>
+            </div>
           )}
         </div>
+
+        {/* Son bölüm tebrik mesajı */}
+        {!nextChapter && (
+          <div className="mt-8 p-5 rounded-2xl border border-primary/20 bg-primary/5 text-center space-y-2">
+            <p className="text-lg font-serif font-semibold">🎉 Hikayenin sonuna ulaştın!</p>
+            <p className="text-sm text-muted-foreground">Bu hikayeyi beğendiysen yazarı takip etmeyi unutma.</p>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
