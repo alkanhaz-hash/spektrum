@@ -155,7 +155,16 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
       if (avatarFile) avatarUrl = await uploadUserAvatar(user.uid, avatarFile);
       if (coverFile) coverUrl = await uploadUserCover(user.uid, coverFile);
 
-      const updated = { ...form, avatarUrl, coverUrl };
+      const stripHandle = (v: string) => v.trim().replace(/^@+/, "").trim();
+      const sanitized = {
+        instagram: stripHandle(form.instagram),
+        tiktok: stripHandle(form.tiktok),
+        pinterest: stripHandle(form.pinterest),
+        snapchat: stripHandle(form.snapchat),
+        website: form.website.trim(),
+      };
+
+      const updated = { ...form, ...sanitized, avatarUrl, coverUrl };
       await updateUserProfile(user.uid, updated);
       onSave({ ...profile, ...updated });
       toast({ title: "Profil güncellendi!" });
@@ -556,6 +565,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<"stories" | "narrations" | "qa" | "bookmarks">("stories");
   const [bookmarkedStories, setBookmarkedStories] = useState<Story[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = useState(false);
+  const [bookmarksKey, setBookmarksKey] = useState(0);
   const [narrations, setNarrations] = useState<Narration[]>([]);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -601,7 +611,7 @@ export default function ProfilePage() {
       .then(setBookmarkedStories)
       .catch(() => {})
       .finally(() => setBookmarksLoading(false));
-  }, [activeTab, user?.uid, isOwner]);
+  }, [activeTab, user?.uid, isOwner, bookmarksKey]);
 
   const handleFollow = async () => {
     if (!user) { setLocation("/auth"); return; }
@@ -820,25 +830,25 @@ export default function ProfilePage() {
           {(profile.instagram || profile.tiktok || profile.pinterest || profile.snapchat || profile.website) && (
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               {profile.instagram && (
-                <a href={profile.instagram.startsWith("http") ? profile.instagram : `https://${profile.instagram}`} target="_blank" rel="noopener noreferrer"
+                <a href={profile.instagram.startsWith("http") ? profile.instagram : `https://instagram.com/${profile.instagram}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-pink-400 transition-colors border border-border hover:border-pink-400/50 rounded-lg px-3 py-1.5">
                   <Instagram className="w-3.5 h-3.5" /> Instagram
                 </a>
               )}
               {profile.tiktok && (
-                <a href={profile.tiktok.startsWith("http") ? profile.tiktok : `https://${profile.tiktok}`} target="_blank" rel="noopener noreferrer"
+                <a href={profile.tiktok.startsWith("http") ? profile.tiktok : `https://tiktok.com/@${profile.tiktok}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-border hover:border-primary/50 rounded-lg px-3 py-1.5">
                   🎵 TikTok
                 </a>
               )}
               {profile.pinterest && (
-                <a href={profile.pinterest.startsWith("http") ? profile.pinterest : `https://${profile.pinterest}`} target="_blank" rel="noopener noreferrer"
+                <a href={profile.pinterest.startsWith("http") ? profile.pinterest : `https://pinterest.com/${profile.pinterest}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-red-400 transition-colors border border-border hover:border-red-400/50 rounded-lg px-3 py-1.5">
                   📌 Pinterest
                 </a>
               )}
               {profile.snapchat && (
-                <a href={profile.snapchat.startsWith("http") ? profile.snapchat : `https://${profile.snapchat}`} target="_blank" rel="noopener noreferrer"
+                <a href={profile.snapchat.startsWith("http") ? profile.snapchat : `https://snapchat.com/add/${profile.snapchat}`} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-yellow-400 transition-colors border border-border hover:border-yellow-400/50 rounded-lg px-3 py-1.5">
                   👻 Snapchat
                 </a>
@@ -899,7 +909,10 @@ export default function ProfilePage() {
               ...(isOwner ? [{ key: "bookmarks", label: "Kaydedilenler", icon: <Bookmark className="w-4 h-4" /> }] : []),
             ].map(tab => (
               <button key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
+                onClick={() => {
+                  setActiveTab(tab.key as any);
+                  if (tab.key === "bookmarks") setBookmarksKey(k => k + 1);
+                }}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   activeTab === tab.key
                     ? "border-primary text-primary"
