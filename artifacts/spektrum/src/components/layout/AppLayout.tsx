@@ -9,7 +9,17 @@ function getNotifUrl(n: SpektrumNotification): string {
   if (n.type === "follow") return `/profile/${n.senderId}`;
   if (n.type === "like" || n.type === "comment") return n.storyId ? `/story/${n.storyId}` : `/profile/${n.senderId}`;
   if (n.type === "qa_answer") return `/profile/${n.senderId}`;
-  return "#";
+  if (n.type === "chapter_approved" || n.type === "chapter_rejected") return n.storyId ? `/write/${n.storyId}` : "/";
+  return "/";
+}
+
+function timeAgo(ts: { seconds: number } | undefined): string {
+  if (!ts) return "";
+  const diff = Math.floor(Date.now() / 1000) - ts.seconds;
+  if (diff < 60) return "az önce";
+  if (diff < 3600) return `${Math.floor(diff / 60)}dk`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}sa`;
+  return `${Math.floor(diff / 86400)}g`;
 }
 
 export function Navbar() {
@@ -186,7 +196,10 @@ export function Navbar() {
                                 {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
 
                               </p>
-                              {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />}
+                                <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt as { seconds: number } | undefined)}</span>
+                              </div>
                             </div>
                           </button>
                         ))
@@ -265,6 +278,10 @@ export function Navbar() {
                                 {n.type === "chapter_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü onaylandı.</>}
                                 {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
                               </p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />}
+                                <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt as { seconds: number } | undefined)}</span>
+                              </div>
                             </button>
                           ))
                         )}

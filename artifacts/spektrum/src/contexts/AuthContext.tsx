@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User } from "firebase/auth";
+import { User, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { onAuthChange, UserProfile, ensureUserProfile } from "@/lib/auth-service";
 
 interface AuthContextType {
@@ -58,9 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!snapshotUid) return;
     const unsub = onSnapshot(
       doc(db, "users", snapshotUid),
-      (snap) => {
+      async (snap) => {
         if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
+          const data = snap.data() as UserProfile;
+          // Oturum açıkken ban yapılırsa anında çıkış yap
+          if (data.banned) {
+            setProfile(null);
+            await signOut(auth);
+            return;
+          }
+          setProfile(data);
         }
       },
       (err) => {

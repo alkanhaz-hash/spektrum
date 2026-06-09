@@ -144,13 +144,20 @@ export async function loginUser(email: string, password: string): Promise<User> 
   const credential = await signInWithEmailAndPassword(auth, email, password);
   if (!credential.user.emailVerified) {
     // signOut YAPMIYORUZ — kullanıcı oturumda kalıyor ki "Tekrar Gönder" çalışsın.
-    // withAuth guard doğrulanmamış kullanıcıyı korumalı sayfalara almaz.
     const err = new Error("E-posta adresin henüz doğrulanmamış. Lütfen gelen kutunu kontrol et.");
     (err as any).code = "auth/email-not-verified";
     throw err;
   }
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
+  // Ban kontrolü — askıya alınmış kullanıcıyı giriş yaptırmıyoruz
+  if (snap.exists() && snap.data()?.banned === true) {
+    await signOut(auth);
+    const reason: string = snap.data()?.banReason || "Hesabın askıya alındı.";
+    const err = new Error(`Hesabın askıya alındı: ${reason}`);
+    (err as any).code = "auth/user-banned";
+    throw err;
+  }
   if (!snap.exists()) {
     await setDoc(userRef, {
       uid: credential.user.uid,
@@ -203,9 +210,16 @@ async function ensureGoogleProfile(user: User): Promise<void> {
 
 export async function loginWithGoogle(): Promise<User | null> {
   const provider = new GoogleAuthProvider();
-  // Popup her platformda (mobil dahil) çalışır; redirect Replit proxy ortamında
-  // dönüş URL'sini algılayamadığından her zaman popup kullanıyoruz.
   const credential = await signInWithPopup(auth, provider);
+  // Ban kontrolü — Google ile giriş yapan askıya alınmış kullanıcıyı da engelle
+  const snap = await getDoc(doc(db, "users", credential.user.uid));
+  if (snap.exists() && snap.data()?.banned === true) {
+    await signOut(auth);
+    const reason: string = snap.data()?.banReason || "Hesabın askıya alındı.";
+    const err = new Error(`Hesabın askıya alındı: ${reason}`);
+    (err as any).code = "auth/user-banned";
+    throw err;
+  }
   await ensureGoogleProfile(credential.user);
   return credential.user;
 }
