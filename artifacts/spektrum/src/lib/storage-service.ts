@@ -52,34 +52,6 @@ export async function uploadUserAvatar(uid: string, file: File): Promise<string>
   return getDownloadURL(storageRef);
 }
 
-/**
- * Ses dosyasının süresini saniye olarak döndürür (upload yapmaz).
- * İsim geriye dönük uyumluluk için korunuyor.
- */
-export async function uploadNarrationAudio(_storyId: string, _narratorId: string, file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const audio = new Audio(url);
-    audio.addEventListener("loadedmetadata", () => { URL.revokeObjectURL(url); resolve(Math.round(audio.duration) || 0); });
-    audio.addEventListener("error", () => { URL.revokeObjectURL(url); resolve(0); });
-  });
-}
-
-export async function uploadNarrationFile(storyId: string, narratorId: string, file: File): Promise<string> {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "mp3";
-  // Bazı tarayıcılar/mobil cihazlar MIME tipini boş bırakır — uzantıdan fallback belirle
-  const MIME: Record<string, string> = {
-    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4",
-    aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac", webm: "audio/webm",
-  };
-  const contentType = file.type && file.type.startsWith("audio/")
-    ? file.type
-    : (MIME[ext] ?? "audio/mpeg");
-  const storageRef = ref(storage, `narrations/${storyId}/${narratorId}_${Date.now()}.${ext}`);
-  await uploadBytes(storageRef, file, { contentType });
-  return getDownloadURL(storageRef);
-}
-
 export async function uploadUserCover(uid: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);
   const storageRef = ref(storage, `covers/users/${uid}/cover.webp`);
@@ -87,15 +59,6 @@ export async function uploadUserCover(uid: string, file: File): Promise<string> 
   return getDownloadURL(storageRef);
 }
 
-export async function uploadStatusImage(uid: string, file: File): Promise<string> {
-  const isGif = file.type === "image/gif";
-  const uploadBlob: Blob = isGif ? file : await convertToWebP(file);
-  const ext = isGif ? "gif" : "webp";
-  const contentType = isGif ? "image/gif" : "image/webp";
-  const storageRef = ref(storage, `statuses/${uid}/${Date.now()}.${ext}`);
-  await uploadBytes(storageRef, uploadBlob, { contentType });
-  return getDownloadURL(storageRef);
-}
 
 export async function uploadTalentWork(userId: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);

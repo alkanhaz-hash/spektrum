@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Users, Edit3, Instagram, Globe, Camera,
-  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Mic, Play, Pause, Bookmark, Flag
+  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Bookmark, Flag
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,6 @@ import { getUserProfile, updateUserProfile, ensureUserProfile, UserProfile } fro
 import {
   getStoriesByAuthor, Story,
   listenAnsweredQuestions, listenUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
-  getNarrationsByNarrator, Narration,
   getOrCreateConversation,
   followUser, unfollowUser, isFollowingUser,
   getFollowers, getFollowing,
@@ -22,62 +21,6 @@ import {
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
-
-// ─── MINI AUDIO PLAYER (for profile narration cards) ─────────────────────────
-
-function NarrationCard({ narration, index }: { narration: Narration; index: number }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-
-  const toggle = () => {
-    if (!audioRef.current) return;
-    if (playing) { audioRef.current.pause(); setPlaying(false); }
-    else { audioRef.current.play(); setPlaying(true); }
-  };
-
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}
-      className="border border-border rounded-2xl p-4 bg-card">
-      <div className="flex gap-3 mb-3">
-        {narration.storyCoverUrl && (
-          <img src={narration.storyCoverUrl} alt={narration.storyTitle} className="w-12 h-16 rounded-lg object-cover shrink-0" />
-        )}
-        <div className="min-w-0">
-          <Link href={`/story/${narration.storyId}`}>
-            <p className="font-semibold text-sm hover:text-primary transition-colors cursor-pointer truncate">{narration.storyTitle}</p>
-          </Link>
-          <p className="text-xs text-muted-foreground">{narration.authorName} · {fmt(narration.durationSeconds)}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <button onClick={toggle}
-          className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0 hover:bg-primary/90 transition-colors shadow-[0_0_10px_hsl(var(--primary)/0.35)]">
-          {playing
-            ? <Pause className="w-3.5 h-3.5 text-primary-foreground" />
-            : <Play className="w-3.5 h-3.5 text-primary-foreground ml-0.5" />}
-        </button>
-        <input type="range" min="0" max="100" value={progress}
-          onChange={e => {
-            if (!audioRef.current) return;
-            audioRef.current.currentTime = (Number(e.target.value) / 100) * (audioRef.current.duration || 0);
-          }}
-          className="flex-1 h-1 accent-primary cursor-pointer" />
-        <span className="text-xs text-muted-foreground w-10 text-right">{fmt(currentTime)}</span>
-      </div>
-      <audio ref={audioRef} src={narration.audioUrl}
-        onTimeUpdate={() => {
-          if (!audioRef.current) return;
-          setCurrentTime(audioRef.current.currentTime);
-          setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100);
-        }}
-        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }} />
-    </motion.div>
-  );
-}
 
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 
@@ -574,11 +517,10 @@ export default function ProfilePage() {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"stories" | "narrations" | "qa" | "bookmarks">("stories");
+  const [activeTab, setActiveTab] = useState<"stories" | "qa" | "bookmarks">("stories");
   const [bookmarkedStories, setBookmarkedStories] = useState<Story[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = useState(false);
   const [bookmarksKey, setBookmarksKey] = useState(0);
-  const [narrations, setNarrations] = useState<Narration[]>([]);
   const [editOpen, setEditOpen] = useState(false);
 
   const isOwner = user?.uid === uid;
@@ -595,13 +537,9 @@ export default function ProfilePage() {
         let p: UserProfile | null = null;
         if (isOwner && user) p = await ensureUserProfile(user);
         else p = await getUserProfile(uid);
-        const [s, narrs] = await Promise.all([
-          getStoriesByAuthor(uid, !isOwner),
-          getNarrationsByNarrator(uid),
-        ]);
+        const s = await getStoriesByAuthor(uid, !isOwner);
         setProfile(p);
         setStories(s);
-        setNarrations(narrs);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Profil yüklenemedi");
       } finally {
@@ -916,13 +854,12 @@ export default function ProfilePage() {
           <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
             {[
               { key: "stories", label: "Hikayeleri", icon: <BookOpen className="w-4 h-4" /> },
-              { key: "narrations", label: "Sesli Kitaplar", icon: <Mic className="w-4 h-4" /> },
               { key: "qa", label: "Soru & Cevap", icon: <MessageSquarePlus className="w-4 h-4" /> },
               ...(isOwner ? [{ key: "bookmarks", label: "Kaydedilenler", icon: <Bookmark className="w-4 h-4" /> }] : []),
             ].map(tab => (
               <button key={tab.key}
                 onClick={() => {
-                  setActiveTab(tab.key as "stories" | "narrations" | "qa" | "bookmarks");
+                  setActiveTab(tab.key as "stories" | "qa" | "bookmarks");
                   if (tab.key === "bookmarks") setBookmarksKey(k => k + 1);
                 }}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -979,25 +916,6 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── Narrations Tab ── */}
-          {activeTab === "narrations" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              {narrations.length === 0 ? (
-                <div className="py-16 text-center border border-dashed border-border rounded-2xl">
-                  <Mic className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-muted-foreground">{isOwner ? "Henüz bir hikaye seslendirmemişsin." : "Yayınlanmış seslendirme yok."}</p>
-                  {isOwner && <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasından sesli anlatım ekleyebilirsin.</p>}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {narrations.map((n, i) => (
-                    <NarrationCard key={n.id} narration={n} index={i} />
                   ))}
                 </div>
               )}

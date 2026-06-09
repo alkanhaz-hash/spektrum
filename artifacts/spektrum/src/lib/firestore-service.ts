@@ -94,18 +94,6 @@ export interface Conversation {
   unreadCount: Record<string, number>;
 }
 
-export interface UserStatus {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  imageUrl: string;
-  caption?: string;
-  createdAt: Timestamp;
-  expiresAt: Timestamp;
-  viewedBy: string[];
-}
-
 export interface TalentPortfolio {
   id: string;
   userId: string;
@@ -477,99 +465,6 @@ export async function getTrendingStories(limitCount = 10): Promise<TrendingStory
     .slice(0, limitCount);
 }
 
-// ─── NARRATIONS ───────────────────────────────────────────────────────────────
-
-export interface NarrationRequest {
-  id: string;
-  storyId: string;
-  storyTitle: string;
-  narratorId: string;
-  narratorName: string;
-  narratorAvatar: string;
-  authorId: string;
-  status: "pending" | "approved" | "rejected";
-  conversationId?: string;
-  createdAt: Timestamp;
-}
-
-export interface Narration {
-  id: string;
-  storyId: string;
-  storyTitle: string;
-  storyCoverUrl: string;
-  narratorId: string;
-  narratorName: string;
-  narratorAvatar: string;
-  authorId: string;
-  authorName: string;
-  audioUrl: string;
-  durationSeconds: number;
-  createdAt: Timestamp;
-}
-
-export async function createNarrationRequest(data: Omit<NarrationRequest, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "narrationRequests"), {
-    ...data,
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
-}
-
-export async function getNarrationRequest(storyId: string, narratorId: string): Promise<NarrationRequest | null> {
-  const q = query(
-    collection(db, "narrationRequests"),
-    where("storyId", "==", storyId),
-    where("narratorId", "==", narratorId)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as NarrationRequest;
-}
-
-export async function updateNarrationRequest(id: string, status: "approved" | "rejected"): Promise<void> {
-  await updateDoc(doc(db, "narrationRequests", id), { status });
-}
-
-export async function getPendingNarrationRequestsByStory(storyId: string): Promise<NarrationRequest[]> {
-  const q = query(
-    collection(db, "narrationRequests"),
-    where("storyId", "==", storyId),
-    where("status", "==", "pending"),
-  );
-  const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as NarrationRequest))
-    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
-}
-
-export async function getNarrationsByStory(storyId: string): Promise<Narration[]> {
-  const q = query(collection(db, "narrations"), where("storyId", "==", storyId));
-  const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as Narration))
-    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-}
-
-export async function getNarrationsByNarrator(narratorId: string): Promise<Narration[]> {
-  const q = query(collection(db, "narrations"), where("narratorId", "==", narratorId));
-  const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as Narration))
-    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-}
-
-export async function uploadNarration(data: Omit<Narration, "id" | "createdAt">): Promise<string> {
-  const ref = await addDoc(collection(db, "narrations"), {
-    ...data,
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
-}
-
-export async function deleteNarration(id: string): Promise<void> {
-  await deleteDoc(doc(db, "narrations", id));
-}
-
 // ─── ANONYMOUS QUESTIONS ──────────────────────────────────────────────────────
 
 export interface AnonymousQuestion {
@@ -796,45 +691,6 @@ export async function getBookmarkedStories(userId: string): Promise<Story[]> {
     .filter(s => s.exists())
     .map(s => ({ id: s.id, ...s.data() } as Story))
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-}
-
-// ─── STATUS (24h) ─────────────────────────────────────────────────────────────
-
-export async function createUserStatus(data: {
-  userId: string;
-  userName: string;
-  userAvatar: string;
-  imageUrl: string;
-  caption?: string;
-}): Promise<string> {
-  const now = Timestamp.now();
-  const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000);
-  const ref = await addDoc(collection(db, "statuses"), {
-    ...data,
-    createdAt: serverTimestamp(),
-    expiresAt,
-    viewedBy: [],
-  });
-  return ref.id;
-}
-
-export async function getActiveStatuses(): Promise<UserStatus[]> {
-  const q = query(
-    collection(db, "statuses"),
-    where("expiresAt", ">", Timestamp.now()),
-    orderBy("expiresAt", "asc"),
-    limit(50)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as UserStatus));
-}
-
-export async function markStatusViewed(statusId: string, userId: string): Promise<void> {
-  await updateDoc(doc(db, "statuses", statusId), { viewedBy: arrayUnion(userId) });
-}
-
-export async function deleteUserStatus(statusId: string): Promise<void> {
-  await deleteDoc(doc(db, "statuses", statusId));
 }
 
 // ─── BAN ──────────────────────────────────────────────────────────────────────

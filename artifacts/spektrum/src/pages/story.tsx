@@ -1,235 +1,22 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useParams, Link, useLocation } from "wouter";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Heart, MessageSquare, ChevronRight, User,
-  Mic, Play, Pause, Send, Upload, Clock, Trash2, CheckCircle, XCircle, Loader2, Edit3,
+  Send, Clock, Edit3,
   Bookmark, BookmarkCheck, Share2, Check, Flag
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getStory, getChaptersByStory, likeStory, unlikeStory, hasUserLikedStory,
-  getNarrationsByStory, uploadNarration, deleteNarration,
   reportContent,
   bookmarkStory, unbookmarkStory, isStoryBookmarked, createNotification,
-  Story, Chapter, Narration,
+  Story, Chapter,
 } from "@/lib/firestore-service";
-import { uploadNarrationFile, uploadNarrationAudio } from "@/lib/storage-service";
 import { useToast } from "@/hooks/use-toast";
-
-// ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
-
-function AudioPlayer({ narration }: { narration: Narration }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-
-  const toggle = () => {
-    if (!audioRef.current) return;
-    if (playing) { audioRef.current.pause(); setPlaying(false); }
-    else { audioRef.current.play(); setPlaying(true); }
-  };
-
-  const handleTimeUpdate = () => {
-    if (!audioRef.current) return;
-    setCurrentTime(audioRef.current.currentTime);
-    setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100);
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!audioRef.current) return;
-    const val = Number(e.target.value);
-    audioRef.current.currentTime = (val / 100) * (audioRef.current.duration || 0);
-  };
-
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-  return (
-    <div className="flex items-center gap-3 bg-muted/30 rounded-xl px-4 py-3">
-      <button onClick={toggle}
-        className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0 hover:bg-primary/90 transition-colors shadow-[0_0_12px_hsl(var(--primary)/0.4)]">
-        {playing ? <Pause className="w-4 h-4 text-primary-foreground" /> : <Play className="w-4 h-4 text-primary-foreground ml-0.5" />}
-      </button>
-      <div className="flex-1 min-w-0">
-        <input type="range" min="0" max="100" value={progress} onChange={handleSeek}
-          className="w-full h-1 accent-primary cursor-pointer" />
-        <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
-          <span>{fmt(currentTime)}</span>
-          <span>{fmt(narration.durationSeconds)}</span>
-        </div>
-      </div>
-      <audio ref={audioRef} src={narration.audioUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }} />
-    </div>
-  );
-}
-
-// ─── NARRATIONS TAB ───────────────────────────────────────────────────────────
-
-function NarrationsTab({ story }: { story: Story }) {
-  const { user, profile } = useAuth();
-  const { toast } = useToast();
-  const [narrations, setNarrations] = useState<Narration[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const isAuthor = user?.uid === story.authorId;
-
-  useEffect(() => {
-    getNarrationsByStory(story.id)
-      .then(setNarrations)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [story.id]);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user || !profile) return;
-    if (!file.type.startsWith("audio/")) {
-      toast({ title: "Sadece ses dosyası yükleyebilirsin", variant: "destructive" });
-      return;
-    }
-    if (file.size > 100 * 1024 * 1024) {
-      toast({ title: "Dosya çok büyük (max 100MB)", variant: "destructive" });
-      return;
-    }
-    setUploading(true);
-    try {
-      const [audioUrl, durationSeconds] = await Promise.all([
-        uploadNarrationFile(story.id, user.uid, file),
-        uploadNarrationAudio(story.id, user.uid, file),
-      ]);
-      await uploadNarration({
-        storyId: story.id,
-        storyTitle: story.title,
-        storyCoverUrl: story.coverUrl,
-        narratorId: user.uid,
-        narratorName: profile.displayName,
-        narratorAvatar: profile.avatarUrl || "",
-        authorId: story.authorId,
-        authorName: story.authorName,
-        audioUrl,
-        durationSeconds,
-      });
-      const fresh = await getNarrationsByStory(story.id);
-      setNarrations(fresh);
-      toast({ title: "Seslendirme yüklendi!" });
-    } catch {
-      toast({ title: "Yükleme hatası", variant: "destructive" });
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleDelete = async (narration: Narration) => {
-    if (!user || user.uid !== narration.narratorId) return;
-    await deleteNarration(narration.id);
-    setNarrations(prev => prev.filter(n => n.id !== narration.id));
-    toast({ title: "Seslendirme silindi." });
-  };
-
-  if (loading) return (
-    <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-  );
-
-  const myNarration = narrations.find(n => n.narratorId === user?.uid);
-
-  return (
-    <div className="space-y-6">
-
-      {/* ─ YAZAR: Yükleme Paneli ─ */}
-      {user && isAuthor && (
-        <div className="border border-primary/30 rounded-2xl p-5 bg-primary/5">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-lg">🎙️</span>
-            <p className="font-semibold text-sm text-primary">Yazar Seslendirmesi</p>
-            <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-2 py-0.5 rounded-full">Resmi</span>
-          </div>
-
-          {!myNarration ? (
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm">Hikayeni kendi sesinde yayınla.</p>
-                <p className="text-xs text-muted-foreground mt-0.5">MP3, WAV veya M4A · En fazla 100 MB</p>
-              </div>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 shrink-0"
-              >
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploading ? "Yükleniyor..." : "Ses Yükle"}
-              </button>
-              <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleUpload} />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4" /> Seslendirmen yayında
-                </p>
-                <button
-                  onClick={() => handleDelete(myNarration)}
-                  className="text-muted-foreground hover:text-destructive transition-colors"
-                  title="Seslendirmeyi sil"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-              <AudioPlayer narration={myNarration} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─ Seslendirme Listesi ─ */}
-      {narrations.length === 0 ? (
-        <div className="py-14 text-center border border-dashed border-border rounded-2xl">
-          <Mic className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">Henüz seslendirme yok.</p>
-          {!isAuthor && <p className="text-sm text-muted-foreground mt-1">Yazar henüz sesli anlatım eklemedi.</p>}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {narrations.map((n, i) => (
-            <motion.div key={n.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-              className="border border-border rounded-2xl p-4 bg-card space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0">
-                  {n.narratorAvatar
-                    ? <img src={n.narratorAvatar} alt={n.narratorName} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-sm font-bold text-primary">{n.narratorName.charAt(0)}</div>
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Link href={`/profile/${n.narratorId}`}>
-                      <span className="text-sm font-semibold hover:text-primary transition-colors cursor-pointer">{n.narratorName}</span>
-                    </Link>
-                    {n.narratorId === n.authorId && (
-                      <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-1.5 py-0.5 rounded-full leading-none">👑 Yazar</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{Math.floor(n.durationSeconds / 60)}:{String(n.durationSeconds % 60).padStart(2, "0")}</p>
-                </div>
-                <Mic className="w-4 h-4 text-primary/50" />
-              </div>
-              <AudioPlayer narration={n} />
-            </motion.div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
@@ -461,46 +248,27 @@ export default function StoryPage() {
           </div>
         </motion.div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="chapters">
-          <div className="overflow-x-auto mb-6">
-            <TabsList className="bg-card border border-border w-max">
-              <TabsTrigger value="chapters" data-testid="tab-chapters">
-                Bölümler ({chapters.length})
-              </TabsTrigger>
-              <TabsTrigger value="narrations">
-                <Mic className="w-4 h-4 mr-1" /> Sesli
-              </TabsTrigger>
-              {/* Yetenek sekmesi geçici olarak gizlendi */}
-            </TabsList>
-          </div>
-
-          <TabsContent value="chapters">
-            <div className="space-y-2">
-              {chapters.length === 0 && <p className="text-muted-foreground py-8 text-center">Henüz yayınlanmış bölüm yok.</p>}
-              {chapters.map((ch, i) => (
-                <motion.div key={ch.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
-                  <Link href={`/read/${story.id}/${ch.id}`}>
-                    <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 bg-card hover:bg-card/80 transition-all cursor-pointer group" data-testid={`card-chapter-${ch.id}`}>
-                      <div>
-                        <span className="text-xs text-muted-foreground mb-1 block">Bölüm {ch.order}</span>
-                        <h3 className="font-semibold group-hover:text-primary transition-colors">{ch.title}</h3>
-                        <span className="text-xs text-muted-foreground">{ch.wordCount.toLocaleString("tr-TR")} kelime · {ch.readCount.toLocaleString("tr-TR")} okuma</span>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+        {/* Bölümler */}
+        <div>
+          <h2 className="font-semibold text-base mb-4" data-testid="tab-chapters">Bölümler ({chapters.length})</h2>
+          <div className="space-y-2">
+            {chapters.length === 0 && <p className="text-muted-foreground py-8 text-center">Henüz yayınlanmış bölüm yok.</p>}
+            {chapters.map((ch, i) => (
+              <motion.div key={ch.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
+                <Link href={`/read/${story.id}/${ch.id}`}>
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 bg-card hover:bg-card/80 transition-all cursor-pointer group" data-testid={`card-chapter-${ch.id}`}>
+                    <div>
+                      <span className="text-xs text-muted-foreground mb-1 block">Bölüm {ch.order}</span>
+                      <h3 className="font-semibold group-hover:text-primary transition-colors">{ch.title}</h3>
+                      <span className="text-xs text-muted-foreground">{ch.wordCount.toLocaleString("tr-TR")} kelime · {ch.readCount.toLocaleString("tr-TR")} okuma</span>
                     </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="narrations">
-            <NarrationsTab story={story} />
-          </TabsContent>
-
-          {/* Yetenek sekmesi içeriği geçici olarak gizlendi */}
-        </Tabs>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  </div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </div>
     </AppLayout>
   );

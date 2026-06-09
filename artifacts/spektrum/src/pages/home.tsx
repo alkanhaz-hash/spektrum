@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { BookOpen, Clock, MessageSquare, TrendingUp, Pen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { StatusBar } from "@/components/StatusBar";
 
 export default function HomePage() {
   const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
@@ -31,11 +30,6 @@ export default function HomePage() {
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-8">
-
-        {/* Status Bar */}
-        <section className="mb-8">
-          <StatusBar />
-        </section>
 
         {/* Hero Section */}
         <section className="py-20 flex flex-col items-center text-center space-y-8 relative overflow-hidden rounded-3xl bg-card border border-border/50 shadow-2xl shadow-primary/5 mb-16">
