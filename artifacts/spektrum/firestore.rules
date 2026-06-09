@@ -64,9 +64,10 @@ service cloud.firestore {
                     // (admin olmayan kullanıcıların rolü admin'e yükseltilemez)
                     || (isSignedIn()
                         && role() == 'admin'
-                        && changedKeys().hasOnly(['role'])
                         && resource.data.get('role', 'user') != 'admin'
-                        && request.resource.data.get('role', 'user') in ['user', 'moderator'])
+                        && request.resource.data.get('role', 'user') in ['user', 'moderator']
+                        && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+                        && request.resource.data.get('banned', false) == resource.data.get('banned', false))
                     // Herhangi bir giriş yapmış kullanıcı YALNIZCA takipçi/takip sayaçlarını güncelleyebilir
                     || (isSignedIn()
                         && changedKeys().hasOnly(['followerCount', 'followingCount'])
