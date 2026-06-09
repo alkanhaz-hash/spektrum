@@ -66,10 +66,17 @@ export async function uploadNarrationAudio(_storyId: string, _narratorId: string
 }
 
 export async function uploadNarrationFile(storyId: string, narratorId: string, file: File): Promise<string> {
-  // BUG FIX: Dosyanın gerçek uzantısı ve MIME tipi kullanılıyor (önceden .mp3/audio/mpeg hardcode'du)
   const ext = file.name.split(".").pop()?.toLowerCase() || "mp3";
+  // Bazı tarayıcılar/mobil cihazlar MIME tipini boş bırakır — uzantıdan fallback belirle
+  const MIME: Record<string, string> = {
+    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4",
+    aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac", webm: "audio/webm",
+  };
+  const contentType = file.type && file.type.startsWith("audio/")
+    ? file.type
+    : (MIME[ext] ?? "audio/mpeg");
   const storageRef = ref(storage, `narrations/${storyId}/${narratorId}_${Date.now()}.${ext}`);
-  await uploadBytes(storageRef, file, { contentType: file.type });
+  await uploadBytes(storageRef, file, { contentType });
   return getDownloadURL(storageRef);
 }
 

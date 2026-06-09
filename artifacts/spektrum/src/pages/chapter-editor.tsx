@@ -236,11 +236,14 @@ export default function ChapterEditorPage() {
 
   const [autoSaveLabel, setAutoSaveLabel] = useState<"saved" | "saving" | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Yayınla tıklandıktan sonra auto-save'i engelle (race condition: auto-save "draft" yazmasın)
+  const publishedRef = useRef(false);
 
   useEffect(() => {
     if (!titleVal || !contentVal || chapterId === "new") return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
+      if (publishedRef.current) return; // Yayınlandıysa auto-save çalışmasın
       setAutoSaveLabel("saving");
       try {
         await updateChapter(chapterId, { title: titleVal, content: contentVal, status: "draft", wordCount });
@@ -280,6 +283,9 @@ export default function ChapterEditorPage() {
   };
 
   const publishChapter = async (data: FormData) => {
+    // Auto-save timer'ı hemen iptal et — "draft" override'ı engelle
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+    publishedRef.current = true;
     setSaving(true);
     setModerationStatus("checking");
     setModerationReason(null);
@@ -316,8 +322,11 @@ export default function ChapterEditorPage() {
         });
       }
 
+      // Her iki durumda da hikayeyi "published" yap — moderasyonda bile
+      // hikaye discover feed'de chapterCount>0 ile zaten görünür.
+      updateStory(storyId, { status: "published" }).catch(() => {});
+
       if (chapterStatus === "published") {
-        updateStory(storyId, { status: "published" }).catch(() => {});
         toast({ title: "Bölüm yayınlandı! 🎉", description: "İçerik onaylandı ve okuyucularla paylaşıldı." });
       } else {
         toast({ title: "Moderatör incelemesine gönderildi", description: "Bölüm onaylanınca yayınlanacak." });
