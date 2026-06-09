@@ -12,11 +12,38 @@ import {
   signInWithRedirect,
   getRedirectResult,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp, collection, query, where, limit, getDocs } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 // Mobil cihaz tespiti (User-Agent tabanlı)
 const isMobileDevice = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+/** Verilen takma adın başka bir kullanıcı tarafından kullanılıp kullanılmadığını kontrol eder. */
+export async function isNicknameTaken(displayName: string, excludeUid?: string): Promise<boolean> {
+  const q = query(
+    collection(db, "users"),
+    where("displayName", "==", displayName.trim()),
+    limit(2)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return false;
+  // Kendi UID'si hariç başka biri kullanıyorsa alınmış sayılır
+  if (excludeUid) {
+    return snap.docs.some(d => d.id !== excludeUid);
+  }
+  return !snap.empty;
+}
+
+/** Yaş doğrulama — 13 yaşından küçükse hata fırlatır. */
+function validateAge(birthDate: string): void {
+  const minDate = new Date();
+  minDate.setFullYear(minDate.getFullYear() - 13);
+  if (new Date(birthDate) > minDate) {
+    const err = new Error("13 yaşından küçük kullanıcılar kayıt olamaz.");
+    (err as any).code = "auth/underage";
+    throw err;
+  }
+}
 
 // GÜVENLİK NOTU: e-posta (ve emailVerified) artık Firestore `users` belgesinde
 // TUTULMAZ. `users` belgeleri herkese açık okunabilir (profil ad/avatar/bio için);
@@ -61,6 +88,15 @@ export async function registerUser(
   birthDate: string,
   gender: string
 ): Promise<User> {
+  // Sunucu tarafı yaş doğrulaması
+  validateAge(birthDate);
+  // Sunucu tarafı nickname benzersizlik kontrolü
+  const taken = await isNicknameTaken(displayName);
+  if (taken) {
+    const err = new Error("Bu takma ad zaten kullanılıyor. Farklı bir isim dene.");
+    (err as any).code = "auth/nickname-taken";
+    throw err;
+  }
   const credential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(credential.user, { displayName });
   await setDoc(doc(db, "users", credential.user.uid), {
@@ -153,6 +189,15 @@ async function ensureGoogleProfile(user: User): Promise<void> {
       role: "user",
       nicknameSet: false,
     });
+  } else {
+    // PII temizliği: eski Google profillerinde e-posta kalmış olabilir
+    const data = snap.data();
+    const patch: Record<string, unknown> = {};
+    if ("email" in data) patch.email = deleteField();
+    if ("emailVerified" in data) patch.emailVerified = deleteField();
+    if (Object.keys(patch).length > 0) {
+      await updateDoc(userRef, patch);
+    }
   }
 }
 

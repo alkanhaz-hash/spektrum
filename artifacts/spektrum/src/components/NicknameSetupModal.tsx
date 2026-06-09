@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AtSign, Sparkles, User, Calendar, ChevronDown } from "lucide-react";
-import { updateUserProfile } from "@/lib/auth-service";
+import { AtSign, Sparkles, User, Calendar, ChevronDown, Check, X, Loader2 } from "lucide-react";
+import { updateUserProfile, isNicknameTaken } from "@/lib/auth-service";
 import { updateDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -60,13 +60,38 @@ export function NicknameSetupModal({ uid, onComplete }: Props) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [kvkkAccepted, setKvkkAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [nicknameStatus, setNicknameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const trimmed = nickname.trim();
   const nicknameValid = trimmed.length >= 3 && trimmed.length <= 30;
-  const canSubmit = nicknameValid && birthDate && gender && termsAccepted && kvkkAccepted && !saving;
+
+  // Yaş kontrolü
+  const minBirthDate = new Date(Date.now() - 13 * 365.25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const isTooYoung = birthDate ? birthDate > minBirthDate : false;
+
+  const canSubmit = nicknameValid && nicknameStatus === "available" && birthDate && !isTooYoung && gender && termsAccepted && kvkkAccepted && !saving;
+
+  // Debounced nickname kontrolü
+  useEffect(() => {
+    if (!nicknameValid) { setNicknameStatus("idle"); return; }
+    setNicknameStatus("checking");
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const taken = await isNicknameTaken(trimmed, uid);
+        setNicknameStatus(taken ? "taken" : "available");
+      } catch { setNicknameStatus("idle"); }
+    }, 600);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [trimmed, nicknameValid, uid]);
 
   const handleSave = async () => {
     if (!canSubmit) return;
+    if (isTooYoung) {
+      toast({ title: "Yaş sınırı", description: "En az 13 yaşında olmalısın.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       await updateUserProfile(uid, { displayName: trimmed });
@@ -127,14 +152,21 @@ export function NicknameSetupModal({ uid, onComplete }: Props) {
                   onChange={e => setNickname(e.target.value)}
                   placeholder="takma_adın"
                   maxLength={30}
-                  className="w-full bg-background border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                  className="w-full bg-background border border-border rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                 />
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                  {nicknameStatus === "checking" && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />}
+                  {nicknameStatus === "available" && <Check className="w-4 h-4 text-emerald-500" />}
+                  {nicknameStatus === "taken" && <X className="w-4 h-4 text-red-500" />}
+                </div>
               </div>
               {trimmed.length > 0 && !nicknameValid && (
                 <p className="text-xs text-red-400 mt-1">
                   {trimmed.length < 3 ? "En az 3 karakter olmalı" : "En fazla 30 karakter"}
                 </p>
               )}
+              {nicknameStatus === "taken" && <p className="text-xs text-red-400 mt-1">Bu takma ad alınmış. Farklı bir isim dene.</p>}
+              {nicknameStatus === "available" && <p className="text-xs text-emerald-500 mt-1">Bu takma ad kullanılabilir!</p>}
             </div>
 
             {/* Doğum tarihi */}
@@ -148,10 +180,13 @@ export function NicknameSetupModal({ uid, onComplete }: Props) {
                 type="date"
                 value={birthDate}
                 onChange={e => setBirthDate(e.target.value)}
-                max={new Date(Date.now() - 13 * 365.25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]}
+                max={minBirthDate}
                 className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
               />
-              <p className="text-xs text-muted-foreground mt-1">En az 13 yaşında olmalısın.</p>
+              {isTooYoung
+                ? <p className="text-xs text-red-400 mt-1">Kayıt olabilmek için en az 13 yaşında olmalısın.</p>
+                : <p className="text-xs text-muted-foreground mt-1">En az 13 yaşında olmalısın.</p>
+              }
             </div>
 
             {/* Cinsiyet */}

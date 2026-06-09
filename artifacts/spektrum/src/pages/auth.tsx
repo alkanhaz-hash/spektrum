@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginUser, registerUser, loginWithGoogle, getGoogleRedirectResult, resetPassword, resendVerificationEmail, logoutUser } from "@/lib/auth-service";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { isNicknameTaken } from "@/lib/auth-service";
 import { SiGoogle } from "react-icons/si";
-import { Mail, CheckCircle, ArrowLeft } from "lucide-react";
+import { Mail, CheckCircle, ArrowLeft, Check, X, Loader2 } from "lucide-react";
 
 type View = "auth" | "forgot" | "verify-email";
 
@@ -52,6 +53,44 @@ export default function AuthPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [kvkkAccepted, setKvkkAccepted] = useState(false);
 
+  // Nickname müsaitlik kontrolü
+  const [nicknameStatus, setNicknameStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const nicknameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const trimmed = regName.trim();
+    if (trimmed.length < 3) { setNicknameStatus("idle"); return; }
+    setNicknameStatus("checking");
+    if (nicknameTimerRef.current) clearTimeout(nicknameTimerRef.current);
+    nicknameTimerRef.current = setTimeout(async () => {
+      try {
+        const taken = await isNicknameTaken(trimmed);
+        setNicknameStatus(taken ? "taken" : "available");
+      } catch { setNicknameStatus("idle"); }
+    }, 600);
+    return () => { if (nicknameTimerRef.current) clearTimeout(nicknameTimerRef.current); };
+  }, [regName]);
+
+  // Şifre güç hesabı
+  const passwordStrength = (() => {
+    const p = regPassword;
+    if (!p) return 0;
+    let score = 0;
+    if (p.length >= 6) score++;
+    if (p.length >= 10) score++;
+    if (/[A-Z]/.test(p)) score++;
+    if (/[0-9]/.test(p)) score++;
+    if (/[^A-Za-z0-9]/.test(p)) score++;
+    return score;
+  })();
+
+  const passwordStrengthLabel = ["", "Çok Zayıf", "Zayıf", "Orta", "Güçlü", "Çok Güçlü"][passwordStrength];
+  const passwordStrengthColor = ["", "bg-red-500", "bg-orange-500", "bg-yellow-500", "bg-green-500", "bg-emerald-500"][passwordStrength];
+
+  // Yaş kontrolü
+  const minBirthDate = new Date(Date.now() - 13 * 365.25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const isTooYoung = regBirthDate ? regBirthDate > minBirthDate : false;
+
   const [resetEmail, setResetEmail] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -82,6 +121,14 @@ export default function AuthPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (nicknameStatus === "taken") {
+      toast({ title: "Takma ad alınmış", description: "Farklı bir takma ad seç.", variant: "destructive" });
+      return;
+    }
+    if (isTooYoung) {
+      toast({ title: "Yaş sınırı", description: "Kayıt olabilmek için en az 13 yaşında olmalısın.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
       await registerUser(regEmail, regPassword, regName, regBirthDate, regGender);
@@ -91,6 +138,10 @@ export default function AuthPage() {
         ? "Bu e-posta zaten kayıtlı."
         : err.code === "auth/weak-password"
         ? "Şifre en az 6 karakter olmalı."
+        : err.code === "auth/nickname-taken"
+        ? "Bu takma ad zaten kullanılıyor. Farklı bir isim dene."
+        : err.code === "auth/underage"
+        ? "Kayıt olabilmek için en az 13 yaşında olmalısın."
         : err.message;
       toast({ title: "Kayıt başarısız", description: msg, variant: "destructive" });
     } finally {
@@ -264,18 +315,27 @@ export default function AuthPage() {
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="reg-name">Takma Ad <span className="text-muted-foreground font-normal">(Nickname)</span></Label>
-                      <Input
-                        id="reg-name"
-                        type="text"
-                        value={regName}
-                        onChange={e => setRegName(e.target.value)}
-                        required
-                        minLength={3}
-                        maxLength={30}
-                        placeholder="takma_adın"
-                        className="bg-background/50"
-                      />
-                      <p className="text-xs text-muted-foreground">Diğer kullanıcılar seni bu isimle arayacak ve profilinde görünecek.</p>
+                      <div className="relative">
+                        <Input
+                          id="reg-name"
+                          type="text"
+                          value={regName}
+                          onChange={e => setRegName(e.target.value)}
+                          required
+                          minLength={3}
+                          maxLength={30}
+                          placeholder="takma_adın"
+                          className="bg-background/50 pr-9"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          {nicknameStatus === "checking" && <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />}
+                          {nicknameStatus === "available" && <Check className="w-4 h-4 text-emerald-500" />}
+                          {nicknameStatus === "taken" && <X className="w-4 h-4 text-red-500" />}
+                        </div>
+                      </div>
+                      {nicknameStatus === "taken" && <p className="text-xs text-red-400">Bu takma ad alınmış. Farklı bir isim dene.</p>}
+                      {nicknameStatus === "available" && <p className="text-xs text-emerald-500">Bu takma ad kullanılabilir!</p>}
+                      {nicknameStatus === "idle" && <p className="text-xs text-muted-foreground">Diğer kullanıcılar seni bu isimle arayacak ve profilinde görünecek.</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-email">E-posta</Label>
@@ -284,6 +344,18 @@ export default function AuthPage() {
                     <div className="space-y-2">
                       <Label htmlFor="reg-password">Şifre</Label>
                       <Input id="reg-password" type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={6} className="bg-background/50" />
+                      {regPassword.length > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex gap-1 h-1">
+                            {[1, 2, 3, 4, 5].map(i => (
+                              <div key={i} className={`flex-1 rounded-full transition-all ${i <= passwordStrength ? passwordStrengthColor : "bg-muted"}`} />
+                            ))}
+                          </div>
+                          <p className={`text-xs ${passwordStrength <= 2 ? "text-red-400" : passwordStrength === 3 ? "text-yellow-400" : "text-emerald-500"}`}>
+                            {passwordStrengthLabel}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-birth">Doğum Tarihi</Label>
@@ -293,10 +365,13 @@ export default function AuthPage() {
                         value={regBirthDate}
                         onChange={e => setRegBirthDate(e.target.value)}
                         required
-                        max={new Date(Date.now() - 13 * 365.25 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]}
+                        max={minBirthDate}
                         className="bg-background/50"
                       />
-                      <p className="text-xs text-muted-foreground">En az 13 yaşında olmalısın.</p>
+                      {isTooYoung
+                        ? <p className="text-xs text-red-400">Kayıt olabilmek için en az 13 yaşında olmalısın.</p>
+                        : <p className="text-xs text-muted-foreground">En az 13 yaşında olmalısın.</p>
+                      }
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-gender">Cinsiyet</Label>
