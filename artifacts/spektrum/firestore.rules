@@ -231,11 +231,16 @@ service cloud.firestore {
 
     // ─── STATUSES ───────────────────────────────────────────────────────────
     // 24 saatlik kullanıcı durumları. Herkes okuyabilir; yalnızca sahibi oluşturur/siler.
+    // viewedBy dizisine yalnızca kendi UID'sini ekleyebilir.
     match /statuses/{statusId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow delete: if (isSignedIn() && resource.data.uid == request.auth.uid) || isModerator();
-      allow update: if false;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isModerator();
+      // viewedBy güncellemesi: giriş yapmış herhangi biri sadece kendi UID'sini ekleyebilir
+      allow update: if isSignedIn()
+                    && changedKeys().hasOnly(['viewedBy'])
+                    && request.resource.data.viewedBy.toSet().difference(resource.data.viewedBy.toSet())
+                         == [request.auth.uid].toSet();
     }
 
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────

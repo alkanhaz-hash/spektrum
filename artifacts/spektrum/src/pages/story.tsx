@@ -11,13 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { Timestamp } from "firebase/firestore";
 import {
   getStory, getChaptersByStory, getTalentPortfoliosByStory, likeStory, unlikeStory, hasUserLikedStory,
-  getNarrationsByStory, getNarrationRequest, createNarrationRequest, uploadNarration, deleteNarration,
-  getOrCreateConversation, sendMessage, reportContent,
+  getNarrationsByStory, uploadNarration, deleteNarration,
+  reportContent,
   bookmarkStory, unbookmarkStory, isStoryBookmarked, createNotification,
-  Story, Chapter, TalentPortfolio, Narration, NarrationRequest,
+  Story, Chapter, TalentPortfolio, Narration,
 } from "@/lib/firestore-service";
 import { uploadNarrationFile, uploadNarrationAudio } from "@/lib/storage-service";
 import { useToast } from "@/hooks/use-toast";
@@ -76,83 +75,24 @@ function AudioPlayer({ narration }: { narration: Narration }) {
 function NarrationsTab({ story }: { story: Story }) {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
   const [narrations, setNarrations] = useState<Narration[]>([]);
-  const [myRequest, setMyRequest] = useState<NarrationRequest | null>(null);
   const [loading, setLoading] = useState(true);
-  const [requesting, setRequesting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const audioInputRef = useRef<HTMLInputElement>(null);
-  // BUG FIX: useRef hook'u conditional return'dan önce tanımlanmalı (React hook kuralı)
-  const authorInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAuthor = user?.uid === story.authorId;
-  const isNarrator = !!myRequest && myRequest.status === "approved";
 
   useEffect(() => {
-    const init = async () => {
-      const [narrs, req] = await Promise.all([
-        getNarrationsByStory(story.id),
-        user ? getNarrationRequest(story.id, user.uid) : Promise.resolve(null),
-      ]);
-      setNarrations(narrs);
-      setMyRequest(req);
-      setLoading(false);
-    };
-    init().catch(() => setLoading(false));
-  }, [story.id, user?.uid]);
-
-  const handleRequest = async () => {
-    if (!user || !profile) { setLocation("/auth"); return; }
-    if (user.uid === story.authorId) {
-      toast({ title: "Kendi hikayeni seslendirmek için izne gerek yok!" });
-      return;
-    }
-    setRequesting(true);
-    try {
-      // 1 — DM konuşması aç / bul
-      const convId = await getOrCreateConversation(
-        user.uid,
-        story.authorId,
-        { [user.uid]: profile.displayName, [story.authorId]: story.authorName },
-        { [user.uid]: profile.avatarUrl || "", [story.authorId]: story.authorAvatar || "" }
-      );
-
-      // 2 — İzin isteği kaydı
-      const reqId = await createNarrationRequest({
-        storyId: story.id,
-        storyTitle: story.title,
-        narratorId: user.uid,
-        narratorName: profile.displayName,
-        narratorAvatar: profile.avatarUrl || "",
-        authorId: story.authorId,
-        status: "pending",
-        conversationId: convId,
-      });
-
-      // 3 — DM mesajı gönder
-      const msg = `🎙️ Merhaba! "${story.title}" adlı hikayenizi seslendirmek istiyorum. İzin verir misiniz?\n\n(Bu istek otomatik oluşturulmuştur — istek ID: ${reqId})`;
-      await sendMessage({
-        conversationId: convId,
-        senderId: user.uid,
-        senderName: profile.displayName,
-        senderAvatar: profile.avatarUrl || "",
-        text: msg,
-      });
-
-      setMyRequest({ id: reqId, storyId: story.id, storyTitle: story.title, narratorId: user.uid, narratorName: profile.displayName, narratorAvatar: profile.avatarUrl || "", authorId: story.authorId, status: "pending", conversationId: convId, createdAt: Timestamp.now() });
-      toast({ title: "İzin isteği gönderildi!", description: "Yazara DM olarak mesaj iletildi." });
-    } catch {
-      toast({ title: "Hata", description: "İstek gönderilemedi.", variant: "destructive" });
-    } finally {
-      setRequesting(false);
-    }
-  };
+    getNarrationsByStory(story.id)
+      .then(setNarrations)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [story.id]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !profile) return;
-    if (!file.type.includes("audio")) {
+    if (!file.type.startsWith("audio/")) {
       toast({ title: "Sadece ses dosyası yükleyebilirsin", variant: "destructive" });
       return;
     }
@@ -205,11 +145,11 @@ function NarrationsTab({ story }: { story: Story }) {
   return (
     <div className="space-y-6">
 
-      {/* ─ YAZAR: Kendi Seslendirmesi ─ */}
+      {/* ─ YAZAR: Yükleme Paneli ─ */}
       {user && isAuthor && (
         <div className="border border-primary/30 rounded-2xl p-5 bg-primary/5">
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-lg">👑</span>
+            <span className="text-lg">🎙️</span>
             <p className="font-semibold text-sm text-primary">Yazar Seslendirmesi</p>
             <span className="text-xs bg-primary/15 border border-primary/30 text-primary px-2 py-0.5 rounded-full">Resmi</span>
           </div>
@@ -221,26 +161,20 @@ function NarrationsTab({ story }: { story: Story }) {
                 <p className="text-xs text-muted-foreground mt-0.5">MP3, WAV veya M4A · En fazla 100 MB</p>
               </div>
               <button
-                onClick={() => authorInputRef.current?.click()}
+                onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 shrink-0"
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 {uploading ? "Yükleniyor..." : "Ses Yükle"}
               </button>
-              <input
-                ref={authorInputRef}
-                type="file"
-                accept="audio/mpeg,audio/wav,audio/mp4,audio/m4a,audio/*"
-                className="hidden"
-                onChange={handleUpload}
-              />
+              <input ref={fileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleUpload} />
             </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-primary flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4" /> Seslendirmeni yayında
+                  <CheckCircle className="w-4 h-4" /> Seslendirmen yayında
                 </p>
                 <button
                   onClick={() => handleDelete(myNarration)}
@@ -256,83 +190,12 @@ function NarrationsTab({ story }: { story: Story }) {
         </div>
       )}
 
-      {/* ─ Narrator action area (okuyucular için) ─ */}
-      {user && !isAuthor && (
-        <div className="border border-border rounded-2xl p-5 bg-card">
-          {!myRequest && (
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-semibold text-sm">Bu hikayeyi seslendirmek ister misin?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Yazara DM üzerinden izin isteği gönderilir.</p>
-              </div>
-              <button onClick={handleRequest} disabled={requesting}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-60 shrink-0">
-                {requesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                İzin İste
-              </button>
-            </div>
-          )}
-
-          {myRequest?.status === "pending" && (
-            <div className="flex items-center gap-3 text-amber-400">
-              <Clock className="w-5 h-5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold">İzin isteğin bekleniyor</p>
-                <p className="text-xs text-muted-foreground">Yazar DM'inden onayladığında ses yükleyebilirsin.</p>
-              </div>
-              <Link href={`/messages/${myRequest.conversationId}`}>
-                <button className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-400/30 text-amber-400 text-xs hover:bg-amber-400/10 transition-colors">
-                  <Send className="w-3 h-3" /> DM'e Git
-                </button>
-              </Link>
-            </div>
-          )}
-
-          {myRequest?.status === "rejected" && (
-            <div className="flex items-center gap-3 text-destructive">
-              <XCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">İzin isteğin reddedildi.</p>
-            </div>
-          )}
-
-          {(myRequest?.status === "approved" || isAuthor) && !myNarration && (
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 text-green-400">
-                <CheckCircle className="w-5 h-5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">İzin onaylandı!</p>
-                  <p className="text-xs text-muted-foreground">MP3 veya WAV dosyasını yükleyebilirsin (max 100MB).</p>
-                </div>
-              </div>
-              <button onClick={() => audioInputRef.current?.click()} disabled={uploading}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/20 border border-green-500/40 text-green-400 text-sm font-semibold hover:bg-green-500/30 transition-all disabled:opacity-60 shrink-0">
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {uploading ? "Yükleniyor..." : "Ses Yükle"}
-              </button>
-              <input ref={audioInputRef} type="file" accept="audio/mpeg,audio/wav,audio/mp3,audio/*" className="hidden" onChange={handleUpload} />
-            </div>
-          )}
-
-          {myNarration && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-green-400 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Senin Seslendirmen</p>
-                <button onClick={() => handleDelete(myNarration)} className="text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-              <AudioPlayer narration={myNarration} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─ All narrations list ─ */}
+      {/* ─ Seslendirme Listesi ─ */}
       {narrations.length === 0 ? (
         <div className="py-14 text-center border border-dashed border-border rounded-2xl">
           <Mic className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">Henüz seslendirme yok.</p>
-          <p className="text-sm text-muted-foreground mt-1">İlk seslendiren sen ol!</p>
+          {!isAuthor && <p className="text-sm text-muted-foreground mt-1">Yazar henüz sesli anlatım eklemedi.</p>}
         </div>
       ) : (
         <div className="space-y-4">

@@ -184,6 +184,8 @@ export function Navbar() {
                                 {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
                                 {n.type === "chapter_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü onaylandı.</>}
                                 {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
+                                {n.type === "narration_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> seslendirme isteğin onaylandı! Ses dosyasını yükleyebilirsin.</>}
+                                {n.type === "narration_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> seslendirme isteğin reddedildi.</>}
                               </p>
                               {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
                             </div>

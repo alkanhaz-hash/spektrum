@@ -526,6 +526,18 @@ export async function updateNarrationRequest(id: string, status: "approved" | "r
   await updateDoc(doc(db, "narrationRequests", id), { status });
 }
 
+export async function getPendingNarrationRequestsByStory(storyId: string): Promise<NarrationRequest[]> {
+  const q = query(
+    collection(db, "narrationRequests"),
+    where("storyId", "==", storyId),
+    where("status", "==", "pending"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as NarrationRequest))
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+}
+
 export async function getNarrationsByStory(storyId: string): Promise<Narration[]> {
   const q = query(collection(db, "narrations"), where("storyId", "==", storyId));
   const snap = await getDocs(q);
@@ -726,7 +738,7 @@ export interface SpektrumNotification {
   senderId: string;
   senderName: string;
   senderAvatar: string;
-  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected";
+  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected" | "narration_approved" | "narration_rejected";
   storyId?: string;
   storyTitle?: string;
   questionId?: string;
