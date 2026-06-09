@@ -954,22 +954,30 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {stories.map((s, i) => (
                     <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                      <Link href={isOwner && s.status !== "published" ? `/write/${s.id}` : `/story/${s.id}`}>
-                        <div className="group cursor-pointer">
-                          <div className="aspect-[2/3] rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border overflow-hidden mb-2 group-hover:border-primary/50 transition-all group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.2)]">
+                      <div className="group">
+                        {/* Kapak — yazar için write sayfasına, diğerleri story sayfasına */}
+                        <Link href={isOwner ? `/write/${s.id}` : `/story/${s.id}`}>
+                          <div className="aspect-[2/3] rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border overflow-hidden mb-2 cursor-pointer group-hover:border-primary/50 transition-all group-hover:shadow-[0_0_16px_hsl(var(--primary)/0.2)]">
                             {s.coverUrl && <img src={s.coverUrl} alt={s.title} className="w-full h-full object-cover" />}
                           </div>
-                          <h3 className="text-sm font-semibold group-hover:text-primary transition-colors truncate">{s.title}</h3>
-                          <div className="flex items-center gap-1 mt-1 flex-wrap">
-                            <Badge variant="outline" className="text-xs border-primary/20 text-primary/70">{s.genre}</Badge>
-                            {isOwner && s.status !== "published" && (
-                              <Badge variant="secondary" className="text-xs">
-                                {s.status === "draft" ? "Taslak" : s.status === "completed" ? "Tamamlandı" : s.status}
-                              </Badge>
-                            )}
-                          </div>
+                        </Link>
+                        <Link href={isOwner ? `/write/${s.id}` : `/story/${s.id}`}>
+                          <h3 className="text-sm font-semibold hover:text-primary transition-colors truncate cursor-pointer">{s.title}</h3>
+                        </Link>
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          <Badge variant="outline" className="text-xs border-primary/20 text-primary/70">{s.genre}</Badge>
+                          {isOwner && s.status === "published" && (
+                            <Link href={`/story/${s.id}`}>
+                              <span className="text-xs text-primary/60 hover:text-primary cursor-pointer underline underline-offset-2 transition-colors">Oku</span>
+                            </Link>
+                          )}
+                          {isOwner && s.status !== "published" && (
+                            <Badge variant="secondary" className="text-xs">
+                              {s.status === "draft" ? "Taslak" : s.status === "completed" ? "Tamamlandı" : s.status}
+                            </Badge>
+                          )}
                         </div>
-                      </Link>
+                      </div>
                     </motion.div>
                   ))}
                 </div>
