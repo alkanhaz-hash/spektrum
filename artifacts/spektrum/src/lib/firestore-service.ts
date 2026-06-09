@@ -726,7 +726,7 @@ export interface SpektrumNotification {
   senderId: string;
   senderName: string;
   senderAvatar: string;
-  type: "follow" | "like" | "comment" | "qa_answer";
+  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected";
   storyId?: string;
   storyTitle?: string;
   questionId?: string;
@@ -833,15 +833,9 @@ export async function unbanUser(uid: string): Promise<void> {
 
 export async function searchUsersForMod(term: string): Promise<UserProfile[]> {
   if (!term.trim()) return [];
-  const lower = term.toLowerCase();
-  const q = query(
-    collection(db, "users"),
-    where("displayName", ">=", term),
-    where("displayName", "<=", term + "\uf8ff"),
-    limit(15)
-  );
-  const snap = await getDocs(q);
+  const lower = term.trim().toLowerCase();
+  const snap = await getDocs(query(collection(db, "users"), limit(200)));
   return snap.docs
     .map(d => ({ uid: d.id, ...d.data() } as UserProfile))
-    .filter(u => u.displayName?.toLowerCase().includes(lower));
+    .filter(u => (u.displayName ?? "").toLowerCase().includes(lower));
 }

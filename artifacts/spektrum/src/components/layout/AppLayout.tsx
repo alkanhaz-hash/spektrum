@@ -182,6 +182,8 @@ export function Navbar() {
                                 {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
                                 {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
                                 {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
+                                {n.type === "chapter_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü onaylandı.</>}
+                                {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
                               </p>
                               {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
                             </div>
@@ -259,6 +261,8 @@ export function Navbar() {
                                 {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
                                 {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
                                 {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
+                                {n.type === "chapter_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü onaylandı.</>}
+                                {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
                               </p>
                             </button>
                           ))

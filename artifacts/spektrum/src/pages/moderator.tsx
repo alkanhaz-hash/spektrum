@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, getStory, Chapter,
-  banUser, unbanUser, searchUsersForMod,
+  banUser, unbanUser, searchUsersForMod, createNotification,
 } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +23,8 @@ interface UserSummary {
 
 interface PendingItem extends Chapter {
   storyTitle?: string;
+  authorId?: string;
+  authorName?: string;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -37,6 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 // ─── Bölüm İnceleme ──────────────────────────────────────────────────────────
 
 function ReviewTab() {
+  const { user, profile: modProfile } = useAuth();
   const { toast } = useToast();
   const [items, setItems] = useState<PendingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +49,7 @@ function ReviewTab() {
     getPendingChapters().then(async (chs) => {
       const withTitles = await Promise.all(chs.map(async ch => {
         const story = await getStory(ch.storyId).catch(() => null);
-        return { ...ch, storyTitle: story?.title };
+        return { ...ch, storyTitle: story?.title, authorId: story?.authorId, authorName: story?.authorName };
       }));
       setItems(withTitles);
       setLoading(false);
@@ -57,8 +60,20 @@ function ReviewTab() {
     setProcessing(chapterId);
     try {
       await updateChapterStatus(chapterId, decision);
+      const item = items.find(i => i.id === chapterId);
       setItems(prev => prev.filter(i => i.id !== chapterId));
       toast({ title: decision === "published" ? "Bölüm onaylandı" : "Bölüm reddedildi" });
+      if (item?.authorId && user && modProfile) {
+        createNotification({
+          recipientId: item.authorId,
+          senderId: user.uid,
+          senderName: modProfile.displayName,
+          senderAvatar: modProfile.avatarUrl ?? "",
+          type: decision === "published" ? "chapter_approved" : "chapter_rejected",
+          storyId: item.storyId,
+          storyTitle: item.storyTitle,
+        }).catch(() => {});
+      }
     } catch {
       toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
     } finally {
