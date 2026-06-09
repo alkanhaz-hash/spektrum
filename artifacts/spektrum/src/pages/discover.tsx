@@ -1,14 +1,13 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { useGetTrendingStories } from "@workspace/api-client-react";
-import { getDiscoverFeed, Story, GENRES } from "@/lib/firestore-service";
+import { getDiscoverFeed, getTrendingStories, TrendingStory, Story, GENRES } from "@/lib/firestore-service";
 import { useEffect, useState } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { TrendingUp, MessageSquare, BookOpen, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
-function StoryCard({ story, rank, delay = 0 }: { story: { storyId: string; title: string; authorName: string; commentCount: number; readCount: number; engagementScore: number; genre: string; coverUrl: string | null }; rank: number; delay?: number }) {
+function StoryCard({ story, rank, delay = 0 }: { story: TrendingStory; rank: number; delay?: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -76,17 +75,25 @@ function FirestoreStoryCard({ story, delay = 0 }: { story: Story; delay?: number
 }
 
 export default function DiscoverPage() {
-  const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
+  const [trending, setTrending] = useState<TrendingStory[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
   const searchString = useSearch();
+  const [, setLocation] = useLocation();
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
 
-  // URL'deki ?genre= parametresi değiştiğinde (home → discover gibi navigasyonlarda) güncelle
   useEffect(() => {
     const genre = new URLSearchParams(searchString).get("genre");
     setSelectedGenre(genre);
   }, [searchString]);
+
+  useEffect(() => {
+    getTrendingStories(10)
+      .then(setTrending)
+      .catch(() => {})
+      .finally(() => setTrendingLoading(false));
+  }, []);
 
   useEffect(() => {
     getDiscoverFeed().then(res => {
@@ -96,6 +103,14 @@ export default function DiscoverPage() {
   }, []);
 
   const filtered = selectedGenre ? stories.filter(s => s.genre === selectedGenre) : stories;
+
+  function handleGenreSelect(genre: string | null) {
+    if (genre) {
+      setLocation(`/discover?genre=${encodeURIComponent(genre)}`);
+    } else {
+      setLocation("/discover");
+    }
+  }
 
   return (
     <AppLayout>
@@ -117,21 +132,14 @@ export default function DiscoverPage() {
               <div className="space-y-3">
                 {trendingLoading
                   ? Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)
-                  : trendingError
-                  ? (
-                    <div className="flex flex-col items-center py-10 text-center text-muted-foreground gap-2">
-                      <TrendingUp className="w-8 h-8 opacity-20" />
-                      <p className="text-sm">Trend verisi yüklenemedi. Lütfen sayfayı yenile.</p>
-                    </div>
-                  )
-                  : !(trending?.length)
+                  : trending.length === 0
                   ? (
                     <div className="flex flex-col items-center py-10 text-center text-muted-foreground gap-2">
                       <TrendingUp className="w-8 h-8 opacity-20" />
                       <p className="text-sm">Son 24 saatte henüz trend hikaye yok.</p>
                     </div>
                   )
-                  : trending.slice(0, 10).map((s, i) => (
+                  : trending.map((s, i) => (
                     <StoryCard key={s.storyId} story={s} rank={i + 1} delay={i * 0.05} />
                   ))}
               </div>
@@ -144,7 +152,7 @@ export default function DiscoverPage() {
               <h2 className="text-lg font-bold font-serif mb-3">Türlere Göz At</h2>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => setSelectedGenre(null)}
+                  onClick={() => handleGenreSelect(null)}
                   className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${!selectedGenre ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
                   data-testid="filter-all"
                 >
@@ -153,7 +161,7 @@ export default function DiscoverPage() {
                 {GENRES.map(g => (
                   <button
                     key={g}
-                    onClick={() => setSelectedGenre(g === selectedGenre ? null : g)}
+                    onClick={() => handleGenreSelect(g === selectedGenre ? null : g)}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${selectedGenre === g ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
                     data-testid={`filter-${g}`}
                   >
@@ -164,12 +172,14 @@ export default function DiscoverPage() {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold font-serif mb-3">Yeni Hikayeler</h2>
+              <h2 className="text-lg font-bold font-serif mb-3">
+                {selectedGenre ? `${selectedGenre} Hikayeleri` : "Yeni Hikayeler"}
+              </h2>
               <div className="space-y-3">
                 {storiesLoading
                   ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)
-                  : filtered.slice(0, 6).map((s, i) => (
-                    <FirestoreStoryCard key={s.id} story={s} delay={i * 0.05} />
+                  : filtered.map((s, i) => (
+                    <FirestoreStoryCard key={s.id} story={s} delay={i * 0.04} />
                   ))}
                 {!storiesLoading && filtered.length === 0 && (
                   <div className="flex flex-col items-center py-8 text-center gap-3">
@@ -179,7 +189,7 @@ export default function DiscoverPage() {
                     </p>
                     {selectedGenre && (
                       <button
-                        onClick={() => setSelectedGenre(null)}
+                        onClick={() => handleGenreSelect(null)}
                         className="text-xs text-primary hover:text-primary/80 transition-colors underline underline-offset-2"
                       >
                         Filtreyi temizle → Tüm hikayeleri gör

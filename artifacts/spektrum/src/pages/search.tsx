@@ -1,5 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Search as SearchIcon, BookOpen, Users } from "lucide-react";
@@ -14,6 +14,7 @@ type Tab = "stories" | "users";
 
 export default function SearchPage() {
   const searchString = useSearch();
+  const [, setLocation] = useLocation();
   const initialQuery = new URLSearchParams(searchString).get("q") ?? "";
   const [term, setTerm] = useState(initialQuery);
   const [tab, setTab] = useState<Tab>("stories");
@@ -26,16 +27,23 @@ export default function SearchPage() {
 
   useEffect(() => {
     const t = term.trim();
-    if (!t) { setStories([]); setUsers([]); setSearched(false); return; }
+    if (t.length < 2) {
+      setStories([]); setUsers([]); setSearched(false);
+      if (t.length === 0) setLocation("/search", { replace: true });
+      return;
+    }
     setLoading(true);
     setSearched(false);
+    const urlHandle = setTimeout(() => {
+      setLocation(`/search?q=${encodeURIComponent(t)}`, { replace: true });
+    }, 400);
     const handle = setTimeout(() => {
       Promise.all([searchStories(t), searchUsers(t)])
         .then(([s, u]) => { setStories(s); setUsers(u); setSearched(true); })
         .catch(() => { setStories([]); setUsers([]); })
         .finally(() => setLoading(false));
-    }, 300);
-    return () => clearTimeout(handle);
+    }, 400);
+    return () => { clearTimeout(handle); clearTimeout(urlHandle); };
   }, [term]);
 
   const tabs: { key: Tab; label: string; count: number }[] = [

@@ -423,8 +423,54 @@ export async function getDiscoverFeed(): Promise<Story[]> {
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
-    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
-    .slice(0, 20);
+    .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+}
+
+export interface TrendingStory {
+  storyId: string;
+  title: string;
+  authorName: string;
+  genre: string;
+  coverUrl: string | null;
+  readCount: number;
+  commentCount: number;
+  likeCount: number;
+  engagementScore: number;
+}
+
+export async function getTrendingStories(limitCount = 10): Promise<TrendingStory[]> {
+  const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+  const q = query(
+    collection(db, "stories"),
+    where("status", "==", "published"),
+    where("publishedAt", ">=", since),
+    limit(50),
+  );
+  const snap = await getDocs(q);
+  const stories = snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+
+  if (stories.length === 0) {
+    const fallback = query(
+      collection(db, "stories"),
+      where("status", "==", "published"),
+      orderBy("likeCount", "desc"),
+      limit(limitCount),
+    );
+    const fSnap = await getDocs(fallback);
+    return fSnap.docs.map(d => {
+      const s = { id: d.id, ...d.data() } as Story;
+      const score = (s.likeCount ?? 0) * 3 + (s.commentCount ?? 0) * 2 + (s.readCount ?? 0) * 0.1;
+      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
+    });
+  }
+
+  return stories
+    .map(s => {
+      const score = (s.likeCount ?? 0) * 3 + (s.commentCount ?? 0) * 2 + (s.readCount ?? 0) * 0.1;
+      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
+    })
+    .sort((a, b) => b.engagementScore - a.engagementScore)
+    .slice(0, limitCount);
 }
 
 // ─── NARRATIONS ───────────────────────────────────────────────────────────────
