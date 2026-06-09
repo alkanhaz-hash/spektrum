@@ -308,6 +308,7 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
 // ─── ANONYMOUS Q&A ────────────────────────────────────────────────────────────
 
 function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolean }) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [answered, setAnswered] = useState<AnonymousQuestion[]>([]);
   const [pending, setPending] = useState<AnonymousQuestion[]>([]);
@@ -354,7 +355,7 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
         toast({ title: "Soru gönderilemedi", description: "Uygunsuz içerik tespit edildi.", variant: "destructive" });
         return;
       }
-      await sendAnonymousQuestion(profile.uid, question.trim());
+      await sendAnonymousQuestion(profile.uid, question.trim(), user?.uid);
       setQuestion("");
       toast({ title: "Soru gönderildi!", description: "Yanıtlandığında profilinde görünecek." });
     } catch {
@@ -376,6 +377,17 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
       await answerQuestion(qid, ans.trim());
       setAnsweringId(null);
       toast({ title: "Yanıtlandı!" });
+      const q = pending.find(p => p.id === qid);
+      if (q?.senderUid) {
+        createNotification({
+          recipientId: q.senderUid,
+          senderId: profile.uid,
+          senderName: profile.displayName,
+          senderAvatar: profile.avatarUrl ?? "",
+          type: "qa_answer",
+          questionId: qid,
+        }).catch(() => {});
+      }
     } catch {
       toast({ title: "Hata", variant: "destructive" });
     }

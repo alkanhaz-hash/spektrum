@@ -559,6 +559,7 @@ export async function deleteNarration(id: string): Promise<void> {
 export interface AnonymousQuestion {
   id: string;
   targetUid: string;
+  senderUid?: string;
   question: string;
   answer?: string;
   isAnswered: boolean;
@@ -566,12 +567,13 @@ export interface AnonymousQuestion {
   answeredAt?: Timestamp;
 }
 
-export async function sendAnonymousQuestion(targetUid: string, question: string): Promise<string> {
+export async function sendAnonymousQuestion(targetUid: string, question: string, senderUid?: string): Promise<string> {
   const ref = await addDoc(collection(db, "anonymousQuestions"), {
     targetUid,
     question,
     isAnswered: false,
     createdAt: serverTimestamp(),
+    ...(senderUid ? { senderUid } : {}),
   });
   return ref.id;
 }
@@ -724,9 +726,10 @@ export interface SpektrumNotification {
   senderId: string;
   senderName: string;
   senderAvatar: string;
-  type: "follow" | "like" | "comment";
+  type: "follow" | "like" | "comment" | "qa_answer";
   storyId?: string;
   storyTitle?: string;
+  questionId?: string;
   read: boolean;
   createdAt: Timestamp;
 }

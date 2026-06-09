@@ -170,6 +170,7 @@ export function Navbar() {
                                 {n.type === "follow" && " seni takip etmeye başladı."}
                                 {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
                                 {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
+                                {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
                               </p>
                               {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
                             </div>
@@ -242,6 +243,7 @@ export function Navbar() {
                                 {n.type === "follow" && " seni takip etmeye başladı."}
                                 {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
                                 {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
+                                {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
                               </p>
                             </div>
                           ))

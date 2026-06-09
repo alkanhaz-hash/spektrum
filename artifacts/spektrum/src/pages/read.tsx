@@ -235,6 +235,15 @@ export default function ReadPage() {
       } else {
         await followUser(user.uid, story.authorId);
         setIsFollowing(true);
+        if (profile) {
+          createNotification({
+            recipientId: story.authorId,
+            senderId: user.uid,
+            senderName: profile.displayName,
+            senderAvatar: profile.avatarUrl ?? "",
+            type: "follow",
+          }).catch(() => {});
+        }
       }
     } catch {
       toast({ title: "İşlem başarısız", variant: "destructive" });
