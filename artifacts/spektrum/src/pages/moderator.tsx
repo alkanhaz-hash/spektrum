@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, updateStory, getStory, Chapter,
-  banUser, unbanUser, searchUsersForMod, createNotification,
+  banUser, unbanUser, searchUsersForMod, createNotification, setUserRole,
 } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
@@ -147,7 +147,7 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "text-amber-400 border-amber-400/40",
 };
 
-function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () => Promise<string> }) {
+function UsersTab({ currentUid }: { currentUid: string }) {
   const { toast } = useToast();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<UserProfile[]>([]);
@@ -180,19 +180,7 @@ function UsersTab({ currentUid, getToken }: { currentUid: string; getToken: () =
     }
     setSaving(u.uid);
     try {
-      const token = await getToken();
-      const res = await fetch(`/api/admin/users/${u.uid}/role`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ role: newRole }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? "İzin reddedildi");
-      }
+      await setUserRole(u.uid, newRole);
       setResults(prev => prev.map(r => r.uid === u.uid ? { ...r, role: newRole } : r));
       toast({ title: newRole === "moderator" ? `${u.displayName} moderatör yapıldı` : `${u.displayName} rolü kaldırıldı` });
     } catch (err: unknown) {
@@ -501,7 +489,7 @@ export default function ModeratorPage() {
         {tab === "review" && <ReviewTab />}
         {tab === "ban" && <BanTab />}
         {tab === "users" && isAdmin && user && (
-          <UsersTab currentUid={user.uid} getToken={() => user.getIdToken()} />
+          <UsersTab currentUid={user.uid} />
         )}
       </div>
     </AppLayout>

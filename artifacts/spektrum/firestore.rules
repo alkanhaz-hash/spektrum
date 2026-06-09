@@ -60,6 +60,13 @@ service cloud.firestore {
                     // Moderatörler ban/banReason alanlarını güncelleyebilir (rol dışında)
                     || (isModerator()
                         && request.resource.data.get('role', 'user') == resource.data.get('role', 'user'))
+                    // Admin kullanıcılar başka kullanıcıların rolünü değiştirebilir
+                    // (admin olmayan kullanıcıların rolü admin'e yükseltilemez)
+                    || (isSignedIn()
+                        && role() == 'admin'
+                        && changedKeys().hasOnly(['role'])
+                        && resource.data.get('role', 'user') != 'admin'
+                        && request.resource.data.get('role', 'user') in ['user', 'moderator'])
                     // Herhangi bir giriş yapmış kullanıcı YALNIZCA takipçi/takip sayaçlarını güncelleyebilir
                     || (isSignedIn()
                         && changedKeys().hasOnly(['followerCount', 'followingCount'])
