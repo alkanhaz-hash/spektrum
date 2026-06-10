@@ -252,14 +252,17 @@ export async function createChapter(data: Omit<Chapter, "id" | "createdAt" | "up
 }
 
 export async function getChaptersByStory(storyId: string, publishedOnly = false): Promise<Chapter[]> {
-  // Tek alan filtresi — composite index gerektirmeyen basit query.
-  // publishedOnly filtrelemesi client tarafında yapılıyor (Firestore'da storyId+status
-  // bileşik index'i production ortamında genellikle oluşturulmamış oluyor).
-  const q = query(collection(db, "chapters"), where("storyId", "==", storyId));
+  // publishedOnly=true → Firestore sorgusuna status filtresi ekliyoruz.
+  // Bu olmadan Firestore güvenlik kuralı tüm sorguyu reddeder çünkü
+  // kural "status=='published'" olan belgeler için okumaya izin veriyor;
+  // status filtresi olmayan sorgu taslakları da döndürebileceğinden reddedilir.
+  const constraints = publishedOnly
+    ? [where("storyId", "==", storyId), where("status", "==", "published")]
+    : [where("storyId", "==", storyId)];
+  const q = query(collection(db, "chapters"), ...constraints);
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Chapter))
-    .filter(ch => !publishedOnly || ch.status === "published")
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
