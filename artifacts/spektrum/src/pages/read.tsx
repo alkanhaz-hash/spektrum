@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getStory, getChapter, getChaptersByStory, getInlineComments,
-  addInlineComment, likeInlineComment, incrementUserReadCount, incrementChapterReadCount,
+  addInlineComment, likeInlineComment, incrementUserReadCount, incrementChapterReadCount, incrementStoryReadCount,
   createNotification, reportContent, followUser, unfollowUser, isFollowingUser,
   Story, Chapter, InlineComment
 } from "@/lib/firestore-service";
@@ -172,6 +172,7 @@ export default function ReadPage() {
       if (!sessionStorage.getItem(sessionKey)) {
         sessionStorage.setItem(sessionKey, "1");
         incrementChapterReadCount(chapterId).catch(() => {});
+        incrementStoryReadCount(storyId).catch(() => {});
         if (user) incrementUserReadCount(user.uid).catch(() => {});
       }
       // İkincil veriler — hata olsa sayfa çökmez

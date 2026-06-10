@@ -570,6 +570,10 @@ export async function incrementChapterReadCount(chapterId: string): Promise<void
   await updateDoc(doc(db, "chapters", chapterId), { readCount: increment(1) });
 }
 
+export async function incrementStoryReadCount(storyId: string): Promise<void> {
+  await updateDoc(doc(db, "stories", storyId), { readCount: increment(1) });
+}
+
 export const GENRES = [
   "Fantastik", "Romantik", "Gizem", "Korku", "Bilim Kurgu",
   "Macera", "Dram", "Psikolojik", "Tarihi", "Gençlik",
