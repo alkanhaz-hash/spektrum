@@ -152,12 +152,11 @@ export default function ReadPage() {
   useEffect(() => {
     if (!storyId || !chapterId) return;
     setLoading(true);
+    // Kritik: hikaye + bölüm birlikte yükle. Diğerleri başarısız olsa sayfa çökmez.
     Promise.all([
       getStory(storyId),
       getChapter(chapterId),
-      getChaptersByStory(storyId, true),
-      getInlineComments(chapterId),
-    ]).then(([s, ch, allCh, cmts]) => {
+    ]).then(([s, ch]) => {
       // Güvenlik: taslak/reddedilen bölüm yalnızca yazar ve moderatör/admin görebilir
       if (ch && ch.status !== "published"
           && user?.uid !== s?.authorId
@@ -168,8 +167,6 @@ export default function ReadPage() {
       }
       setStory(s);
       setChapter(ch);
-      setAllChapters(allCh.filter(c => c.status === "published" || c.id === chapterId));
-      setComments(cmts);
       setLoading(false);
       const sessionKey = `spektrum_read_${chapterId}`;
       if (!sessionStorage.getItem(sessionKey)) {
@@ -177,6 +174,13 @@ export default function ReadPage() {
         incrementChapterReadCount(chapterId).catch(() => {});
         if (user) incrementUserReadCount(user.uid).catch(() => {});
       }
+      // İkincil veriler — hata olsa sayfa çökmez
+      getChaptersByStory(storyId, true)
+        .then(allCh => setAllChapters(allCh.filter(c => c.status === "published" || c.id === chapterId)))
+        .catch(() => {});
+      getInlineComments(chapterId)
+        .then(cmts => setComments(cmts))
+        .catch(() => {});
     }).catch(() => setLoading(false));
   }, [storyId, chapterId, user?.uid, profile?.role]);
 

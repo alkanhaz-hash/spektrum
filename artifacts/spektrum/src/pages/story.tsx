@@ -36,21 +36,31 @@ export default function StoryPage() {
   useEffect(() => {
     if (!id) return;
     setLoadError(false);
-    Promise.all([
-      getStory(id),
-      getChaptersByStory(id, true),
-      user ? hasUserLikedStory(id, user.uid) : Promise.resolve(false),
-      user ? isStoryBookmarked(user.uid, id) : Promise.resolve(false),
-    ]).then(([s, ch, alreadyLiked, alreadyBookmarked]) => {
-      setStory(s);
-      setChapters(ch);
-      setLiked(alreadyLiked);
-      setBookmarked(alreadyBookmarked);
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-      setLoadError(true);
-    });
+    // Önce hikayeyi yükle — hikaye yüklenemezse sayfayı tamamen hata göster.
+    // Bölümler, beğeni ve yer imi ayrıca yükleniyor; bunlar başarısız olsa da
+    // hikaye sayfası yine de gösterilir.
+    getStory(id)
+      .then(s => {
+        if (!s) { setLoadError(true); setLoading(false); return; }
+        setStory(s);
+        setLoading(false);
+        // İkincil veriler — hataları yutuyoruz, sayfa çökmez
+        getChaptersByStory(id, true)
+          .then(ch => setChapters(ch))
+          .catch(() => {});
+        if (user) {
+          hasUserLikedStory(id, user.uid)
+            .then(v => setLiked(v))
+            .catch(() => {});
+          isStoryBookmarked(user.uid, id)
+            .then(v => setBookmarked(v))
+            .catch(() => {});
+        }
+      })
+      .catch(() => {
+        setLoading(false);
+        setLoadError(true);
+      });
   }, [id, user?.uid]);
 
   const handleLike = async () => {
