@@ -91,7 +91,8 @@ export function Navbar() {
 
         {/* Sol: Logo + masaüstü nav */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="SPEKTRUM" className="w-8 h-8 object-contain" />
             <span className="font-serif text-2xl font-bold tracking-tighter text-primary">SPEKTRUM</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
