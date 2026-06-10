@@ -168,12 +168,18 @@ export function Navbar() {
                   <div className="absolute right-0 mt-2 w-80 rounded-xl border border-border bg-card shadow-xl z-50 overflow-hidden">
                     <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                       <span className="font-semibold text-sm">Bildirimler</span>
+                      <button
+                        onClick={() => { setNotifOpen(false); setLocation("/notifications"); }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Tümünü gör
+                      </button>
                     </div>
                     <div className="max-h-80 overflow-y-auto divide-y divide-border/50">
                       {notifs.length === 0 ? (
                         <div className="py-10 text-center text-muted-foreground text-sm">Henüz bildirim yok.</div>
                       ) : (
-                        notifs.slice(0, 20).map(n => (
+                        notifs.slice(0, 10).map(n => (
                           <button
                             key={n.id}
                             className={`w-full text-left flex items-start gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors cursor-pointer ${!n.read ? "bg-primary/5" : ""}`}
@@ -189,12 +195,11 @@ export function Navbar() {
                               <p className="text-xs leading-relaxed break-words">
                                 <span className="font-semibold">{n.senderName}</span>
                                 {n.type === "follow" && " seni takip etmeye başladı."}
-                                {n.type === "like" && <> <span className="text-pink-400">"{n.storyTitle}"</span> adlı hikayeni beğendi.</>}
-                                {n.type === "comment" && <> <span className="text-primary">"{n.storyTitle}"</span> adlı hikayene yorum yaptı.</>}
+                                {n.type === "like" && <> "<span className="text-pink-400">{n.storyTitle}</span>" adlı hikayeni beğendi.</>}
+                                {n.type === "comment" && <> "<span className="text-primary">{n.storyTitle}</span>" adlı hikayene yorum yaptı.</>}
                                 {n.type === "qa_answer" && " anonim sorunuzu yanıtladı."}
-                                {n.type === "chapter_approved" && <> <span className="text-emerald-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü onaylandı.</>}
-                                {n.type === "chapter_rejected" && <> <span className="text-red-400">"{n.storyTitle}"</span> adlı hikayenizin bir bölümü reddedildi.</>}
-
+                                {n.type === "chapter_approved" && <> "<span className="text-emerald-400">{n.storyTitle}</span>" bölümün onaylandı.</>}
+                                {n.type === "chapter_rejected" && <> "<span className="text-destructive">{n.storyTitle}</span>" bölümün reddedildi.</>}
                               </p>
                               <div className="flex items-center gap-1 mt-0.5">
                                 {!n.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />}
@@ -205,6 +210,16 @@ export function Navbar() {
                         ))
                       )}
                     </div>
+                    {notifs.length > 0 && (
+                      <div className="border-t border-border">
+                        <button
+                          onClick={() => { setNotifOpen(false); setLocation("/notifications"); }}
+                          className="w-full py-2.5 text-xs text-center text-primary hover:bg-muted/50 transition-colors"
+                        >
+                          Tüm bildirimleri gör ({notifs.length})
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -229,15 +244,11 @@ export function Navbar() {
                         <span>Profilim</span>
                       </div>
                     </Link>
-                    {/* Mobilde bildirimler dropdown'da */}
+                    {/* Mobilde bildirimler → /notifications sayfasına yönlendir */}
                     <button
                       onClick={() => {
                         setDropdownOpen(false);
-                        if (user && notifCount > 0) {
-                          markAllNotificationsRead(user.uid).catch(() => {});
-                          setNotifCount(0);
-                        }
-                        setNotifOpen(v => !v);
+                        setLocation("/notifications");
                       }}
                       className="md:hidden w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors border-t border-border"
                     >

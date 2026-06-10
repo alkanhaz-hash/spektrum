@@ -18,6 +18,7 @@ import ChapterEditorPage from "@/pages/chapter-editor";
 import ProfilePage from "@/pages/profile";
 import MessagesPage from "@/pages/messages";
 import ModeratorPage from "@/pages/moderator";
+import NotificationsPage from "@/pages/notifications";
 import TermsPage from "@/pages/terms";
 import KvkkPage from "@/pages/kvkk";
 
@@ -73,6 +74,7 @@ function Router() {
       <Route path="/messages" component={GuardedMessages} />
       <Route path="/messages/:conversationId" component={GuardedMessages} />
       <Route path="/moderator" component={ModeratorPage} />
+      <Route path="/notifications" component={NotificationsPage} />
       <Route path="/terms" component={TermsPage} />
       <Route path="/kvkk" component={KvkkPage} />
       <Route component={NotFound} />

@@ -683,6 +683,10 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
   await Promise.all(snap.docs.map(d => updateDoc(d.ref, { read: true })));
 }
 
+export async function markNotificationRead(notifId: string): Promise<void> {
+  await updateDoc(doc(db, "notifications", notifId), { read: true });
+}
+
 // ─── BOOKMARKS ────────────────────────────────────────────────────────────────
 
 export async function bookmarkStory(userId: string, storyId: string): Promise<void> {
