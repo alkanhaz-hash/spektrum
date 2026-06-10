@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "DeulPEYpK_XtN_SZNQIJh"
+uri = "file://artifacts/spektrum/public/logo-concept-1.png"
+type = "image"
+title = "spektrum-logo-book-prism"
+
+[[generated]]
+id = "sCC8dQoG8rXKYuht3pjXQ"
+uri = "file://artifacts/spektrum/public/logo-concept-2.png"
+type = "image"
+title = "spektrum-logo-s-book"
+
+[[generated]]
+id = "m1sWzq53DNfO1IeOyVlk2"
+uri = "file://artifacts/spektrum/public/logo-concept-3.png"
+type = "image"
+title = "spektrum-logo-prism-book"
