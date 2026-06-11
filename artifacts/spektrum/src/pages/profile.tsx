@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Users, Edit3, Instagram, Globe, Camera,
-  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Bookmark, Flag
+  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Bookmark, Flag, Ban, ShieldOff
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   followUser, unfollowUser, isFollowingUser,
   getFollowers, getFollowing,
   getBookmarkedStories, createNotification, reportContent,
+  blockUser, unblockUser, isUserBlocked,
 } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
@@ -527,6 +528,8 @@ export default function ProfilePage() {
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followListModal, setFollowListModal] = useState<"followers" | "following" | null>(null);
+  const [blocked, setBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
 
   useEffect(() => {
     if (!uid || authLoading) return;
@@ -552,6 +555,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user || !uid || isOwner) return;
     isFollowingUser(user.uid, uid).then(setFollowing).catch(() => {});
+    isUserBlocked(user.uid, uid).then(setBlocked).catch(() => {});
   }, [user, uid, isOwner]);
 
   useEffect(() => {
@@ -594,6 +598,7 @@ export default function ProfilePage() {
 
   const handleMessageUser = async () => {
     if (!user || !myProfile || !profile) return;
+    if (blocked) { toast({ title: "Bu kullanıcıyı engelledin", description: "Mesaj atmak için engeli kaldır.", variant: "destructive" }); return; }
     setMessaging(true);
     try {
       const convId = await getOrCreateConversation(
@@ -607,6 +612,31 @@ export default function ProfilePage() {
       toast({ title: "Hata", description: "Konuşma başlatılamadı.", variant: "destructive" });
     } finally {
       setMessaging(false);
+    }
+  };
+
+  const handleBlock = async () => {
+    if (!user || isOwner) return;
+    setBlockLoading(true);
+    try {
+      if (blocked) {
+        await unblockUser(user.uid, uid);
+        setBlocked(false);
+        toast({ title: `${profile?.displayName} engeli kaldırıldı` });
+      } else {
+        await blockUser(user.uid, uid);
+        setBlocked(true);
+        // Engellenince takipten çıkar
+        if (following) {
+          await unfollowUser(user.uid, uid).catch(() => {});
+          setFollowing(false);
+        }
+        toast({ title: `${profile?.displayName} engellendi`, description: "Bu kullanıcı sana artık DM gönderemez." });
+      }
+    } catch {
+      toast({ title: "İşlem başarısız", variant: "destructive" });
+    } finally {
+      setBlockLoading(false);
     }
   };
 
@@ -737,6 +767,21 @@ export default function ProfilePage() {
                   <Send className="w-3.5 h-3.5" />
                   {messaging ? "Açılıyor..." : "Mesaj At"}
                 </button>
+                {user && (
+                  <button
+                    onClick={handleBlock}
+                    disabled={blockLoading}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all disabled:opacity-60 ${
+                      blocked
+                        ? "bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20"
+                        : "bg-card border-border text-muted-foreground/60 hover:text-red-400 hover:border-red-500/30"
+                    }`}
+                    title={blocked ? "Engeli kaldır" : "Engelle"}
+                  >
+                    {blocked ? <ShieldOff className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{blocked ? "Engeli Kaldır" : "Engelle"}</span>
+                  </button>
+                )}
                 {user && (
                   <button
                     onClick={handleReportUser}

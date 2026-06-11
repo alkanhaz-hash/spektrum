@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Image, Smile, ChevronLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import { getConversations, listenMessages, sendMessage, markConversationRead, Conversation, Message } from "@/lib/firestore-service";
+import { getConversations, listenMessages, sendMessage, markConversationRead, Conversation, Message, isMutuallyBlocked } from "@/lib/firestore-service";
 import { uploadMessageMedia } from "@/lib/storage-service";
 import { checkImageSafety } from "@/lib/nsfw-service";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +56,13 @@ export default function MessagesPage() {
 
   const handleSend = async () => {
     if (!text.trim() || !user || !profile || !conversationId) return;
+    if (otherUid) {
+      const mutualBlock = await isMutuallyBlocked(user.uid, otherUid).catch(() => false);
+      if (mutualBlock) {
+        toast({ title: "Mesaj gönderilemedi", description: "Bu kullanıcıyla mesajlaşma engelli.", variant: "destructive" });
+        return;
+      }
+    }
     setSending(true);
     try {
       await sendMessage({ conversationId, senderId: user.uid, senderName: profile.displayName, senderAvatar: profile.avatarUrl, text });

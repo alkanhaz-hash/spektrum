@@ -784,6 +784,41 @@ export async function deleteStatus(statusId: string): Promise<void> {
   await deleteDoc(doc(db, "statuses", statusId));
 }
 
+// ─── BLOCK ────────────────────────────────────────────────────────────────────
+
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  await setDoc(doc(db, "blocks", `${blockerId}_${blockedId}`), {
+    blockerId,
+    blockedId,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  await deleteDoc(doc(db, "blocks", `${blockerId}_${blockedId}`));
+}
+
+export async function isUserBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "blocks", `${blockerId}_${blockedId}`));
+  return snap.exists();
+}
+
+/** Kullanıcının engellediği UID listesini döndürür */
+export async function getBlockedUserIds(blockerId: string): Promise<string[]> {
+  const q = query(collection(db, "blocks"), where("blockerId", "==", blockerId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data().blockedId as string);
+}
+
+/** Karşılıklı engel var mı? (biri diğerini engellemiş mi) */
+export async function isMutuallyBlocked(uid1: string, uid2: string): Promise<boolean> {
+  const [a, b] = await Promise.all([
+    getDoc(doc(db, "blocks", `${uid1}_${uid2}`)),
+    getDoc(doc(db, "blocks", `${uid2}_${uid1}`)),
+  ]);
+  return a.exists() || b.exists();
+}
+
 // ─── BAN ──────────────────────────────────────────────────────────────────────
 
 export async function banUser(uid: string, reason: string): Promise<void> {
