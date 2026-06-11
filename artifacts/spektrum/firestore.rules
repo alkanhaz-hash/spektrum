@@ -237,6 +237,26 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.recipientId == request.auth.uid;
     }
 
+    // ─── BLOCKS ─────────────────────────────────────────────────────────────
+    // Engel kaydı yokken (resource == null) okumaya izin ver — isUserBlocked kontrolü
+    match /blocks/{blockId} {
+      allow read: if isSignedIn()
+                  && (resource == null
+                      || resource.data.blockerId == request.auth.uid
+                      || resource.data.blockedId == request.auth.uid);
+      allow create: if isSignedIn()
+                    && request.resource.data.blockerId == request.auth.uid;
+      allow delete: if isSignedIn()
+                    && resource.data.blockerId == request.auth.uid;
+    }
+
+    // ─── REPORTS ────────────────────────────────────────────────────────────
+    // Herkes şikayet oluşturabilir; yalnızca moderatörler okur ve günceller.
+    match /reports/{reportId} {
+      allow create: if isSignedIn();
+      allow read, update: if isModerator();
+    }
+
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
