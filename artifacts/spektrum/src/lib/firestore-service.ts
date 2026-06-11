@@ -323,6 +323,16 @@ export async function likeInlineComment(commentId: string, userId: string, liked
   });
 }
 
+export interface Report {
+  id: string;
+  reportedId: string;
+  reportedType: "comment" | "story" | "chapter" | "user";
+  reporterId: string;
+  reason?: string;
+  status: "pending" | "resolved" | "dismissed";
+  createdAt: Timestamp | null;
+}
+
 export async function reportContent(data: {
   reportedId: string;
   reportedType: "comment" | "story" | "chapter" | "user";
@@ -334,6 +344,20 @@ export async function reportContent(data: {
     status: "pending",
     createdAt: serverTimestamp(),
   });
+}
+
+export async function getReports(status: "pending" | "resolved" | "dismissed" = "pending"): Promise<Report[]> {
+  const q = query(
+    collection(db, "reports"),
+    where("status", "==", status),
+    orderBy("createdAt", "desc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<Report, "id">) }));
+}
+
+export async function resolveReport(reportId: string, resolution: "resolved" | "dismissed"): Promise<void> {
+  await updateDoc(doc(db, "reports", reportId), { status: resolution });
 }
 
 // ─── CONVERSATIONS & MESSAGES ─────────────────────────────────────────────────

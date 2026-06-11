@@ -2,13 +2,14 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle, XCircle, Eye, Users, Search, Ban, ShieldOff } from "lucide-react";
+import { Shield, CheckCircle, XCircle, Eye, Users, Search, Ban, ShieldOff, AlertTriangle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, updateStory, getStory, Chapter,
   banUser, unbanUser, searchUsersForMod, createNotification, setUserRole,
+  getReports, resolveReport, Report,
 } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
@@ -410,12 +411,125 @@ function BanTab() {
   );
 }
 
+// ─── Şikayetler ──────────────────────────────────────────────────────────────
+
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  story: "Hikaye",
+  chapter: "Bölüm",
+  comment: "Yorum",
+  user: "Kullanıcı",
+};
+
+const REPORT_TYPE_LINKS: Record<string, (id: string) => string> = {
+  story: (id) => `/story/${id}`,
+  chapter: (id) => `/read/unknown/${id}`,
+  comment: (id) => `/read/unknown/${id}`,
+  user: (id) => `/profile/${id}`,
+};
+
+function ReportsTab() {
+  const { toast } = useToast();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
+
+  useEffect(() => {
+    getReports("pending").then(r => { setReports(r); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const handleResolve = async (reportId: string, resolution: "resolved" | "dismissed") => {
+    setProcessing(reportId);
+    try {
+      await resolveReport(reportId, resolution);
+      setReports(prev => prev.filter(r => r.id !== reportId));
+      toast({ title: resolution === "resolved" ? "Şikayet çözüldü" : "Şikayet reddedildi" });
+    } catch {
+      toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  if (loading) return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>;
+
+  if (reports.length === 0) {
+    return (
+      <div className="py-20 text-center border border-dashed border-border rounded-2xl">
+        <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+        <p className="text-lg font-semibold mb-1">Bekleyen şikayet yok!</p>
+        <p className="text-muted-foreground text-sm">Tüm şikayetler işlendi.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {reports.map((r, i) => (
+        <motion.div
+          key={r.id}
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+          className="p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5"
+        >
+          <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-xs">
+                {REPORT_TYPE_LABELS[r.reportedType] ?? r.reportedType}
+              </Badge>
+              <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">{r.reportedId}</span>
+            </div>
+            <a
+              href={REPORT_TYPE_LINKS[r.reportedType]?.(r.reportedId) ?? "#"}
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink className="w-3 h-3" /> İçeriğe Git
+            </a>
+          </div>
+
+          {r.reason && (
+            <p className="text-sm text-foreground/70 bg-background rounded-lg px-3 py-2 mb-3 border border-border italic">
+              "{r.reason}"
+            </p>
+          )}
+
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-xs text-muted-foreground">
+              Şikayetçi UID:{" "}
+              <Link href={`/profile/${r.reporterId}`} className="text-primary/70 hover:text-primary underline underline-offset-2">
+                {r.reporterId.slice(0, 8)}…
+              </Link>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleResolve(r.id, "dismissed")}
+                disabled={processing === r.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="w-3.5 h-3.5" /> Reddet
+              </button>
+              <button
+                onClick={() => handleResolve(r.id, "resolved")}
+                disabled={processing === r.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
+              >
+                <CheckCircle className="w-3.5 h-3.5" /> {processing === r.id ? "İşleniyor…" : "Çözüldü"}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 
 export default function ModeratorPage() {
   const [, setLocation] = useLocation();
   const { user, profile, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<"review" | "users" | "ban">("review");
+  const [tab, setTab] = useState<"review" | "reports" | "ban" | "users">("review");
 
   useEffect(() => {
     if (authLoading) return; // auth yüklenene kadar bekle — erken yönlendirmeyi önler
@@ -469,6 +583,13 @@ export default function ModeratorPage() {
             <Eye className="w-4 h-4" /> Bölüm İnceleme
           </button>
           <button
+            onClick={() => setTab("reports")}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              tab === "reports" ? "border-amber-400 text-amber-400" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}>
+            <AlertTriangle className="w-4 h-4" /> Şikayetler
+          </button>
+          <button
             onClick={() => setTab("ban")}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
               tab === "ban" ? "border-red-500 text-red-400" : "border-transparent text-muted-foreground hover:text-foreground"
@@ -487,6 +608,7 @@ export default function ModeratorPage() {
         </div>
 
         {tab === "review" && <ReviewTab />}
+        {tab === "reports" && <ReportsTab />}
         {tab === "ban" && <BanTab />}
         {tab === "users" && isAdmin && user && (
           <UsersTab currentUid={user.uid} />
