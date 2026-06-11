@@ -786,6 +786,17 @@ export default function ProfilePage() {
             )}
           </div>
 
+          {/* Ban Banner */}
+          {profile.banned && (
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-red-500/40 bg-red-500/10 text-red-400">
+              <Ban className="w-5 h-5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Bu hesap askıya alınmıştır</p>
+                {profile.banReason && <p className="text-xs text-red-400/70 mt-0.5 truncate">Sebep: {profile.banReason}</p>}
+              </div>
+            </div>
+          )}
+
           {/* Name + Status */}
           <div className="mb-3">
             <div className="flex items-center gap-2 flex-wrap">

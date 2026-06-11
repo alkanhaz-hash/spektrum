@@ -56,6 +56,10 @@ export default function MessagesPage() {
 
   const handleSend = async () => {
     if (!text.trim() || !user || !profile || !conversationId) return;
+    if (profile.banned) {
+      toast({ title: "Hesabın askıya alındı", description: profile.banReason || "Askıya alınan hesaplar mesaj gönderemez.", variant: "destructive" });
+      return;
+    }
     if (otherUid) {
       const mutualBlock = await isMutuallyBlocked(user.uid, otherUid).catch(() => false);
       if (mutualBlock) {
@@ -74,6 +78,11 @@ export default function MessagesPage() {
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !profile || !conversationId) return;
+    if (profile.banned) {
+      toast({ title: "Hesabın askıya alındı", description: profile.banReason || "Askıya alınan hesaplar mesaj gönderemez.", variant: "destructive" });
+      e.target.value = "";
+      return;
+    }
     setSending(true);
     try {
       const mediaType = file.type === "image/gif" ? "gif" : "image";

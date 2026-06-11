@@ -200,6 +200,10 @@ export default function ReadPage() {
 
   const handleAddComment = async (text: string, paragraphIndex: number, paragraphAnchor: string) => {
     if (!user || !profile || !storyId || !chapterId) return;
+    if (profile.banned) {
+      toast({ title: "Hesabın askıya alındı", description: profile.banReason || "Askıya alınan hesaplar yorum gönderemez.", variant: "destructive" });
+      return;
+    }
     try {
       await addInlineComment({ storyId, chapterId, paragraphIndex, paragraphAnchor, authorId: user.uid, authorName: profile.displayName, authorAvatar: profile.avatarUrl, text });
       const updated = await getInlineComments(chapterId);

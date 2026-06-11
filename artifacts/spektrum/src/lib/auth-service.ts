@@ -150,14 +150,8 @@ export async function loginUser(email: string, password: string): Promise<User> 
   }
   const userRef = doc(db, "users", credential.user.uid);
   const snap = await getDoc(userRef);
-  // Ban kontrolü — askıya alınmış kullanıcıyı giriş yaptırmıyoruz
-  if (snap.exists() && snap.data()?.banned === true) {
-    await signOut(auth);
-    const reason: string = snap.data()?.banReason || "Hesabın askıya alındı.";
-    const err = new Error(`Hesabın askıya alındı: ${reason}`);
-    (err as any).code = "auth/user-banned";
-    throw err;
-  }
+  // Askıya alınmış kullanıcılar giriş yapabilir; içerik üretimi Firestore
+  // kuralları ve istemci kontrolü ile engellenir (profil sayfasında banner gösterilir).
   if (!snap.exists()) {
     await setDoc(userRef, {
       uid: credential.user.uid,
@@ -211,15 +205,8 @@ async function ensureGoogleProfile(user: User): Promise<void> {
 export async function loginWithGoogle(): Promise<User | null> {
   const provider = new GoogleAuthProvider();
   const credential = await signInWithPopup(auth, provider);
-  // Ban kontrolü — Google ile giriş yapan askıya alınmış kullanıcıyı da engelle
-  const snap = await getDoc(doc(db, "users", credential.user.uid));
-  if (snap.exists() && snap.data()?.banned === true) {
-    await signOut(auth);
-    const reason: string = snap.data()?.banReason || "Hesabın askıya alındı.";
-    const err = new Error(`Hesabın askıya alındı: ${reason}`);
-    (err as any).code = "auth/user-banned";
-    throw err;
-  }
+  // Askıya alınmış kullanıcılar Google ile de giriş yapabilir; içerik üretimi
+  // Firestore kuralları ve istemci kontrolü ile engellenir.
   await ensureGoogleProfile(credential.user);
   return credential.user;
 }
