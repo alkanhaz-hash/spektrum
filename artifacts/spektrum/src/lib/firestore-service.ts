@@ -95,6 +95,67 @@ export interface Conversation {
   unreadCount: Record<string, number>;
 }
 
+// ─── USER STATUS (24h) ───────────────────────────────────────────────────────
+
+export interface UserStatus {
+  id: string;
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  type: "text" | "image";
+  text?: string;
+  backgroundColor?: string;
+  mediaUrl?: string;
+  viewedBy: string[];
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+}
+
+export async function createStatus(
+  uid: string,
+  data: {
+    displayName: string;
+    avatarUrl: string;
+    type: "text" | "image";
+    text?: string;
+    backgroundColor?: string;
+    mediaUrl?: string;
+  }
+): Promise<string> {
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const ref = await addDoc(collection(db, "statuses"), {
+    ...data,
+    uid,
+    viewedBy: [],
+    createdAt: serverTimestamp(),
+    expiresAt,
+  });
+  return ref.id;
+}
+
+export async function getActiveStatuses(): Promise<UserStatus[]> {
+  const now = Timestamp.now();
+  const q = query(
+    collection(db, "statuses"),
+    where("expiresAt", ">", now),
+    limit(100)
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as UserStatus))
+    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+}
+
+export async function markStatusViewed(statusId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, "statuses", statusId), { viewedBy: arrayUnion(uid) });
+}
+
+export async function deleteStatus(statusId: string): Promise<void> {
+  await deleteDoc(doc(db, "statuses", statusId));
+}
+
+// ─── TALENT PORTFOLIOS ────────────────────────────────────────────────────────
+
 export interface TalentPortfolio {
   id: string;
   userId: string;

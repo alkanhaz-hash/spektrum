@@ -60,6 +60,16 @@ export async function uploadUserCover(uid: string, file: File): Promise<string> 
 }
 
 
+export async function uploadStatusImage(uid: string, file: File): Promise<string> {
+  const isGif = file.type === "image/gif";
+  const ext = isGif ? "gif" : "webp";
+  const uploadBlob: Blob = isGif ? file : await convertToWebP(file);
+  const contentType = isGif ? "image/gif" : "image/webp";
+  const storageRef = ref(storage, `statuses/${uid}/${Date.now()}.${ext}`);
+  await uploadBytes(storageRef, uploadBlob, { contentType });
+  return getDownloadURL(storageRef);
+}
+
 export async function uploadTalentWork(userId: string, file: File): Promise<string> {
   const webpBlob = await convertToWebP(file);
   const storageRef = ref(storage, `talent/${userId}/${Date.now()}.webp`);

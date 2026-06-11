@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { BookOpen, Clock, MessageSquare, TrendingUp, Pen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { StatusBar } from "@/components/StatusBar";
 
 export default function HomePage() {
   const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
@@ -65,6 +66,9 @@ export default function HomePage() {
             </div>
           </motion.div>
         </section>
+
+        {/* Status Bar */}
+        {user && <StatusBar />}
 
         {/* Trending Section */}
         <section className="mb-16">
