@@ -174,9 +174,9 @@ export default function ReadPage() {
         const sessionKey = `spektrum_read_${chapterId}`;
         if (!sessionStorage.getItem(sessionKey)) {
           sessionStorage.setItem(sessionKey, "1");
-          incrementChapterReadCount(chapterId).catch(() => {});
-          incrementStoryReadCount(storyId).catch(() => {});
-          incrementUserReadCount(user.uid).catch(() => {});
+          incrementChapterReadCount(chapterId).catch(e => console.error("[readCount] chapter:", e));
+          incrementStoryReadCount(storyId).catch(e => console.error("[readCount] story:", e));
+          incrementUserReadCount(user.uid).catch(e => console.error("[readCount] user:", e));
         }
       }
       // İkincil veriler — hata olsa sayfa çökmez
