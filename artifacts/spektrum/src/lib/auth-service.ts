@@ -63,6 +63,8 @@ export interface UserProfile {
   createdAt: unknown;
   role: "user" | "moderator" | "admin";
   status?: string;
+  statusColor?: string;
+  statusExpiresAt?: unknown;
   instagram?: string;
   tiktok?: string;
   website?: string;
@@ -290,7 +292,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
 
 export async function updateUserProfile(
   uid: string,
-  data: Partial<Pick<UserProfile, "displayName" | "bio" | "genre" | "status" | "instagram" | "tiktok" | "website" | "pinterest" | "snapchat" | "avatarUrl" | "coverUrl">>
+  data: Partial<Pick<UserProfile, "displayName" | "bio" | "genre" | "status" | "statusColor" | "statusExpiresAt" | "instagram" | "tiktok" | "website" | "pinterest" | "snapchat" | "avatarUrl" | "coverUrl">>
 ): Promise<void> {
   await updateDoc(doc(db, "users", uid), { ...data });
 }

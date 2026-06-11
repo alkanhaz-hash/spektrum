@@ -22,6 +22,17 @@ function timeAgo(ts: { seconds: number } | undefined): string {
   return `${Math.floor(diff / 86400)}g`;
 }
 
+function getActiveStatusColor(profile: { status?: string; statusColor?: string; statusExpiresAt?: unknown } | null): string | null {
+  if (!profile?.status || !profile?.statusExpiresAt) return null;
+  try {
+    const expires = (profile.statusExpiresAt as { toDate(): Date }).toDate();
+    if (expires > new Date()) return profile.statusColor || "#8b5cf6";
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function Navbar() {
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -52,6 +63,8 @@ export function Navbar() {
     });
     return () => unsub();
   }, [user?.uid]);
+
+  const activeStatusColor = getActiveStatusColor(profile);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,7 +242,11 @@ export function Navbar() {
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setDropdownOpen(v => !v)}
-                  className="w-8 h-8 rounded-full bg-muted overflow-hidden flex items-center justify-center border border-border hover:border-primary/50 transition-colors"
+                  className="w-8 h-8 rounded-full bg-muted overflow-hidden flex items-center justify-center border-2 transition-colors"
+                  style={activeStatusColor
+                    ? { borderColor: activeStatusColor, boxShadow: `0 0 0 2px ${activeStatusColor}40` }
+                    : { borderColor: "hsl(var(--border))" }
+                  }
                 >
                   {profile?.avatarUrl ? (
                     <img src={profile.avatarUrl} alt={profile.displayName} className="w-full h-full object-cover" />
