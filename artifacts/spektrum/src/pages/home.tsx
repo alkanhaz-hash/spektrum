@@ -32,30 +32,34 @@ export default function HomePage() {
       <div className="container mx-auto px-4 py-8">
 
         {/* Hero Section */}
-        <section className="py-20 flex flex-col items-center text-center space-y-8 relative overflow-hidden rounded-3xl bg-card border border-border/50 shadow-2xl shadow-primary/5 mb-16">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/5 pointer-events-none" />
-          <div className="absolute inset-0 opacity-20 mix-blend-overlay pointer-events-none" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}noise.svg)` }} />
-          
-          <motion.div 
+        <section className="py-20 flex flex-col items-center text-center space-y-8 relative overflow-hidden rounded-3xl mb-16" style={{ background: "linear-gradient(135deg, #f8f7ff 0%, #ede9fe 40%, #e0f2fe 100%)" }}>
+          <div className="absolute top-0 right-0 w-96 h-96 rounded-full pointer-events-none opacity-40" style={{ background: "radial-gradient(circle, #8b5cf630, transparent 70%)", transform: "translate(30%, -30%)" }} />
+          <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full pointer-events-none opacity-30" style={{ background: "radial-gradient(circle, #06b6d420, transparent 70%)", transform: "translate(-30%, 30%)" }} />
+
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="relative z-10 space-y-6 max-w-3xl"
           >
-            <Badge variant="outline" className="px-4 py-1.5 border-primary/30 text-primary bg-primary/5 uppercase tracking-widest text-xs font-semibold">
-              Dijital Hikayeciliğin Yeni Boyutu
-            </Badge>
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-balance leading-tight font-serif">
-              Karanlıkta <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Parlar</span>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-widest border" style={{ background: "rgba(255,255,255,0.8)", color: "#6b7280", borderColor: "#e5e7eb" }}>
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              Türkçe Yazarlık Platformu
+            </div>
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-balance leading-tight font-serif text-gray-900">
+              Hikayeler{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
+                Burada Yaşar
+              </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
-              Spektrum; satır aralarında kaybolabileceğin, düşüncelerini her paragrafta paylaşabileceğin ve yeni yetenekleri keşfedebileceğin neon aydınlatmalı bir kütüphane.
+              Spektrum; satır aralarında kaybolabileceğin, düşüncelerini her paragrafta paylaşabileceğin ve yeni yetenekleri keşfedebileceğin temiz bir kütüphane.
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
-              <Link href="/discover" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(var(--primary)/0.3)] h-12 px-8">
+              <Link href="/discover" className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 h-12 px-8">
                 Keşfetmeye Başla
               </Link>
-              <Link href="/write" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border border-input bg-background/50 backdrop-blur hover:bg-accent hover:text-accent-foreground h-12 px-8">
+              <Link href="/write" className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border-2 border-border bg-white/80 text-foreground hover:bg-white h-12 px-8">
                 Hikayeni Yaz
               </Link>
             </div>
