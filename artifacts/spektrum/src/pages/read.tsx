@@ -304,6 +304,38 @@ export default function ReadPage() {
             </span>
           </Link>
           <h1 className="text-2xl font-bold font-serif">{chapter.title}</h1>
+
+          {/* Yazar bilgisi + takip butonu */}
+          {story && (
+            <div className="flex items-center gap-3 mt-3 mb-1">
+              <Link href={`/profile/${story.authorId}`} className="flex items-center gap-2 group">
+                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 overflow-hidden shrink-0">
+                  {story.authorAvatar
+                    ? <img src={story.authorAvatar} alt={story.authorName} className="w-full h-full object-cover" />
+                    : <span className="w-full h-full flex items-center justify-center text-xs font-bold text-primary">{story.authorName.charAt(0)}</span>
+                  }
+                </div>
+                <span className="text-sm font-medium group-hover:text-primary transition-colors">{story.authorName}</span>
+              </Link>
+              {user && user.uid !== story.authorId && (
+                <button
+                  onClick={handleFollow}
+                  disabled={followLoading}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border font-medium transition-all ${
+                    isFollowing
+                      ? "border-border text-muted-foreground hover:border-red-400/50 hover:text-red-400"
+                      : "border-primary/40 text-primary bg-primary/5 hover:bg-primary/10"
+                  }`}
+                >
+                  {isFollowing
+                    ? <><UserCheck className="w-3.5 h-3.5" /> Takip Ediliyor</>
+                    : <><UserPlus className="w-3.5 h-3.5" /> Takip Et</>
+                  }
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
             <span>Bölüm {chapter.order}</span>
             <span>{chapter.wordCount.toLocaleString("tr-TR")} kelime</span>
@@ -425,15 +457,6 @@ export default function ReadPage() {
             </Link>
           ) : (
             <div className="flex items-center gap-3 flex-wrap justify-end">
-              {user && story && user.uid !== story.authorId && (
-                <button
-                  onClick={handleFollow}
-                  disabled={followLoading}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isFollowing ? "border border-border hover:border-red-400/50 hover:text-red-400 text-muted-foreground" : "bg-secondary text-secondary-foreground hover:bg-secondary/90 hover:shadow-[0_0_12px_hsl(var(--secondary)/0.4)]"}`}
-                >
-                  {isFollowing ? <><UserCheck className="w-4 h-4" /> Takip Ediliyor</> : <><UserPlus className="w-4 h-4" /> Yazarı Takip Et</>}
-                </button>
-              )}
               <Link href={`/story/${storyId}`}>
                 <button className="px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors">Hikayeye Dön</button>
               </Link>
