@@ -896,7 +896,7 @@ export default function ProfilePage() {
             {[
               { key: "stories", label: "Hikayeleri", icon: <BookOpen className="w-4 h-4" /> },
               { key: "qa", label: "Soru & Cevap", icon: <MessageSquarePlus className="w-4 h-4" /> },
-              ...(isOwner ? [{ key: "bookmarks", label: "Kaydedilenler", icon: <Bookmark className="w-4 h-4" /> }] : []),
+              ...(isOwner ? [{ key: "bookmarks", label: "Favori Kitaplarım", icon: <Bookmark className="w-4 h-4" /> }] : []),
             ].map(tab => (
               <button key={tab.key}
                 onClick={() => {

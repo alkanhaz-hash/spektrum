@@ -211,11 +211,11 @@ export default function StoryPage() {
               <button
                 onClick={handleBookmark}
                 className={`flex items-center gap-1 transition-colors ${bookmarked ? "text-primary" : "hover:text-primary"}`}
-                title={bookmarked ? "Yer imini kaldır" : "Sonra oku"}
+                title={bookmarked ? "Favorilerden çıkar" : "Favorilerime ekle"}
                 data-testid="button-bookmark"
               >
                 {bookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
-                <span className="text-xs">{bookmarked ? "Kaydedildi" : "Kaydet"}</span>
+                <span className="text-xs">{bookmarked ? "Favorilerimde" : "Favorilerime Ekle"}</span>
               </button>
               <button
                 onClick={handleShare}
