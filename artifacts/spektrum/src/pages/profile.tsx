@@ -24,26 +24,6 @@ import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
 import { moderateText } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
 
-// ─── STATUS HELPERS ──────────────────────────────────────────────────────────
-
-const STATUS_COLORS = [
-  { hex: "#8b5cf6", label: "Mor" },
-  { hex: "#06b6d4", label: "Cyan" },
-  { hex: "#ec4899", label: "Pembe" },
-  { hex: "#f59e0b", label: "Amber" },
-  { hex: "#10b981", label: "Yeşil" },
-  { hex: "#ef4444", label: "Kırmızı" },
-];
-
-function isStatusActive(profile: UserProfile): boolean {
-  if (!profile.status || !profile.statusExpiresAt) return false;
-  try {
-    const expires = (profile.statusExpiresAt as { toDate(): Date }).toDate();
-    return expires > new Date();
-  } catch {
-    return false;
-  }
-}
 // ─── BADGES ──────────────────────────────────────────────────────────────────
 
 const BADGE_DEFS = [
@@ -81,8 +61,6 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
   const [form, setForm] = useState({
     displayName: profile.displayName || "",
     bio: profile.bio || "",
-    status: isStatusActive(profile) ? (profile.status || "") : "",
-    statusColor: profile.statusColor || STATUS_COLORS[0].hex,
     instagram: profile.instagram || "",
     tiktok: profile.tiktok || "",
     website: profile.website || "",
@@ -129,10 +107,7 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
         snapchat: stripHandle(form.snapchat),
         website: form.website.trim(),
       };
-      const statusExpiresAt = form.status.trim()
-        ? Timestamp.fromDate(new Date(Date.now() + 24 * 3600 * 1000))
-        : null;
-      const updated = { ...form, ...sanitized, avatarUrl, coverUrl, statusExpiresAt };
+      const updated = { ...form, ...sanitized, avatarUrl, coverUrl };
       await updateUserProfile(user.uid, updated);
       onSave({ ...profile, ...updated });
       toast({ title: "Profil güncellendi!" });
@@ -207,53 +182,6 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
             <label className="text-sm font-medium text-muted-foreground mb-1 block">Kullanıcı Adı</label>
             <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
               className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
-          </div>
-
-          {/* Status */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm font-medium text-muted-foreground">Durum (24 saat)</label>
-              {form.status && (
-                <button
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, status: "" }))}
-                  className="text-xs text-destructive hover:underline flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" /> Temizle
-                </button>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                value={form.status}
-                onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                placeholder="Şu an ne yapıyorsun? (24 saat görünür)"
-                maxLength={60}
-                className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary pr-16"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{form.status.length}/60</span>
-            </div>
-            {form.status && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-muted-foreground">Renk:</span>
-                {STATUS_COLORS.map(c => (
-                  <button
-                    key={c.hex}
-                    type="button"
-                    title={c.label}
-                    onClick={() => setForm(f => ({ ...f, statusColor: c.hex }))}
-                    className="w-6 h-6 rounded-full transition-transform"
-                    style={{
-                      backgroundColor: c.hex,
-                      outline: form.statusColor === c.hex ? `2px solid ${c.hex}` : "none",
-                      outlineOffset: "2px",
-                      transform: form.statusColor === c.hex ? "scale(1.2)" : "scale(1)",
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">24 saat sonra otomatik kaybolur.</p>
           </div>
 
           {/* Bio */}
@@ -873,22 +801,6 @@ export default function ProfilePage() {
                 </span>
               )}
             </div>
-            {isStatusActive(profile) && (
-              <div
-                className="inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full text-white text-sm font-medium"
-                style={{
-                  backgroundColor: `${profile.statusColor || STATUS_COLORS[0].hex}30`,
-                  border: `1px solid ${profile.statusColor || STATUS_COLORS[0].hex}80`,
-                  color: profile.statusColor || STATUS_COLORS[0].hex,
-                }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0"
-                  style={{ backgroundColor: profile.statusColor || STATUS_COLORS[0].hex }}
-                />
-                {profile.status}
-              </div>
-            )}
           </div>
 
           {/* Bio */}
