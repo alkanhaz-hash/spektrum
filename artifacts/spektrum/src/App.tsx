@@ -21,6 +21,7 @@ import ModeratorPage from "@/pages/moderator";
 import NotificationsPage from "@/pages/notifications";
 import TermsPage from "@/pages/terms";
 import KvkkPage from "@/pages/kvkk";
+import JetonlarPage from "@/pages/jetonlar";
 
 // ─── AUTH GUARD ──────────────────────────────────────────────────────────────
 function isEmailUnverified(user: import("firebase/auth").User) {
@@ -77,6 +78,7 @@ function Router() {
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/terms" component={TermsPage} />
       <Route path="/kvkk" component={KvkkPage} />
+      <Route path="/jetonlar" component={JetonlarPage} />
       <Route component={NotFound} />
     </Switch>
   );

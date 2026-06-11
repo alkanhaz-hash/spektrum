@@ -2,7 +2,7 @@ import { ReactNode, useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { logoutUser } from "@/lib/auth-service";
-import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare, Bell } from "lucide-react";
+import { LogOut, User, Search, Menu, X, Compass, PenLine, Shield, MessageSquare, Bell, Coins } from "lucide-react";
 import { getConversations, getNotifications, markAllNotificationsRead, SpektrumNotification } from "@/lib/firestore-service";
 
 function getNotifUrl(n: SpektrumNotification): string {
@@ -144,6 +144,16 @@ export function Navbar() {
                   Panel
                 </Link>
               )}
+
+              {/* Jeton bakiyesi — masaüstü */}
+              <Link
+                href="/jetonlar"
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-amber-300/60 bg-amber-50 hover:bg-amber-100 transition-colors text-amber-700 text-sm font-semibold tabular-nums"
+                title="Jetonlarım"
+              >
+                <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>{(profile?.jetonBalance ?? 0).toLocaleString("tr-TR")}</span>
+              </Link>
 
               {/* Bildirimler — masaüstü */}
               <div className="hidden md:block relative" ref={notifRef}>
@@ -323,6 +333,16 @@ export function Navbar() {
                         </div>
                       </Link>
                     )}
+                    {/* Jetonlarım */}
+                    <Link href="/jetonlar" onClick={() => setDropdownOpen(false)}>
+                      <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors cursor-pointer border-t border-border">
+                        <span className="flex items-center gap-2">
+                          <Coins className="w-4 h-4 text-amber-500" />
+                          Jetonlarım
+                        </span>
+                        <span className="font-bold text-amber-600 tabular-nums">{(profile?.jetonBalance ?? 0).toLocaleString("tr-TR")}</span>
+                      </div>
+                    </Link>
                     <div className="border-t border-border" />
                     <button
                       onClick={handleLogout}

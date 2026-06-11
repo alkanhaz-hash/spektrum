@@ -777,6 +777,100 @@ export async function isMutuallyBlocked(uid1: string, uid2: string): Promise<boo
   return a.exists() || b.exists();
 }
 
+// ─── JETONLAR ─────────────────────────────────────────────────────────────────
+
+export interface JetonTransaction {
+  id: string;
+  uid: string;
+  type: "earn" | "spend" | "refund";
+  amount: number;
+  /** İşlem sonrası bakiye */
+  balanceAfter: number;
+  reason: string;
+  /** İlgili hikaye / bölüm ID'si (varsa) */
+  refId?: string;
+  createdAt: Timestamp;
+}
+
+/** Kullanıcının mevcut jeton bakiyesini döndürür (0 döner, hata fırlatmaz). */
+export async function getJetonBalance(uid: string): Promise<number> {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return 0;
+  return (snap.data().jetonBalance as number) ?? 0;
+}
+
+/** Kullanıcının son 50 jeton işlemini dinler (onSnapshot). */
+export function subscribeJetonTransactions(
+  uid: string,
+  cb: (txs: JetonTransaction[]) => void
+): () => void {
+  const q = query(
+    collection(db, "jetonTransactions"),
+    where("uid", "==", uid),
+    orderBy("createdAt", "desc"),
+    limit(50)
+  );
+  return onSnapshot(q, snap => {
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as JetonTransaction)));
+  });
+}
+
+/**
+ * Kullanıcının jetonunu düşer.
+ * Bakiye yetersizse hata fırlatır.
+ */
+export async function spendJetons(
+  uid: string,
+  amount: number,
+  reason: string,
+  refId?: string
+): Promise<void> {
+  const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) throw new Error("Kullanıcı bulunamadı.");
+  const current = (snap.data().jetonBalance as number) ?? 0;
+  if (current < amount) throw new Error("Yetersiz jeton bakiyesi.");
+  const balanceAfter = current - amount;
+  await updateDoc(userRef, { jetonBalance: increment(-amount) });
+  await addDoc(collection(db, "jetonTransactions"), {
+    uid,
+    type: "spend",
+    amount,
+    balanceAfter,
+    reason,
+    ...(refId ? { refId } : {}),
+    createdAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Kullanıcıya jeton ekler (yönetici / ödeme tamamlandığında çağrılır).
+ * Güvenlik notu: üretimde bu fonksiyon Firebase Admin SDK ile
+ * sunucu tarafında çalıştırılmalıdır.
+ */
+export async function earnJetons(
+  uid: string,
+  amount: number,
+  reason: string,
+  refId?: string
+): Promise<void> {
+  const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) throw new Error("Kullanıcı bulunamadı.");
+  const current = (snap.data().jetonBalance as number) ?? 0;
+  const balanceAfter = current + amount;
+  await updateDoc(userRef, { jetonBalance: increment(amount) });
+  await addDoc(collection(db, "jetonTransactions"), {
+    uid,
+    type: "earn",
+    amount,
+    balanceAfter,
+    reason,
+    ...(refId ? { refId } : {}),
+    createdAt: serverTimestamp(),
+  });
+}
+
 // ─── BAN ──────────────────────────────────────────────────────────────────────
 
 export async function banUser(uid: string, reason: string): Promise<void> {

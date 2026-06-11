@@ -74,6 +74,8 @@ export interface UserProfile {
   gender?: string;
   /** false → yeni Google kullanıcısı, takma ad henüz seçilmedi. undefined/true → tamam. */
   nicknameSet?: boolean;
+  /** Kullanıcının mevcut jeton bakiyesi. Varsayılan: 0 */
+  jetonBalance?: number;
 }
 
 // Üretim URL'si — e-posta linklerinin gideceği yer
