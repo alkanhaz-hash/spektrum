@@ -281,6 +281,23 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ─── STATUSES (24 SAAT) ──────────────────────────────────────────────────────
+    // Süresi dolmamış durumları tüm giriş yapmış kullanıcılar okuyabilir.
+    // Yalnızca sahibi oluşturabilir/silebilir. viewedBy alanını herhangi bir
+    // giriş yapmış kullanıcı kendi UID'sini ekleyerek güncelleyebilir.
+    match /statuses/{statusId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+                    && !isBanned()
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if (isSignedIn() && resource.data.uid == request.auth.uid)
+                    || (isSignedIn()
+                        && changedKeys().hasOnly(['viewedBy'])
+                        && request.resource.data.viewedBy.toSet().difference(resource.data.viewedBy.toSet())
+                             == [request.auth.uid].toSet());
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
