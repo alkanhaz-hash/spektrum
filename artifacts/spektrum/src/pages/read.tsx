@@ -168,12 +168,16 @@ export default function ReadPage() {
       setStory(s);
       setChapter(ch);
       setLoading(false);
-      const sessionKey = `spektrum_read_${chapterId}`;
-      if (!sessionStorage.getItem(sessionKey)) {
-        sessionStorage.setItem(sessionKey, "1");
-        incrementChapterReadCount(chapterId).catch(() => {});
-        incrementStoryReadCount(storyId).catch(() => {});
-        if (user) incrementUserReadCount(user.uid).catch(() => {});
+      // Firestore kuralı isSignedIn() gerektiriyor; kullanıcı yokken
+      // sessionStorage anahtarını YAZMA — auth yüklenince tekrar dener.
+      if (user) {
+        const sessionKey = `spektrum_read_${chapterId}`;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, "1");
+          incrementChapterReadCount(chapterId).catch(() => {});
+          incrementStoryReadCount(storyId).catch(() => {});
+          incrementUserReadCount(user.uid).catch(() => {});
+        }
       }
       // İkincil veriler — hata olsa sayfa çökmez
       getChaptersByStory(storyId, true)
