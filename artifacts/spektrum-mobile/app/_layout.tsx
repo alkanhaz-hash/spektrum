@@ -29,6 +29,8 @@ function RootLayoutNav() {
       <Stack.Screen name="read/[storyId]" options={{ headerShown: false }} />
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="story-manage/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="chapter-editor/[storyId]" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -16,3 +16,11 @@ export async function uploadUserCover(uid: string, localUri: string): Promise<st
   await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
   return getDownloadURL(storageRef);
 }
+
+export async function uploadStoryCover(uid: string, storyId: string, localUri: string): Promise<string> {
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  const storageRef = ref(storage, `story-covers/${uid}/${storyId}.jpg`);
+  await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
+  return getDownloadURL(storageRef);
+}

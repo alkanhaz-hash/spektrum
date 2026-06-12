@@ -12,14 +12,16 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
-import { getStoriesByAuthor, createStory, GENRES, Story } from "@/lib/firestore-service";
+import { getStoriesByAuthor, createStory, updateStory, GENRES, Story } from "@/lib/firestore-service";
+import { uploadStoryCover } from "@/lib/storage-service";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   published: { label: "Yayında", color: "#22c55e" },
@@ -51,6 +53,18 @@ const lp = StyleSheet.create({
   btnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
 
+function BanBanner({ reason, colors }: { reason?: string; colors: ReturnType<typeof useColors> }) {
+  return (
+    <View style={[styles.banBanner, { backgroundColor: "#7f1d1d22", borderColor: "#ef444440" }]}>
+      <Feather name="shield-off" size={28} color="#f87171" />
+      <Text style={[styles.banTitle, { color: "#f87171" }]}>Hesabın Askıya Alındı</Text>
+      <Text style={[styles.banReason, { color: colors.mutedForeground }]}>
+        {reason || "Topluluk kurallarını ihlal ettiğin için hesabın geçici olarak askıya alındı."}
+      </Text>
+    </View>
+  );
+}
+
 export default function WriteScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -60,10 +74,10 @@ export default function WriteScreen() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Form state
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [genre, setGenre] = useState(GENRES[0]);
+  const [coverUri, setCoverUri] = useState<string | null>(null);
 
   const loadStories = useCallback(async () => {
     if (!user) return;
@@ -77,9 +91,30 @@ export default function WriteScreen() {
 
   useEffect(() => { if (user) loadStories(); else setLoading(false); }, [user, loadStories]);
 
+  const pickCover = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("İzin Gerekli", "Fotoğraf seçmek için galeri iznine ihtiyaç var.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [2, 3],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setCoverUri(result.assets[0].uri);
+    }
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) { Alert.alert("Başlık gerekli"); return; }
     if (!user || !profile) return;
+    if (profile.banned) {
+      Alert.alert("Hesap Askıya Alındı", "Yeni hikaye oluşturamazsın.");
+      return;
+    }
     setSaving(true);
     try {
       const id = await createStory({
@@ -91,30 +126,47 @@ export default function WriteScreen() {
         authorName: profile.displayName,
         authorAvatar: profile.avatarUrl ?? "",
       });
+      if (coverUri) {
+        try {
+          const coverUrl = await uploadStoryCover(user.uid, id, coverUri);
+          await updateStory(id, { coverUrl });
+        } catch { /* kapak yükleme hatası sessiz geçer */ }
+      }
       setCreating(false);
-      setTitle(""); setSummary(""); setGenre(GENRES[0]);
+      setTitle(""); setSummary(""); setGenre(GENRES[0]); setCoverUri(null);
       await loadStories();
-      router.push({ pathname: "/story/[id]", params: { id } });
+      router.push({ pathname: "/story-manage/[id]", params: { id } });
     } catch {
       Alert.alert("Hata", "Hikaye oluşturulamadı.");
     } finally { setSaving(false); }
+  };
+
+  const closeModal = () => {
+    setCreating(false);
+    setTitle(""); setSummary(""); setGenre(GENRES[0]); setCoverUri(null);
   };
 
   if (!user) return <LoginPrompt />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Hikayelerim</Text>
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
-          onPress={() => setCreating(true)}
+          style={[styles.fab, { backgroundColor: profile?.banned ? colors.mutedForeground : colors.primary }]}
+          onPress={() => {
+            if (profile?.banned) { Alert.alert("Hesap Askıya Alındı", "Yeni hikaye oluşturamazsın."); return; }
+            setCreating(true);
+          }}
         >
           <Feather name="plus" size={20} color="#fff" />
           <Text style={styles.fabText}>Yeni</Text>
         </TouchableOpacity>
       </View>
+
+      {profile?.banned && (
+        <BanBanner reason={profile.banReason} colors={colors} />
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -131,19 +183,23 @@ export default function WriteScreen() {
             return (
               <TouchableOpacity
                 style={[styles.storyCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => router.push({ pathname: "/story/[id]", params: { id: s.id } })}
+                onPress={() => router.push({ pathname: "/story-manage/[id]", params: { id: s.id } })}
                 activeOpacity={0.8}
               >
-                <View style={styles.storyCardLeft}>
-                  <View style={[styles.genreDot, { backgroundColor: colors.primary }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.storyTitle, { color: colors.foreground }]} numberOfLines={1}>
-                      {s.title}
-                    </Text>
-                    <Text style={[styles.storyMeta, { color: colors.mutedForeground }]}>
-                      {s.genre} · {s.chapterCount ?? 0} bölüm
-                    </Text>
+                {s.coverUrl ? (
+                  <Image source={{ uri: s.coverUrl }} style={styles.coverThumb} />
+                ) : (
+                  <View style={[styles.coverThumbPlaceholder, { backgroundColor: colors.primary + "22" }]}>
+                    <Feather name="book" size={16} color={colors.primary} />
                   </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.storyTitle, { color: colors.foreground }]} numberOfLines={1}>
+                    {s.title}
+                  </Text>
+                  <Text style={[styles.storyMeta, { color: colors.mutedForeground }]}>
+                    {s.genre} · {s.chapterCount ?? 0} bölüm
+                  </Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: st.color + "22" }]}>
                   <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
@@ -163,14 +219,13 @@ export default function WriteScreen() {
         />
       )}
 
-      {/* Create Modal */}
-      <Modal visible={creating} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={creating} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeModal}>
         <KeyboardAvoidingView
           style={[styles.modal, { backgroundColor: colors.background }]}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-            <TouchableOpacity onPress={() => setCreating(false)}>
+            <TouchableOpacity onPress={closeModal}>
               <Feather name="x" size={22} color={colors.mutedForeground} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Yeni Hikaye</Text>
@@ -183,6 +238,18 @@ export default function WriteScreen() {
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+            <TouchableOpacity style={[styles.coverPicker, { borderColor: colors.border, backgroundColor: colors.card }]} onPress={pickCover} activeOpacity={0.8}>
+              {coverUri ? (
+                <Image source={{ uri: coverUri }} style={styles.coverPickerImage} />
+              ) : (
+                <View style={styles.coverPickerPlaceholder}>
+                  <Feather name="image" size={28} color={colors.mutedForeground} />
+                  <Text style={[styles.coverPickerLabel, { color: colors.mutedForeground }]}>Kapak Seç</Text>
+                  <Text style={[styles.coverPickerSub, { color: colors.mutedForeground + "80" }]}>İsteğe bağlı</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Başlık *</Text>
             <TextInput
               style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
@@ -244,23 +311,33 @@ const styles = StyleSheet.create({
   fab: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   fabText: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   list: { padding: 16, gap: 10 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12, minHeight: 300 },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   emptySub: { fontSize: 14, textAlign: "center", fontFamily: "Inter_400Regular" },
   storyCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
+    gap: 12,
+    padding: 12,
     borderRadius: 14,
     borderWidth: 1,
   },
-  storyCardLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  genreDot: { width: 8, height: 8, borderRadius: 4 },
+  coverThumb: { width: 42, height: 58, borderRadius: 8 },
+  coverThumbPlaceholder: { width: 42, height: 58, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   storyTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   storyMeta: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   statusText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  banBanner: {
+    margin: 16,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 8,
+  },
+  banTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  banReason: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 18 },
   modal: { flex: 1 },
   modalHeader: {
     flexDirection: "row",
@@ -274,6 +351,18 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold" },
   saveBtn: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   modalBody: { padding: 16, gap: 8 },
+  coverPicker: {
+    height: 160,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  coverPickerImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  coverPickerPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center", gap: 6 },
+  coverPickerLabel: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  coverPickerSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 8, marginBottom: 4 },
   textInput: {
     borderRadius: 12,
