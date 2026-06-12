@@ -40,12 +40,15 @@ jobs:
       - name: Bağımlılıkları yükle
         run: pnpm install --no-frozen-lockfile
 
+      - name: Lib paketleri derle
+        run: pnpm run typecheck:libs
+
       - name: EAS CLI kur
         run: npm install -g eas-cli
 
       - name: EAS projesi başlat
         working-directory: artifacts/spektrum-mobile
-        run: eas init --non-interactive --force
+        run: eas init --non-interactive --force || true
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 

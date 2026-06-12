@@ -4,12 +4,7 @@
     "appVersionSource": "local"
   },
   "build": {
-    "base": {
-      "node": "20",
-      "pnpm": "9"
-    },
     "preview": {
-      "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
