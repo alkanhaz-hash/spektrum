@@ -48,7 +48,7 @@ jobs:
 
       - name: Expo prebuild (Android native kod üret)
         working-directory: artifacts/spektrum-mobile
-        run: pnpm exec expo prebuild --platform android --non-interactive --clean
+        run: pnpm exec expo prebuild --platform android --non-interactive --clean --no-install
         env:
           EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
           EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN }}
