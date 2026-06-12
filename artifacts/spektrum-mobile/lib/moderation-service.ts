@@ -1,5 +1,3 @@
-import Constants from "expo-constants";
-
 export interface ModerationResult {
   safe: boolean;
   action: "approved" | "pending_review" | "rejected";
@@ -9,8 +7,7 @@ export interface ModerationResult {
 }
 
 function getApiBase(): string {
-  const base = (Constants.expoConfig?.extra as { apiBase?: string } | null)?.apiBase ?? "";
-  return base;
+  return process.env.EXPO_PUBLIC_API_BASE ?? "";
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

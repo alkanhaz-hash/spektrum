@@ -168,6 +168,7 @@ export default function JetonlarScreen() {
                   <TouchableOpacity
                     style={[s.buyBtn, { backgroundColor: pkg.popular ? colors.primary : "transparent", borderColor: pkg.popular ? colors.primary : colors.border }]}
                     activeOpacity={0.7}
+                    onPress={() => pkg.priceTRY != null ? router.push(`/odeme?packageId=${pkg.id}`) : undefined}
                   >
                     <Text style={[s.buyBtnText, { color: pkg.popular ? "#fff" : colors.foreground }]}>
                       {pkg.priceTRY != null ? `₺${pkg.priceTRY}` : "Yakında"}

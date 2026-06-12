@@ -31,6 +31,11 @@ function RootLayoutNav() {
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="story-manage/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="chapter-editor/[storyId]" options={{ headerShown: false }} />
+      <Stack.Screen name="jetonlar" options={{ headerShown: false }} />
+      <Stack.Screen name="moderator" options={{ headerShown: false }} />
+      <Stack.Screen name="kvkk" options={{ headerShown: false }} />
+      <Stack.Screen name="terms" options={{ headerShown: false }} />
+      <Stack.Screen name="odeme" options={{ headerShown: false }} />
     </Stack>
   );
 }

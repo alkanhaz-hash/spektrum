@@ -16,8 +16,8 @@ export const JETON_PACKAGES: JetonPackage[] = [
     jetonAmount: 300,
     bonusAmount: 0,
     totalJeton: 300,
-    priceTRY: null,
-    unitPriceTRY: null,
+    priceTRY: 49,
+    unitPriceTRY: 0.16,
     popular: false,
   },
   {
@@ -26,8 +26,8 @@ export const JETON_PACKAGES: JetonPackage[] = [
     jetonAmount: 500,
     bonusAmount: 75,
     totalJeton: 575,
-    priceTRY: null,
-    unitPriceTRY: null,
+    priceTRY: 79,
+    unitPriceTRY: 0.14,
     popular: true,
   },
   {
@@ -36,8 +36,8 @@ export const JETON_PACKAGES: JetonPackage[] = [
     jetonAmount: 1000,
     bonusAmount: 200,
     totalJeton: 1200,
-    priceTRY: null,
-    unitPriceTRY: null,
+    priceTRY: 149,
+    unitPriceTRY: 0.12,
     popular: false,
   },
   {
@@ -46,8 +46,8 @@ export const JETON_PACKAGES: JetonPackage[] = [
     jetonAmount: 2000,
     bonusAmount: 500,
     totalJeton: 2500,
-    priceTRY: null,
-    unitPriceTRY: null,
+    priceTRY: 249,
+    unitPriceTRY: 0.10,
     popular: false,
   },
 ];
