@@ -39,7 +39,7 @@ export default function ReaderScreen() {
       setLoading(true);
       try {
         const [ch, all] = await Promise.all([
-          getChapter(sid, cid),
+          getChapter(cid),
           getChapters(sid),
         ]);
         setChapter(ch);

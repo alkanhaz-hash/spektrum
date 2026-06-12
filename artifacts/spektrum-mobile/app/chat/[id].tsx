@@ -16,7 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getMessages,
+  listenMessages,
   sendMessage,
   markConversationRead,
   Message,
@@ -46,23 +46,16 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    if (!convId) return;
-    try {
-      const data = await getMessages(convId);
-      setMessages(data);
-    } catch { /* sessiz */ }
-    finally { setLoading(false); }
-  }, [convId]);
 
   useEffect(() => {
-    load();
-    if (convId && user) markConversationRead(convId, user.uid).catch(() => {});
-    pollRef.current = setInterval(load, 8000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [load, convId, user]);
+    if (!convId) return;
+    if (user) markConversationRead(convId, user.uid).catch(() => {});
+    const unsub = listenMessages(convId, (msgs) => {
+      setMessages(msgs);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [convId, user]);
 
   const handleSend = async () => {
     if (!text.trim() || !user || !profile || !convId) return;
@@ -87,7 +80,7 @@ export default function ChatScreen() {
         text: trimmed,
         receiverId: recipientUid,
       });
-      await load();
+      // onSnapshot otomatik günceller, ayrıca load() gerekmez
     } catch { /* sessiz */ }
     finally { setSending(false); }
   };

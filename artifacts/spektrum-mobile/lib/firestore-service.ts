@@ -11,6 +11,7 @@ import {
   where,
   limit,
   orderBy,
+  onSnapshot,
   serverTimestamp,
   increment,
   Timestamp,
@@ -51,6 +52,7 @@ export interface Chapter {
   readCount: number;
   status: "published" | "pending_review" | "draft" | "rejected";
   moderationCategories?: string[];
+  rejectionReason?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -96,6 +98,26 @@ export async function getPublishedStories(pageSize = 20, genre?: string): Promis
     .map((d) => ({ id: d.id, ...d.data() } as Story))
     .filter((s) => (s.chapterCount ?? 0) > 0)
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
+    .slice(0, pageSize);
+}
+
+/**
+ * Engagement skoruna göre sıralanmış trend hikayeler.
+ * Skor = readCount + likeCount×2 + commentCount×3
+ */
+export async function getTrendingStories(pageSize = 20): Promise<Story[]> {
+  const q = query(
+    collection(db, "stories"),
+    where("status", "==", "published"),
+    limit(200),
+  );
+  const snap = await getDocs(q);
+  const score = (s: Story) =>
+    (s.readCount ?? 0) + (s.likeCount ?? 0) * 2 + (s.commentCount ?? 0) * 3;
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Story))
+    .filter((s) => (s.chapterCount ?? 0) > 0)
+    .sort((a, b) => score(b) - score(a))
     .slice(0, pageSize);
 }
 
@@ -156,6 +178,10 @@ export async function createStory(data: {
   return ref.id;
 }
 
+export async function updateStory(id: string, data: Partial<Pick<Story, "title" | "summary" | "genre" | "tags" | "coverUrl" | "status">>): Promise<void> {
+  await updateDoc(doc(db, "stories", id), { ...data, updatedAt: serverTimestamp() });
+}
+
 export async function incrementStoryRead(storyId: string): Promise<void> {
   await updateDoc(doc(db, "stories", storyId), { readCount: increment(1) });
 }
@@ -174,49 +200,87 @@ export async function unlikeStory(storyId: string, uid: string): Promise<void> {
   });
 }
 
+export async function hasUserLikedStory(storyId: string, userId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "stories", storyId));
+  if (!snap.exists()) return false;
+  const likedBy = (snap.data()?.likedBy ?? []) as string[];
+  return likedBy.includes(userId);
+}
+
 // ─── Bölümler ─────────────────────────────────────────────────────────────────
+// NOT: Bölümler, web uygulamasıyla aynı şekilde flat "chapters" koleksiyonunda tutulur.
+// Eski subcollection path'i (stories/{id}/chapters) KULLANILMAZ.
 
 export async function getChapters(storyId: string): Promise<Chapter[]> {
   const q = query(
-    collection(db, "stories", storyId, "chapters"),
+    collection(db, "chapters"),
+    where("storyId", "==", storyId),
     where("status", "==", "published"),
-    orderBy("order", "asc")
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Chapter));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Chapter))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 export async function getAllChapters(storyId: string): Promise<Chapter[]> {
-  const q = query(collection(db, "stories", storyId, "chapters"), orderBy("order", "asc"));
+  const q = query(collection(db, "chapters"), where("storyId", "==", storyId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Chapter));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Chapter))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
-export async function getChapter(storyId: string, chapterId: string): Promise<Chapter | null> {
-  const snap = await getDoc(doc(db, "stories", storyId, "chapters", chapterId));
+export async function getChapter(chapterId: string): Promise<Chapter | null> {
+  const snap = await getDoc(doc(db, "chapters", chapterId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as Chapter;
 }
 
-export async function createChapter(
-  storyId: string,
-  authorId: string,
-  data: { title: string; content: string; order: number }
-): Promise<string> {
-  const wordCount = data.content.trim().split(/\s+/).length;
-  const ref = await addDoc(collection(db, "stories", storyId, "chapters"), {
+export async function createChapter(data: {
+  storyId: string;
+  title: string;
+  content: string;
+  order: number;
+  status: Chapter["status"];
+}): Promise<string> {
+  const wordCount = data.content.trim().split(/\s+/).filter(Boolean).length;
+  const ref = await addDoc(collection(db, "chapters"), {
     ...data,
-    storyId,
     wordCount,
     readCount: 0,
-    status: "pending_review",
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, "stories", data.storyId), {
+    chapterCount: increment(1),
     updatedAt: serverTimestamp(),
   });
   return ref.id;
 }
 
+export async function updateChapter(
+  chapterId: string,
+  data: Partial<Pick<Chapter, "title" | "content" | "status" | "moderationCategories" | "rejectionReason">>
+): Promise<void> {
+  const update: Record<string, unknown> = { ...data, updatedAt: serverTimestamp() };
+  if (data.content) {
+    update.wordCount = data.content.trim().split(/\s+/).filter(Boolean).length;
+  }
+  await updateDoc(doc(db, "chapters", chapterId), update);
+}
+
 // ─── Mesajlar ────────────────────────────────────────────────────────────────
+
+export function listenConversations(uid: string, callback: (convs: Conversation[]) => void) {
+  const q = query(collection(db, "conversations"), where("participants", "array-contains", uid));
+  return onSnapshot(q, (snap) => {
+    const sorted = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as Conversation))
+      .sort((a, b) => ((b.lastMessageAt as any)?.seconds ?? 0) - ((a.lastMessageAt as any)?.seconds ?? 0));
+    callback(sorted);
+  });
+}
 
 export async function getConversations(uid: string): Promise<Conversation[]> {
   const q = query(collection(db, "conversations"), where("participants", "array-contains", uid));
@@ -226,15 +290,18 @@ export async function getConversations(uid: string): Promise<Conversation[]> {
     .sort((a, b) => (b.lastMessageAt?.seconds ?? 0) - (a.lastMessageAt?.seconds ?? 0));
 }
 
-export async function getMessages(conversationId: string): Promise<Message[]> {
+export function listenMessages(conversationId: string, callback: (msgs: Message[]) => void) {
   const q = query(
     collection(db, "messages"),
     where("conversationId", "==", conversationId),
-    orderBy("createdAt", "asc"),
-    limit(100)
+    limit(200),
   );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message));
+  return onSnapshot(q, (snap) => {
+    const sorted = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as Message))
+      .sort((a, b) => ((a.createdAt as any)?.seconds ?? 0) - ((b.createdAt as any)?.seconds ?? 0));
+    callback(sorted);
+  });
 }
 
 export async function sendMessage(
@@ -244,6 +311,8 @@ export async function sendMessage(
     senderName: string;
     senderAvatar: string;
     text: string;
+    mediaUrl?: string;
+    mediaType?: "image" | "gif";
     receiverId: string;
   }
 ): Promise<void> {
@@ -253,10 +322,18 @@ export async function sendMessage(
     senderName: data.senderName,
     senderAvatar: data.senderAvatar,
     text: data.text,
+    ...(data.mediaUrl ? { mediaUrl: data.mediaUrl, mediaType: data.mediaType } : {}),
     createdAt: serverTimestamp(),
   });
+  const lastMessagePreview = data.text
+    ? data.text
+    : data.mediaType === "image"
+    ? "📷 Fotoğraf"
+    : data.mediaType === "gif"
+    ? "GIF"
+    : "";
   await updateDoc(doc(db, "conversations", conversationId), {
-    lastMessage: data.text,
+    lastMessage: lastMessagePreview,
     lastMessageAt: serverTimestamp(),
     [`unreadCount.${data.receiverId}`]: increment(1),
   });
@@ -268,26 +345,21 @@ export async function getOrCreateConversation(
   names: Record<string, string>,
   avatars: Record<string, string>
 ): Promise<string> {
-  const q = query(
-    collection(db, "conversations"),
-    where("participants", "array-contains", uid1)
-  );
-  const snap = await getDocs(q);
-  const existing = snap.docs.find((d) => {
-    const p = d.data().participants as string[];
-    return p.includes(uid2);
-  });
-  if (existing) return existing.id;
-  const ref = doc(collection(db, "conversations"));
-  await setDoc(ref, {
-    participants: [uid1, uid2],
-    participantNames: names,
-    participantAvatars: avatars,
-    lastMessage: "",
-    lastMessageAt: serverTimestamp(),
-    unreadCount: { [uid1]: 0, [uid2]: 0 },
-  });
-  return ref.id;
+  const conversationId = [uid1, uid2].sort().join("_");
+  const convRef = doc(db, "conversations", conversationId);
+  try {
+    await setDoc(convRef, {
+      participants: [uid1, uid2],
+      participantNames: names,
+      participantAvatars: avatars,
+      lastMessage: "",
+      lastMessageAt: serverTimestamp(),
+      unreadCount: { [uid1]: 0, [uid2]: 0 },
+    });
+  } catch {
+    // Zaten var — ID doğru, devam et.
+  }
+  return conversationId;
 }
 
 export async function markConversationRead(conversationId: string, uid: string): Promise<void> {
@@ -323,10 +395,10 @@ export async function followUser(followerId: string, followedId: string): Promis
 
 export async function unfollowUser(followerId: string, followedId: string): Promise<void> {
   const id = `${followerId}_${followedId}`;
-  const followRef = doc(db, "follows", id);
-  const snap = await getDoc(followRef);
+  const ref = doc(db, "follows", id);
+  const snap = await getDoc(ref);
   if (snap.exists()) {
-    await deleteDoc(followRef);
+    await deleteDoc(ref);
     await updateDoc(doc(db, "users", followedId), { followerCount: increment(-1) });
     await updateDoc(doc(db, "users", followerId), { followingCount: increment(-1) });
   }
