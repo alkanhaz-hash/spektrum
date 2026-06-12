@@ -688,3 +688,170 @@ export async function createNotification(data: {
     createdAt: serverTimestamp(),
   });
 }
+
+// ─── KULLANICI ENGELLEME ──────────────────────────────────────────────────────
+
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  await setDoc(doc(db, "blocks", `${blockerId}_${blockedId}`), {
+    blockerId,
+    blockedId,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  await deleteDoc(doc(db, "blocks", `${blockerId}_${blockedId}`));
+}
+
+export async function isUserBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, "blocks", `${blockerId}_${blockedId}`));
+  return snap.exists();
+}
+
+export async function getBlockedUserIds(uid: string): Promise<string[]> {
+  const q = query(collection(db, "blocks"), where("blockerId", "==", uid));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data().blockedId as string);
+}
+
+// ─── JETONLAR ─────────────────────────────────────────────────────────────────
+
+export interface JetonTransaction {
+  id: string;
+  uid: string;
+  type: "earn" | "spend" | "refund";
+  amount: number;
+  balanceAfter: number;
+  reason: string;
+  refId?: string;
+  createdAt: Timestamp;
+}
+
+export async function getJetonBalance(uid: string): Promise<number> {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return 0;
+  return (snap.data().jetonBalance as number) ?? 0;
+}
+
+export function subscribeJetonTransactions(
+  uid: string,
+  cb: (txs: JetonTransaction[]) => void
+): () => void {
+  const q = query(
+    collection(db, "jetonTransactions"),
+    where("uid", "==", uid),
+    orderBy("createdAt", "desc"),
+    limit(50)
+  );
+  return onSnapshot(q, snap => {
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as JetonTransaction)));
+  });
+}
+
+// ─── MODERATİF İŞLEMLER ──────────────────────────────────────────────────────
+
+export async function getPendingChapters(): Promise<(Chapter & { storyTitle?: string })[]> {
+  const q = query(collection(db, "chapters"), where("status", "==", "pending_review"));
+  const snap = await getDocs(q);
+  const chapters = snap.docs.map(d => ({ id: d.id, ...d.data() } as Chapter));
+  const enriched = await Promise.all(
+    chapters.map(async ch => {
+      try {
+        const storySnap = await getDoc(doc(db, "stories", ch.storyId));
+        const storyTitle = storySnap.exists() ? (storySnap.data().title as string) : undefined;
+        return { ...ch, storyTitle };
+      } catch {
+        return ch;
+      }
+    })
+  );
+  return enriched.sort((a, b) => {
+    const ta = a.createdAt?.toMillis?.() ?? 0;
+    const tb = b.createdAt?.toMillis?.() ?? 0;
+    return ta - tb;
+  });
+}
+
+export async function updateChapterStatus(
+  id: string,
+  status: Chapter["status"],
+  categories?: string[]
+): Promise<void> {
+  await updateDoc(doc(db, "chapters", id), {
+    status,
+    ...(categories ? { moderationCategories: categories } : {}),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  reportedId: string;
+  reportedType: "story" | "chapter" | "comment" | "user";
+  reason?: string;
+  status: "pending" | "resolved" | "dismissed";
+  createdAt: Timestamp;
+}
+
+export async function getReports(
+  status: "pending" | "resolved" | "dismissed" = "pending"
+): Promise<Report[]> {
+  const q = query(
+    collection(db, "reports"),
+    where("status", "==", status),
+    orderBy("createdAt", "desc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Report));
+}
+
+export async function resolveReport(
+  reportId: string,
+  resolution: "resolved" | "dismissed"
+): Promise<void> {
+  await updateDoc(doc(db, "reports", reportId), { status: resolution });
+}
+
+export async function banUser(uid: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { banned: true, banReason: reason });
+}
+
+export async function unbanUser(uid: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { banned: false, banReason: "" });
+}
+
+export interface UserSummary {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  role: "user" | "moderator" | "admin";
+  banned?: boolean;
+  banReason?: string;
+}
+
+export async function searchUsersForMod(term: string): Promise<UserSummary[]> {
+  if (!term.trim()) return [];
+  const lower = term.trim().toLowerCase();
+  const snap = await getDocs(query(collection(db, "users"), limit(200)));
+  return snap.docs
+    .map(d => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: data.displayName ?? "",
+        avatarUrl: data.avatarUrl ?? "",
+        role: (data.role ?? "user") as UserSummary["role"],
+        banned: data.banned ?? false,
+        banReason: data.banReason ?? "",
+      };
+    })
+    .filter(u => u.displayName.toLowerCase().includes(lower));
+}
+
+export async function setUserRole(
+  uid: string,
+  role: "user" | "moderator" | "admin"
+): Promise<void> {
+  await updateDoc(doc(db, "users", uid), { role });
+}

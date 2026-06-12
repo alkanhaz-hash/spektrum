@@ -525,6 +525,71 @@ export default function ProfileScreen() {
               <Feather name="log-out" size={18} color={colors.destructive} />
             </TouchableOpacity>
           </View>
+
+          {/* Menü */}
+          <View style={[s.menuSection, { borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/jetonlar")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}>
+                <Text style={s.menuEmoji}>⚡</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Jetonlarım</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>
+                  Bakiye · Paketler · İşlem Geçmişi
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            {(profile.role === "moderator" || profile.role === "admin") && (
+              <TouchableOpacity
+                style={[s.menuRow, { borderColor: colors.border }]}
+                onPress={() => router.push("/moderator")}
+              >
+                <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}>
+                  <Feather name="shield" size={17} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.menuLabel, { color: colors.foreground }]}>Moderatör Paneli</Text>
+                  <Text style={[s.menuSub, { color: colors.mutedForeground }]}>
+                    İnceleme · Şikayetler · Yönetim
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/kvkk")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: "#22c55e18" }]}>
+                <Feather name="lock" size={17} color="#22c55e" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>KVKK Aydınlatma Metni</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Kişisel verilerin korunması</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: "transparent" }]}
+              onPress={() => router.push("/terms")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: "#f59e0b18" }]}>
+                <Feather name="file-text" size={17} color="#f59e0b" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Kullanıcı Sözleşmesi</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Kullanım koşulları ve kurallar</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Hikayelerim */}
@@ -614,4 +679,10 @@ const s = StyleSheet.create({
   statusBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 2 },
   statusBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   destructive: { color: "#ef4444" },
+  menuSection: { borderWidth: 1, borderRadius: 16, overflow: "hidden", marginTop: 4 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1 },
+  menuIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  menuEmoji: { fontSize: 18 },
+  menuLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  menuSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
 });

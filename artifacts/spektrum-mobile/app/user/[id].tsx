@@ -27,6 +27,9 @@ import {
   getFollowers,
   getFollowing,
   createNotification,
+  blockUser,
+  unblockUser,
+  isUserBlocked,
   Story,
 } from "@/lib/firestore-service";
 
@@ -161,6 +164,8 @@ export default function UserProfileScreen() {
   const [followLoading, setFollowLoading] = useState(false);
   const [messaging, setMessaging] = useState(false);
   const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
+  const [blocked, setBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
 
   const isOwn = user?.uid === id;
 
@@ -179,8 +184,12 @@ export default function UserProfileScreen() {
         setProfile(p);
         setStories(s);
         if (user) {
-          const f = await isFollowing(user.uid, id);
+          const [f, bl] = await Promise.all([
+            isFollowing(user.uid, id),
+            isUserBlocked(user.uid, id),
+          ]);
           setFollowing(f);
+          setBlocked(bl);
         }
       } catch {
         /* sessiz */
@@ -219,6 +228,39 @@ export default function UserProfileScreen() {
     } finally {
       setFollowLoading(false);
     }
+  };
+
+  const handleBlock = async () => {
+    if (!user || !id) return;
+    Alert.alert(
+      blocked ? "Engeli Kaldır" : "Kullanıcıyı Engelle",
+      blocked
+        ? `${profile?.displayName ?? "Bu kullanıcı"} artık sana mesaj gönderebilir ve içeriklerini görebilirsin.`
+        : `${profile?.displayName ?? "Bu kullanıcı"} sana mesaj gönderemez ve içeriklerin bu kullanıcıdan gizlenir.`,
+      [
+        { text: "İptal", style: "cancel" },
+        {
+          text: blocked ? "Engeli Kaldır" : "Engelle",
+          style: blocked ? "default" : "destructive",
+          onPress: async () => {
+            setBlockLoading(true);
+            try {
+              if (blocked) {
+                await unblockUser(user.uid, id);
+                setBlocked(false);
+              } else {
+                await blockUser(user.uid, id);
+                setBlocked(true);
+              }
+            } catch {
+              Alert.alert("Hata", "İşlem başarısız oldu.");
+            } finally {
+              setBlockLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleMessage = async () => {
@@ -403,6 +445,30 @@ export default function UserProfileScreen() {
                 )}
               </TouchableOpacity>
             )}
+
+            {user && (
+              <TouchableOpacity
+                style={[
+                  s.blockBtn,
+                  blocked
+                    ? { borderColor: "#f59e0b55", backgroundColor: "#f59e0b11" }
+                    : { borderColor: "#ef444455", backgroundColor: "#ef444411" },
+                  blockLoading && { opacity: 0.6 },
+                ]}
+                onPress={handleBlock}
+                disabled={blockLoading}
+              >
+                {blockLoading ? (
+                  <ActivityIndicator size="small" color={blocked ? "#f59e0b" : "#ef4444"} />
+                ) : (
+                  <Feather
+                    name={blocked ? "shield-off" : "slash"}
+                    size={18}
+                    color={blocked ? "#f59e0b" : "#ef4444"}
+                  />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -482,6 +548,7 @@ const s = StyleSheet.create({
   followBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   msgBtn: { flex: 1, paddingVertical: 11, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },
   msgBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  blockBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   storiesSection: { paddingHorizontal: 16, paddingTop: 24, gap: 10 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
   emptyStories: { alignItems: "center", paddingVertical: 32, gap: 10 },
