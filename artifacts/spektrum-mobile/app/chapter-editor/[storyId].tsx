@@ -132,18 +132,16 @@ export default function ChapterEditorScreen() {
     try {
       const result = await moderateText(content.trim());
 
-      if (result.action === "rejected") {
-        setModerationStatus("rejected");
-        setModerationReason(result.reason);
-        publishedRef.current = false;
-        Alert.alert("Yayınlanamadı", result.reason || "İçerik uyumsuz bulundu.");
-        return;
-      }
-
       const chapterStatus: Chapter["status"] =
-        result.action === "approved" ? "published" : "pending_review";
+        result.action === "approved"
+          ? "published"
+          : result.action === "pending_review"
+          ? "pending_review"
+          : "rejected";
 
-      setModerationStatus(result.action === "approved" ? "approved" : "pending_review");
+      setModerationStatus(
+        chapterStatus === "published" ? "approved" : chapterStatus === "pending_review" ? "pending_review" : "rejected"
+      );
       setModerationReason(result.reason);
 
       if (!chapterId) {
@@ -160,10 +158,19 @@ export default function ChapterEditorScreen() {
           content: content.trim(),
           status: chapterStatus,
           ...(result.categories.length ? { moderationCategories: result.categories } : {}),
+          ...(result.reason && chapterStatus === "rejected" ? { rejectionReason: result.reason } : {}),
         });
       }
 
-      updateStory(storyId, { status: "published" }).catch(() => {});
+      if (chapterStatus === "rejected") {
+        publishedRef.current = false;
+        Alert.alert("Yayınlanamadı", result.reason || "İçerik uyumsuz bulundu.");
+        return;
+      }
+
+      if (chapterStatus === "published") {
+        updateStory(storyId, { status: "published" }).catch(() => {});
+      }
 
       setTimeout(() => {
         router.replace({ pathname: "/story-manage/[id]", params: { id: storyId } });
