@@ -40,6 +40,9 @@ jobs:
       - name: Android SDK kur
         uses: android-actions/setup-android@v3
 
+      - name: Android NDK kur
+        run: echo "y" | sdkmanager "ndk;27.1.12297006" --sdk_root=$ANDROID_HOME
+
       - name: Bağımlılıkları yükle
         run: pnpm install --no-frozen-lockfile
 
@@ -60,7 +63,7 @@ jobs:
 
       - name: APK derle (Gradle)
         working-directory: artifacts/spektrum-mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
