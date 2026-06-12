@@ -17,11 +17,11 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.spektrum.mobile",
+      "bundleIdentifier": "com.alkanhaz.spektrum",
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.spektrum.mobile",
+      "package": "com.alkanhaz.spektrum",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
