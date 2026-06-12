@@ -140,6 +140,7 @@ export default function ChatScreen() {
       const check = await checkImageSafety({
         mimeType: asset.mimeType,
         fileSize: asset.fileSize,
+        uri: asset.uri,
       });
       if (!check.safe && check.action === "rejected") {
         Alert.alert("Görsel Uygun Değil", check.reason ?? "Bu görsel gönderilemez.");

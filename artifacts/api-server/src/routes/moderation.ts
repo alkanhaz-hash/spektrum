@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { ModerateTextBody } from "@workspace/api-zod";
+import jpegjs from "jpeg-js";
 
 const router = Router();
 
@@ -166,7 +167,8 @@ router.post("/text", async (req: Request, res: Response) => {
 
 // ─── MEDIA MODERATION (mobil istemci) ────────────────────────────────────────
 // Web istemcisi tarayıcı tabanlı nsfwjs kullanır; mobil istemci bu endpoint'i çağırır.
-// Kabul edilen MIME türleri ve maksimum boyut denetlenir; içerik analizi kural tabanlıdır.
+// jpeg-js (pure-JS JPEG decoder) ile piksel seviyesi skin-tone analizi yapılır.
+// Daha doğru bir analiz için TF Lite model entegrasyonu yapılabilir (ilerleyen sprint).
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -177,11 +179,44 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const SKIN_RATIO_THRESHOLD = 0.45;       // %45'ten fazla skin-tone → uyarı
+
+/**
+ * Sempel (max 2500 piksel) üzerinde skin-tone oranı hesaplar.
+ * Eşik: Chai ve arkadaşlarının (1999) RGB skin modeli.
+ * R>95, G>40, B>20, max-min>15, |R-G|>15, R>G, R>B
+ */
+function skinRatio(data: Uint8Array, width: number, height: number): number {
+  const total = width * height;
+  const step = Math.max(1, Math.floor(total / 2500));
+  let skinCount = 0;
+  let sampleCount = 0;
+
+  for (let i = 0; i < total; i += step) {
+    const off = i * 4;
+    const r = data[off];
+    const g = data[off + 1];
+    const b = data[off + 2];
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    if (
+      r > 95 && g > 40 && b > 20 &&
+      mx - mn > 15 &&
+      Math.abs(r - g) > 15 &&
+      r > g && r > b
+    ) {
+      skinCount++;
+    }
+    sampleCount++;
+  }
+  return sampleCount === 0 ? 0 : skinCount / sampleCount;
+}
 
 router.post("/media", (req: Request, res: Response) => {
-  const { mimeType, fileSizeBytes } = req.body as {
+  const { mimeType, fileSizeBytes, imageBase64 } = req.body as {
     mimeType?: string;
     fileSizeBytes?: number;
+    imageBase64?: string;
   };
 
   if (!mimeType || typeof mimeType !== "string") {
@@ -209,6 +244,39 @@ router.post("/media", (req: Request, res: Response) => {
       reason: `Dosya boyutu çok büyük (${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB). Maksimum 10 MB izin verilir.`,
     });
     return;
+  }
+
+  // JPEG görsellerde piksel-seviyesi skin-tone analizi
+  if (
+    imageBase64 &&
+    (mimeType.toLowerCase() === "image/jpeg" || mimeType.toLowerCase() === "image/jpg")
+  ) {
+    try {
+      const buf = Buffer.from(imageBase64, "base64");
+      const decoded = jpegjs.decode(buf, { useTArray: true, maxMemoryUsageInMB: 50 });
+      const ratio = skinRatio(decoded.data, decoded.width, decoded.height);
+
+      if (ratio >= SKIN_RATIO_THRESHOLD) {
+        res.json({
+          safe: false,
+          action: "rejected",
+          categories: ["sexual"],
+          score: Math.min(1, ratio * 1.6),
+          reason: "Görselde uygunsuz (müstehcen/çıplaklık) içerik tespit edildi.",
+        });
+        return;
+      }
+    } catch {
+      // Decode başarısız → format invalid, reddet
+      res.json({
+        safe: false,
+        action: "rejected",
+        categories: ["invalid_image"],
+        score: 1,
+        reason: "Görsel okunamadı veya bozuk.",
+      });
+      return;
+    }
   }
 
   res.json({ safe: true, action: "approved", categories: [], score: 0, reason: null });

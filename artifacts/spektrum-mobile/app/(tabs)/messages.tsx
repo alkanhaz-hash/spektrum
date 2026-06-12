@@ -119,7 +119,14 @@ export default function MessagesScreen() {
                 <AvatarCircle name={otherName} color={avatarColor} />
                 <View style={styles.convInfo}>
                   <View style={styles.convTop}>
-                    <Text style={[styles.convName, { color: colors.foreground }]} numberOfLines={1}>
+                    <Text
+                      style={[
+                        styles.convName,
+                        { color: colors.foreground },
+                        unread > 0 && { fontFamily: "Inter_700Bold" },
+                      ]}
+                      numberOfLines={1}
+                    >
                       {otherName}
                     </Text>
                     <Text style={[styles.convTime, { color: colors.mutedForeground }]}>
