@@ -118,6 +118,7 @@ export default function MessagesPage() {
               const name = otherUid ? conv.participantNames[otherUid] : "Bilinmeyen";
               const avatar = otherUid ? conv.participantAvatars[otherUid] : "";
               const isActive = conv.id === conversationId;
+              const unread = conv.unreadCount?.[user.uid] ?? 0;
               return (
                 <button key={conv.id} onClick={() => setLocation(`/messages/${conv.id}`)}
                   className={`w-full flex items-center gap-3 p-4 text-left hover:bg-accent/50 transition-colors ${isActive ? "bg-primary/10 border-r-2 border-primary" : ""}`}
@@ -126,9 +127,14 @@ export default function MessagesPage() {
                     {avatar ? <img src={avatar} alt={name} className="w-full h-full rounded-full object-cover" /> : name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{conv.lastMessage || "Konuşma başladı"}</p>
+                    <p className={`text-sm truncate ${unread > 0 && !isActive ? "font-bold text-foreground" : "font-semibold"}`}>{name}</p>
+                    <p className={`text-xs truncate ${unread > 0 && !isActive ? "text-foreground/70" : "text-muted-foreground"}`}>{conv.lastMessage || "Konuşma başladı"}</p>
                   </div>
+                  {unread > 0 && !isActive && (
+                    <span className="shrink-0 min-w-[1.25rem] h-5 px-1 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </button>
               );
             })}
