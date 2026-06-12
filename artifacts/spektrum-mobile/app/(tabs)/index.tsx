@@ -17,6 +17,7 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTrendingStories, Story } from "@/lib/firestore-service";
+import MobileStatusBar from "@/components/MobileStatusBar";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = SCREEN_W - 32;
@@ -174,12 +175,15 @@ export default function HomeScreen() {
             />
           }
           ListHeaderComponent={
-            <View style={styles.sectionHeader}>
-              <Feather name="trending-up" size={16} color={colors.primary} />
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Trend Hikayeler</Text>
-              <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
-                En yüksek etkileşim
-              </Text>
+            <View>
+              <MobileStatusBar />
+              <View style={[styles.sectionHeader, { marginTop: 16 }]}>
+                <Feather name="trending-up" size={16} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Trend Hikayeler</Text>
+                <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
+                  En yüksek etkileşim
+                </Text>
+              </View>
             </View>
           }
           ListEmptyComponent={
