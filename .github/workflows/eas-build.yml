@@ -20,16 +20,16 @@ jobs:
       - name: Kodu indir
         uses: actions/checkout@v4
 
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Node.js kur
         uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: pnpm
-
-      - name: pnpm kur
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Bağımlılıkları yükle
         working-directory: artifacts/spektrum-mobile
