@@ -164,8 +164,54 @@ router.post("/text", async (req: Request, res: Response) => {
   });
 });
 
-// NOT: Görsel/medya moderasyonu artık tamamen istemci tarafında (tarayıcıda)
-// nsfwjs ile yapılıyor — bkz. spektrum/src/lib/nsfw-service.ts. Bu sayede sıfır
-// sunucu yükü ve sıfır AI kredisi harcanır. Sunucu yalnızca metin moderasyonu yapar.
+// ─── MEDIA MODERATION (mobil istemci) ────────────────────────────────────────
+// Web istemcisi tarayıcı tabanlı nsfwjs kullanır; mobil istemci bu endpoint'i çağırır.
+// Kabul edilen MIME türleri ve maksimum boyut denetlenir; içerik analizi kural tabanlıdır.
+
+const ALLOWED_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+router.post("/media", (req: Request, res: Response) => {
+  const { mimeType, fileSizeBytes } = req.body as {
+    mimeType?: string;
+    fileSizeBytes?: number;
+  };
+
+  if (!mimeType || typeof mimeType !== "string") {
+    res.status(400).json({ error: "mimeType gerekli" });
+    return;
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(mimeType.toLowerCase())) {
+    res.json({
+      safe: false,
+      action: "rejected",
+      categories: ["unsupported_format"],
+      score: 1,
+      reason: `Desteklenmeyen dosya türü: ${mimeType}. Yalnızca JPEG, PNG, WebP ve GIF kabul edilir.`,
+    });
+    return;
+  }
+
+  if (typeof fileSizeBytes === "number" && fileSizeBytes > MAX_SIZE_BYTES) {
+    res.json({
+      safe: false,
+      action: "rejected",
+      categories: ["file_too_large"],
+      score: 1,
+      reason: `Dosya boyutu çok büyük (${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB). Maksimum 10 MB izin verilir.`,
+    });
+    return;
+  }
+
+  res.json({ safe: true, action: "approved", categories: [], score: 0, reason: null });
+});
 
 export default router;

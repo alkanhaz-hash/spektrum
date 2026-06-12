@@ -26,6 +26,7 @@ import {
   Message,
 } from "@/lib/firestore-service";
 import { uploadMessageMedia } from "@/lib/storage-service";
+import { checkImageSafety } from "@/lib/moderation-service";
 
 const EMOJIS = ["😂", "❤️", "🔥", "👏", "😭", "🙌", "✨", "💜", "🎉", "😍", "🤩", "💯"];
 
@@ -135,7 +136,16 @@ export default function ChatScreen() {
 
     setSending(true);
     try {
-      const url = await uploadMessageMedia(convId, result.assets[0].uri);
+      const asset = result.assets[0];
+      const check = await checkImageSafety({
+        mimeType: asset.mimeType,
+        fileSize: asset.fileSize,
+      });
+      if (!check.safe && check.action === "rejected") {
+        Alert.alert("Görsel Uygun Değil", check.reason ?? "Bu görsel gönderilemez.");
+        return;
+      }
+      const url = await uploadMessageMedia(convId, asset.uri);
       await sendMessage(convId, {
         senderId: user.uid,
         senderName: profile.displayName,

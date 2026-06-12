@@ -13,6 +13,34 @@ function getApiBase(): string {
   return base;
 }
 
+export async function checkImageSafety(asset: {
+  mimeType?: string | null;
+  fileSize?: number | null;
+}): Promise<ModerationResult> {
+  const apiBase = getApiBase();
+  const url = `${apiBase}/api/moderation/media`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mimeType: asset.mimeType ?? "image/jpeg",
+        fileSizeBytes: asset.fileSize ?? 0,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json() as Promise<ModerationResult>;
+  } catch {
+    return {
+      safe: true,
+      action: "pending_review",
+      categories: [],
+      score: 0,
+      reason: "Moderasyon servisine ulaşılamadı; görsel incelemeye alındı.",
+    };
+  }
+}
+
 export async function moderateText(text: string): Promise<ModerationResult> {
   const apiBase = getApiBase();
   const url = `${apiBase}/api/moderation/text`;
