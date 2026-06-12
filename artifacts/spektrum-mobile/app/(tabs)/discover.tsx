@@ -158,12 +158,20 @@ export default function DiscoverScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Keşfet</Text>
-        {genre && (
-          <TouchableOpacity onPress={clearFilter} style={[styles.clearBtn, { borderColor: colors.primary + "60" }]}>
-            <Text style={[styles.clearBtnText, { color: colors.primary }]}>Filtreyi Temizle</Text>
-            <Feather name="x" size={13} color={colors.primary} />
+        <View style={styles.headerRight}>
+          {genre && (
+            <TouchableOpacity onPress={clearFilter} style={[styles.clearBtn, { borderColor: colors.primary + "60" }]}>
+              <Text style={[styles.clearBtnText, { color: colors.primary }]}>Filtreyi Temizle</Text>
+              <Feather name="x" size={13} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            onPress={() => router.push("/search")}
+            style={[styles.searchIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Feather name="search" size={18} color={colors.foreground} />
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       {/* Arama */}
@@ -297,6 +305,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  searchIconBtn: { width: 36, height: 36, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   clearBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1,

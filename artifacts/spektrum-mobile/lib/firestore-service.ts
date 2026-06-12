@@ -430,6 +430,96 @@ export async function getFollowing(uid: string): Promise<import("./auth-service"
   return profiles.filter((p): p is import("./auth-service").UserProfile => p !== null);
 }
 
+// ─── Kullanıcı arama ──────────────────────────────────────────────────────────
+
+export interface UserSearchResult {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  bio?: string;
+  storyCount?: number;
+  followerCount?: number;
+}
+
+export async function searchUsers(term: string): Promise<UserSearchResult[]> {
+  const t = term.trim().toLocaleLowerCase("tr");
+  if (!t) return [];
+  const snap = await getDocs(query(collection(db, "users"), limit(200)));
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: data.displayName ?? "",
+        avatarUrl: data.avatarUrl ?? "",
+        bio: data.bio ?? "",
+        storyCount: data.storyCount ?? 0,
+        followerCount: data.followerCount ?? 0,
+      } as UserSearchResult;
+    })
+    .filter(
+      (u) =>
+        u.displayName.toLocaleLowerCase("tr").includes(t) ||
+        (u.bio ?? "").toLocaleLowerCase("tr").includes(t)
+    );
+}
+
+// ─── Bildirimler ──────────────────────────────────────────────────────────────
+
+export interface SpektrumNotification {
+  id: string;
+  recipientId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected";
+  storyId?: string;
+  storyTitle?: string;
+  read: boolean;
+  createdAt: Timestamp;
+}
+
+export function getNotifications(
+  userId: string,
+  callback: (notifs: SpektrumNotification[]) => void
+): () => void {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    limit(50)
+  );
+  return onSnapshot(q, (snap) => {
+    const notifs = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as SpektrumNotification))
+      .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+    callback(notifs);
+  });
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    where("read", "==", false)
+  );
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { read: true })));
+}
+
+export async function markNotificationRead(notifId: string): Promise<void> {
+  await updateDoc(doc(db, "notifications", notifId), { read: true });
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    where("read", "==", false)
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
 export async function createNotification(data: {
   recipientId: string;
   senderId: string;

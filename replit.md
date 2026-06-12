@@ -64,6 +64,7 @@ Futuristik Türkçe dijital hikaye anlatımı ve yazarlık platformu. Dark mode,
 ## User preferences
 
 - Ajan iletişimi: SADECE Türkçe (kullanıcı İngilizce bilmiyor) — hiç İngilizce kullanma
+- Dosya yazma işlemlerini sırayla yap, paralel yazma
 - Türkçe UI dili
 - Dark mode varsayılan (geçiş yok)
 - Firebase backend (Replit DB değil)

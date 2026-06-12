@@ -4,10 +4,58 @@ import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Platform, StyleSheet, View, Text, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/contexts/AuthContext";
+import { getUnreadNotificationCount } from "@/lib/firestore-service";
+
+// ─── Bildirim rozeti bileşeni ─────────────────────────────────────────────────
+
+function NotifBadge({ count, color }: { count: number; color: string }) {
+  if (count <= 0) return null;
+  return (
+    <View style={[badge.wrap, { backgroundColor: color }]}>
+      <Text style={badge.text}>{count > 99 ? "99+" : count}</Text>
+    </View>
+  );
+}
+
+const badge = StyleSheet.create({
+  wrap: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  text: { color: "#fff", fontSize: 9, fontFamily: "Inter_700Bold" },
+});
+
+// ─── Bildirim rozeti kancası ──────────────────────────────────────────────────
+
+function useUnreadCount(): number {
+  const { user } = useAuth();
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setCount(0); return; }
+    let cancelled = false;
+    getUnreadNotificationCount(user.uid)
+      .then((n) => { if (!cancelled) setCount(n); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
+  return count;
+}
+
+// ─── Native sekmeler (iOS Liquid Glass) ──────────────────────────────────────
 
 function NativeTabLayout() {
   return (
@@ -17,7 +65,7 @@ function NativeTabLayout() {
         <Label>Ana Sayfa</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="discover">
-        <Icon sf={{ default: "magnifyingglass", selected: "magnifyingglass" }} />
+        <Icon sf={{ default: "books.vertical", selected: "books.vertical.fill" }} />
         <Label>Keşfet</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="write">
@@ -28,6 +76,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} />
         <Label>Mesajlar</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="notifications">
+        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
+        <Label>Bildirimler</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />
         <Label>Profil</Label>
@@ -36,12 +88,15 @@ function NativeTabLayout() {
   );
 }
 
+// ─── Klasik sekmeler ──────────────────────────────────────────────────────────
+
 function ClassicTabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const unreadCount = useUnreadCount();
 
   return (
     <Tabs
@@ -87,9 +142,9 @@ function ClassicTabLayout() {
           title: "Keşfet",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="magnifyingglass" tintColor={color} size={24} />
+              <SymbolView name="books.vertical" tintColor={color} size={24} />
             ) : (
-              <Feather name="search" size={22} color={color} />
+              <Feather name="compass" size={22} color={color} />
             ),
         }}
       />
@@ -118,6 +173,24 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notifications"
+        options={{
+          title: "Bildirimler",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <View>
+                <SymbolView name="bell" tintColor={color} size={24} />
+                <NotifBadge count={unreadCount} color={colors.primary} />
+              </View>
+            ) : (
+              <View>
+                <Feather name="bell" size={22} color={color} />
+                <NotifBadge count={unreadCount} color={colors.primary} />
+              </View>
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profil",
@@ -132,6 +205,8 @@ function ClassicTabLayout() {
     </Tabs>
   );
 }
+
+// ─── Dışa aktarılan bileşen ───────────────────────────────────────────────────
 
 export default function TabLayout() {
   if (isLiquidGlassAvailable()) {
