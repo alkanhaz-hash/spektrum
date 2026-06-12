@@ -2,4 +2,5 @@
 - [Security scan triage (SPEKTRUM)](security-scan-notes.md) — Firebase web key flagged as "secret" is a false positive (public by design); nosemgrep must sit directly above the match line; qs vuln fixed via workspace override.
 - [Firestore rules missing field](firestore-rules-missing-field.md) — .get(field,default) kullanmadan doğrudan alan erişimi eski belgelerde kural hatasına ve tüm güncelleme reddine yol açar.
 - [Moderator role real-time](moderator-role-realtime.md) — onSnapshot ile canlı profil aboneliği; konsol değişiklikleri anında yansır, logout-login gerekmez.
+- [Mobile workflow health check](mobile-workflow-health-check.md) — kind=mobile port 24811 restart_workflow'dan erişilemiyor; manuel Run butonu ile başlat.
 - [Firestore query vs rule mismatch](firestore-query-rule-mismatch.md) — Sorgu filtresi olmayan collection query, belge-seviyesi okuma kuralını ihlal ederse tüm sorgu reddedilir; client-side filter yeterli değil.

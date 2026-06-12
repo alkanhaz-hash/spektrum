@@ -3,14 +3,13 @@ previewPath = "/spektrum-mobile/"
 title = "SPEKTRUM Mobil"
 version = "1.0.0"
 id = "artifacts/spektrum-mobile"
-router = "expo-domain"
+router = "path"
 
 [[integratedSkills]]
 name = "expo"
 version = "1.0.0"
 
 [[services]]
-ensurePreviewReachable = "/status"
 name = "expo"
 paths = [ "/spektrum-mobile/" ]
 localPort = 24811
