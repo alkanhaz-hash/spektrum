@@ -403,3 +403,38 @@ export async function unfollowUser(followerId: string, followedId: string): Prom
     await updateDoc(doc(db, "users", followerId), { followingCount: increment(-1) });
   }
 }
+
+export async function getFollowers(uid: string): Promise<import("./auth-service").UserProfile[]> {
+  const { getUserProfile } = await import("./auth-service");
+  const q = query(collection(db, "follows"), where("followedId", "==", uid));
+  const snap = await getDocs(q);
+  const ids = snap.docs.map((d) => d.data().followerId as string);
+  const profiles = await Promise.all(ids.map((id) => getUserProfile(id)));
+  return profiles.filter((p): p is import("./auth-service").UserProfile => p !== null);
+}
+
+export async function getFollowing(uid: string): Promise<import("./auth-service").UserProfile[]> {
+  const { getUserProfile } = await import("./auth-service");
+  const q = query(collection(db, "follows"), where("followerId", "==", uid));
+  const snap = await getDocs(q);
+  const ids = snap.docs.map((d) => d.data().followedId as string);
+  const profiles = await Promise.all(ids.map((id) => getUserProfile(id)));
+  return profiles.filter((p): p is import("./auth-service").UserProfile => p !== null);
+}
+
+export async function createNotification(data: {
+  recipientId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  type: "follow" | "like" | "comment" | "chapter_published";
+  storyId?: string;
+  storyTitle?: string;
+}): Promise<void> {
+  if (data.recipientId === data.senderId) return;
+  await addDoc(collection(db, "notifications"), {
+    ...data,
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+}
