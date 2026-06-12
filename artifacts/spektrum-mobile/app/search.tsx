@@ -120,6 +120,7 @@ export default function SearchScreen() {
       setStories([]);
       setUsers([]);
       setSearched(false);
+      setLoading(false);
       return;
     }
     setLoading(true);

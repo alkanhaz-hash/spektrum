@@ -535,7 +535,7 @@ export async function createNotification(data: {
   senderId: string;
   senderName: string;
   senderAvatar: string;
-  type: "follow" | "like" | "comment" | "chapter_published";
+  type: SpektrumNotification["type"];
   storyId?: string;
   storyTitle?: string;
 }): Promise<void> {
