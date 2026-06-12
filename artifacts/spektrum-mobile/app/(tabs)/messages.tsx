@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
-import { getConversations, Conversation } from "@/lib/firestore-service";
+import { listenConversations, Conversation } from "@/lib/firestore-service";
 
 function timeAgo(ts?: { seconds: number }): string {
   if (!ts) return "";
@@ -65,23 +65,21 @@ const AVATAR_COLORS = ["#7c3aed", "#06b6d4", "#ec4899", "#f59e0b", "#22c55e"];
 export default function MessagesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    try {
-      const data = await getConversations(user.uid);
-      setConversations(data);
-    } catch { /* sessiz */ }
-    finally { setLoading(false); }
-  }, [user]);
-
   useEffect(() => {
-    if (user) load();
-    else setLoading(false);
-  }, [user, load]);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    const unsub = listenConversations(user.uid, (convs) => {
+      setConversations(convs);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [user]);
 
   if (!user) return <LoginPrompt />;
 

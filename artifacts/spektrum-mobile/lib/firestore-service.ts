@@ -368,6 +368,14 @@ export async function markConversationRead(conversationId: string, uid: string):
   });
 }
 
+export async function isMutuallyBlocked(uid1: string, uid2: string): Promise<boolean> {
+  const [snap1, snap2] = await Promise.all([
+    getDocs(query(collection(db, "blocks"), where("blockerId", "==", uid1), where("blockedId", "==", uid2), limit(1))),
+    getDocs(query(collection(db, "blocks"), where("blockerId", "==", uid2), where("blockedId", "==", uid1), limit(1))),
+  ]);
+  return !snap1.empty || !snap2.empty;
+}
+
 // ─── Takip ────────────────────────────────────────────────────────────────────
 
 export async function isFollowing(followerId: string, followedId: string): Promise<boolean> {
