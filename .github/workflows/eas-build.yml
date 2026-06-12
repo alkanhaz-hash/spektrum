@@ -32,7 +32,6 @@ jobs:
           cache: pnpm
 
       - name: Bağımlılıkları yükle
-        working-directory: artifacts/spektrum-mobile
         run: pnpm install --frozen-lockfile
 
       - name: EAS CLI kur
