@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+import express, { Router, Request, Response } from "express";
 import { ModerateTextBody } from "@workspace/api-zod";
 import jpegjs from "jpeg-js";
 
@@ -212,7 +212,10 @@ function skinRatio(data: Uint8Array, width: number, height: number): number {
   return sampleCount === 0 ? 0 : skinCount / sampleCount;
 }
 
-router.post("/media", (req: Request, res: Response) => {
+// Sadece bu rota için JSON body limitini artır (base64 kodlama ~%33 şişirir).
+// 12 MB limit → maks. ~9 MB gerçek görsel verisi; MAX_SIZE_BYTES (10 MB) ile tutarlı.
+// express.json() ile global limit değiştirilmez, güvenlik riski oluşmaz.
+router.post("/media", express.json({ limit: "12mb" }), (req: Request, res: Response) => {
   const { mimeType, fileSizeBytes, imageBase64 } = req.body as {
     mimeType?: string;
     fileSizeBytes?: number;
