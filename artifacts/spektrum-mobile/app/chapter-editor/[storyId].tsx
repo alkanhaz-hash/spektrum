@@ -144,14 +144,27 @@ export default function ChapterEditorScreen() {
       );
       setModerationReason(result.reason);
 
+      let targetChapterId = chapterId;
       if (!chapterId) {
-        await createChapter({
+        targetChapterId = await createChapter({
           storyId,
           title: title.trim(),
           content: content.trim(),
           order: nextOrder,
           status: chapterStatus,
         });
+        if (
+          (result.categories.length || result.reason) &&
+          targetChapterId
+        ) {
+          await updateChapter(targetChapterId, {
+            title: title.trim(),
+            content: content.trim(),
+            status: chapterStatus,
+            ...(result.categories.length ? { moderationCategories: result.categories } : {}),
+            ...(result.reason && chapterStatus === "rejected" ? { rejectionReason: result.reason } : {}),
+          });
+        }
       } else {
         await updateChapter(chapterId, {
           title: title.trim(),
@@ -168,7 +181,7 @@ export default function ChapterEditorScreen() {
         return;
       }
 
-      if (chapterStatus === "published") {
+      if (chapterStatus === "published" || chapterStatus === "pending_review") {
         updateStory(storyId, { status: "published" }).catch(() => {});
       }
 
