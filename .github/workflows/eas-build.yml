@@ -37,11 +37,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Android SDK kur
+      - name: Android SDK + NDK kur
         uses: android-actions/setup-android@v3
 
-      - name: Android NDK kur
-        run: echo "y" | sdkmanager "ndk;27.1.12297006" --sdk_root=$ANDROID_HOME
+      - name: NDK 27 kur
+        run: sdkmanager "ndk;27.1.12297006"
 
       - name: Bağımlılıkları yükle
         run: pnpm install --no-frozen-lockfile
@@ -61,18 +61,25 @@ jobs:
           EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
           EXPO_PUBLIC_API_BASE: ${{ secrets.EXPO_PUBLIC_API_BASE }}
 
+      - name: local.properties oluştur
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > artifacts/spektrum-mobile/android/local.properties
+          echo "ndk.dir=$ANDROID_HOME/ndk/27.1.12297006" >> artifacts/spektrum-mobile/android/local.properties
+          echo "--- local.properties içeriği ---"
+          cat artifacts/spektrum-mobile/android/local.properties
+
       - name: APK derle (Gradle)
         working-directory: artifacts/spektrum-mobile/android
         run: |
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/gradle.log
+          ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee /tmp/gradle.log
           EXIT_CODE=${PIPESTATUS[0]}
           if [ $EXIT_CODE -ne 0 ]; then
             echo "=== HATA ÖZETI ==="
-            grep -n "FAILED\|error:\|Error\|Exception\|Could not\|> Task" /tmp/gradle.log | grep -v "^Binary\|\.java:[0-9]" | head -60
+            grep -n "FAILED\|error:\|> Task\|Caused by\|Could not" /tmp/gradle.log | grep -v "warning\|deprecated" | head -60
             exit $EXIT_CODE
           fi
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
 
       - name: APK kaydet
         uses: actions/upload-artifact@v4
