@@ -9,7 +9,7 @@ import { Platform, StyleSheet, View, Text, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUnreadNotificationCount } from "@/lib/firestore-service";
+import { listenUnreadNotificationCount } from "@/lib/firestore-service";
 
 // ─── Bildirim rozeti bileşeni ─────────────────────────────────────────────────
 
@@ -45,11 +45,8 @@ function useUnreadCount(): number {
 
   useEffect(() => {
     if (!user) { setCount(0); return; }
-    let cancelled = false;
-    getUnreadNotificationCount(user.uid)
-      .then((n) => { if (!cancelled) setCount(n); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const unsub = listenUnreadNotificationCount(user.uid, setCount);
+    return unsub;
   }, [user]);
 
   return count;
@@ -58,6 +55,7 @@ function useUnreadCount(): number {
 // ─── Native sekmeler (iOS Liquid Glass) ──────────────────────────────────────
 
 function NativeTabLayout() {
+  const unreadCount = useUnreadCount();
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
@@ -77,8 +75,8 @@ function NativeTabLayout() {
         <Label>Mesajlar</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="notifications">
-        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
-        <Label>Bildirimler</Label>
+        <Icon sf={{ default: unreadCount > 0 ? "bell.badge" : "bell", selected: unreadCount > 0 ? "bell.badge.fill" : "bell.fill" }} />
+        <Label>{unreadCount > 0 ? `Bildirimler (${unreadCount > 99 ? "99+" : unreadCount})` : "Bildirimler"}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person", selected: "person.fill" }} />

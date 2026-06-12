@@ -486,13 +486,11 @@ export function getNotifications(
   const q = query(
     collection(db, "notifications"),
     where("recipientId", "==", userId),
+    orderBy("createdAt", "desc"),
     limit(50)
   );
   return onSnapshot(q, (snap) => {
-    const notifs = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as SpektrumNotification))
-      .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-    callback(notifs);
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SpektrumNotification)));
   });
 }
 
@@ -518,6 +516,18 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
   );
   const snap = await getDocs(q);
   return snap.size;
+}
+
+export function listenUnreadNotificationCount(
+  userId: string,
+  callback: (count: number) => void
+): () => void {
+  const q = query(
+    collection(db, "notifications"),
+    where("recipientId", "==", userId),
+    where("read", "==", false)
+  );
+  return onSnapshot(q, (snap) => callback(snap.size));
 }
 
 export async function createNotification(data: {

@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
-import { searchStories, searchUsers, Story, UserSearchResult } from "@/lib/firestore-service";
+import { searchStories, searchUsers, Story, UserSearchResult, GENRES } from "@/lib/firestore-service";
 
 type Tab = "stories" | "users";
 
@@ -206,12 +206,26 @@ export default function SearchScreen() {
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : !searched && term.trim().length < 2 ? (
-        <View style={styles.center}>
-          <Feather name="search" size={44} color={colors.mutedForeground + "40"} />
-          <Text style={[styles.hint, { color: colors.mutedForeground }]}>
-            Aramak için en az 2 karakter gir.
+        <ScrollView
+          contentContainerStyle={[styles.genresWrap, { paddingBottom: insets.bottom + 40 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={[styles.genresTitle, { color: colors.mutedForeground }]}>
+            Popüler türlere göz at
           </Text>
-        </View>
+          <View style={styles.genreGrid}>
+            {GENRES.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.suggestionPill, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => setTerm(g)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.suggestionPillText, { color: colors.foreground }]}>{g}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       ) : tab === "stories" ? (
         stories.length === 0 ? (
           <View style={styles.center}>
@@ -294,6 +308,12 @@ const styles = StyleSheet.create({
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   hint: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+
+  genresWrap: { padding: 20 },
+  genresTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 14, textTransform: "uppercase", letterSpacing: 0.8 },
+  genreGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  suggestionPill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
+  suggestionPillText: { fontSize: 14, fontFamily: "Inter_500Medium" },
 
   storyRow: {
     flexDirection: "row",
