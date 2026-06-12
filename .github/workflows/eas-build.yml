@@ -37,6 +37,12 @@ jobs:
       - name: EAS CLI kur
         run: npm install -g eas-cli
 
+      - name: EAS projesi başlat
+        working-directory: artifacts/spektrum-mobile
+        run: eas init --non-interactive --force
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Android derlemesi başlat
         working-directory: artifacts/spektrum-mobile
         run: eas build -p android --profile ${{ github.event.inputs.profile }} --non-interactive
