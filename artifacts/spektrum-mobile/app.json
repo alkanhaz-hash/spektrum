@@ -57,6 +57,12 @@
       "expo-font",
       "expo-web-browser",
       [
+        "react-native-iap",
+        {
+          "paymentProvider": "Play Store"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "SPEKTRUM fotoğraf seçmek için galeri erişimi istiyor.",

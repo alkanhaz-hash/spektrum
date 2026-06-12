@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -15,26 +16,29 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getJetonBalance,
   subscribeJetonTransactions,
-  JetonTransaction,
+  recordIapPurchase,
+  type JetonTransaction,
 } from "@/lib/firestore-service";
 import {
   JETON_PACKAGES,
   JETON_COSTS,
   WORDS_PER_JETON,
   MIN_CHAPTER_COST,
+  type JetonPackage,
 } from "@/lib/jeton-packages";
+import { useIap } from "@/lib/iap-service";
+import type { Purchase } from "react-native-iap";
 
 // ─── İşlem tipi etiketi ───────────────────────────────────────────────────────
 
 function txLabel(tx: JetonTransaction): string {
-  if (tx.type === "earn") return "+" + tx.amount + " ₿";
-  if (tx.type === "refund") return "+" + tx.amount + " ₿ (iade)";
-  return "-" + tx.amount + " ₿";
+  if (tx.type === "earn") return "+" + tx.amount + " ⚡";
+  if (tx.type === "refund") return "+" + tx.amount + " ⚡ (iade)";
+  return "-" + tx.amount + " ⚡";
 }
 
 function txColor(tx: JetonTransaction, colors: ReturnType<typeof useColors>): string {
-  if (tx.type === "earn" || tx.type === "refund") return "#22c55e";
-  return "#ef4444";
+  return tx.type === "earn" || tx.type === "refund" ? "#22c55e" : "#ef4444";
 }
 
 function formatDate(ts: JetonTransaction["createdAt"]): string {
@@ -59,15 +63,35 @@ export default function JetonlarScreen() {
   const [loadingBalance, setLoadingBalance] = useState(true);
   const [tab, setTab] = useState<"market" | "history">("market");
 
+  // IAP satın alma başarı handler'ı
+  const handlePurchaseSuccess = useCallback(
+    async (pkg: JetonPackage, purchase: Purchase) => {
+      if (!user) return;
+      await recordIapPurchase({
+        uid: user.uid,
+        packageId: pkg.id,
+        productId: pkg.productId,
+        totalJeton: pkg.totalJeton,
+        orderId: purchase.transactionId ?? purchase.productId,
+      });
+      setBalance(prev => prev + pkg.totalJeton);
+      Alert.alert(
+        "Satın Alma Başarılı! 🎉",
+        `${pkg.totalJeton.toLocaleString("tr")} jeton hesabına eklendi.`,
+        [{ text: "Harika!" }]
+      );
+    },
+    [user]
+  );
+
+  const { status: iapStatus, purchasePackage, getPriceFor } = useIap(handlePurchaseSuccess);
+
   useEffect(() => {
     if (!user) return;
     getJetonBalance(user.uid)
       .then(b => { setBalance(b); setLoadingBalance(false); })
       .catch(() => setLoadingBalance(false));
-    const unsub = subscribeJetonTransactions(user.uid, txs => {
-      setTransactions(txs);
-    });
-    return unsub;
+    return subscribeJetonTransactions(user.uid, setTransactions);
   }, [user]);
 
   if (!user || !profile) {
@@ -75,15 +99,21 @@ export default function JetonlarScreen() {
       <View style={[s.center, { backgroundColor: colors.background, paddingTop: insets.top }]}>
         <Feather name="lock" size={40} color={colors.mutedForeground} />
         <Text style={[s.emptyText, { color: colors.mutedForeground }]}>Giriş yapman gerekiyor</Text>
-        <TouchableOpacity style={[s.loginBtn, { backgroundColor: colors.primary }]} onPress={() => router.push("/auth")}>
+        <TouchableOpacity
+          style={[s.loginBtn, { backgroundColor: colors.primary }]}
+          onPress={() => router.push("/auth")}
+        >
           <Text style={s.loginBtnText}>Giriş Yap</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
+  const isPurchasing = iapStatus === "purchasing";
+
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
+
       {/* Başlık */}
       <View style={[s.header, { paddingTop: insets.top + 8, borderColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
@@ -113,18 +143,17 @@ export default function JetonlarScreen() {
 
       {/* Sekmeler */}
       <View style={[s.tabs, { borderColor: colors.border }]}>
-        <TouchableOpacity
-          style={[s.tabBtn, tab === "market" && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-          onPress={() => setTab("market")}
-        >
-          <Text style={[s.tabText, { color: tab === "market" ? colors.primary : colors.mutedForeground }]}>Paketler</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.tabBtn, tab === "history" && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-          onPress={() => setTab("history")}
-        >
-          <Text style={[s.tabText, { color: tab === "history" ? colors.primary : colors.mutedForeground }]}>İşlem Geçmişi</Text>
-        </TouchableOpacity>
+        {(["market", "history"] as const).map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[s.tabBtn, tab === t && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+            onPress={() => setTab(t)}
+          >
+            <Text style={[s.tabText, { color: tab === t ? colors.primary : colors.mutedForeground }]}>
+              {t === "market" ? "Paketler" : "İşlem Geçmişi"}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <ScrollView
@@ -133,7 +162,16 @@ export default function JetonlarScreen() {
       >
         {tab === "market" && (
           <>
-            {/* Fiyatlandırma bilgisi */}
+            {/* IAP durum uyarısı */}
+            {iapStatus === "error" && (
+              <View style={[s.warnBox, { backgroundColor: "#ef444418", borderColor: "#ef444440" }]}>
+                <Feather name="wifi-off" size={14} color="#ef4444" />
+                <Text style={[s.warnText, { color: "#ef4444" }]}>
+                  Google Play'e bağlanılamadı. İnternet bağlantını kontrol et.
+                </Text>
+              </View>
+            )}
+
             <View style={[s.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Feather name="info" size={16} color={colors.mutedForeground} style={{ marginTop: 1 }} />
               <Text style={[s.infoText, { color: colors.mutedForeground }]}>
@@ -142,46 +180,71 @@ export default function JetonlarScreen() {
             </View>
 
             {/* Paket kartları */}
-            {JETON_PACKAGES.map(pkg => (
-              <View
-                key={pkg.id}
-                style={[
-                  s.packageCard,
-                  { backgroundColor: colors.card, borderColor: pkg.popular ? colors.primary : colors.border },
-                ]}
-              >
-                {pkg.popular && (
-                  <View style={[s.popularBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={s.popularBadgeText}>🔥 Popüler</Text>
-                  </View>
-                )}
-                <View style={s.packageRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[s.packageLabel, { color: colors.foreground }]}>{pkg.label}</Text>
-                    <Text style={[s.packageJeton, { color: colors.primary }]}>
-                      ⚡ {pkg.totalJeton.toLocaleString("tr")} Jeton
-                      {pkg.bonusAmount > 0 && (
-                        <Text style={[s.packageBonus, { color: "#22c55e" }]}> (+{pkg.bonusAmount} bonus)</Text>
+            {JETON_PACKAGES.map(pkg => {
+              const livePrice = getPriceFor(pkg.productId);
+              const displayPrice = livePrice ?? `₺${pkg.priceTRY}`;
+              const canBuy = iapStatus === "ready" || iapStatus === "purchasing";
+
+              return (
+                <View
+                  key={pkg.id}
+                  style={[
+                    s.packageCard,
+                    { backgroundColor: colors.card, borderColor: pkg.popular ? colors.primary : colors.border },
+                  ]}
+                >
+                  {pkg.popular && (
+                    <View style={[s.popularBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={s.popularBadgeText}>🔥 Popüler</Text>
+                    </View>
+                  )}
+                  <View style={s.packageRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.packageLabel, { color: colors.foreground }]}>{pkg.label}</Text>
+                      <Text style={[s.packageJeton, { color: colors.primary }]}>
+                        ⚡ {pkg.totalJeton.toLocaleString("tr")} Jeton
+                        {pkg.bonusAmount > 0 && (
+                          <Text style={[s.packageBonus, { color: "#22c55e" }]}>
+                            {" "}(+{pkg.bonusAmount} bonus)
+                          </Text>
+                        )}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        s.buyBtn,
+                        {
+                          backgroundColor: pkg.popular ? colors.primary : "transparent",
+                          borderColor: pkg.popular ? colors.primary : colors.border,
+                          opacity: canBuy ? 1 : 0.5,
+                        },
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => purchasePackage(pkg)}
+                      disabled={!canBuy || isPurchasing}
+                    >
+                      {isPurchasing && pkg === JETON_PACKAGES.find(p => iapStatus === "purchasing") ? (
+                        <ActivityIndicator color={pkg.popular ? "#fff" : colors.foreground} size="small" />
+                      ) : (
+                        <Text style={[s.buyBtnText, { color: pkg.popular ? "#fff" : colors.foreground }]}>
+                          {iapStatus === "connecting" || iapStatus === "fetching"
+                            ? "…"
+                            : displayPrice}
+                        </Text>
                       )}
-                    </Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[s.buyBtn, { backgroundColor: pkg.popular ? colors.primary : "transparent", borderColor: pkg.popular ? colors.primary : colors.border }]}
-                    activeOpacity={0.7}
-                    onPress={() => pkg.priceTRY != null ? router.push(`/odeme?packageId=${pkg.id}`) : undefined}
-                  >
-                    <Text style={[s.buyBtnText, { color: pkg.popular ? "#fff" : colors.foreground }]}>
-                      {pkg.priceTRY != null ? `₺${pkg.priceTRY}` : "Yakında"}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
-                {pkg.unitPriceTRY != null && (
-                  <Text style={[s.unitPrice, { color: colors.mutedForeground }]}>
-                    Birim fiyat: ₺{pkg.unitPriceTRY}/jeton
-                  </Text>
-                )}
-              </View>
-            ))}
+              );
+            })}
+
+            {/* Google Play rozeti */}
+            <View style={[s.gpBadge, { borderColor: colors.border }]}>
+              <Feather name="shield" size={14} color="#22c55e" />
+              <Text style={[s.gpText, { color: colors.mutedForeground }]}>
+                Ödemeler Google Play tarafından güvence altındadır. Kart bilgilerin hiçbir zaman uygulamaya iletilmez.
+              </Text>
+            </View>
 
             {/* Harcama tablosu */}
             <Text style={[s.sectionTitle, { color: colors.foreground }]}>Jeton Kullanım Alanları</Text>
@@ -261,6 +324,8 @@ const s = StyleSheet.create({
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 12 },
   tabText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
+  warnBox: { flexDirection: "row", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, alignItems: "flex-start" },
+  warnText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   infoBox: { flexDirection: "row", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, alignItems: "flex-start" },
   infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   packageCard: { padding: 16, borderRadius: 16, borderWidth: 1, overflow: "hidden", gap: 4 },
@@ -270,9 +335,10 @@ const s = StyleSheet.create({
   packageLabel: { fontSize: 16, fontFamily: "Inter_700Bold" },
   packageJeton: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginTop: 2 },
   packageBonus: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  buyBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, borderWidth: 1, minWidth: 90, alignItems: "center" },
+  buyBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, borderWidth: 1, minWidth: 100, alignItems: "center", justifyContent: "center" },
   buyBtnText: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  unitPrice: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  gpBadge: { flexDirection: "row", gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, alignItems: "flex-start" },
+  gpText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", marginTop: 4 },
   costTable: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
   costRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 13 },

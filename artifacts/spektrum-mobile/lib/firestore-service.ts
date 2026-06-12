@@ -17,6 +17,7 @@ import {
   Timestamp,
   arrayUnion,
   arrayRemove,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -854,4 +855,40 @@ export async function setUserRole(
   role: "user" | "moderator" | "admin"
 ): Promise<void> {
   await updateDoc(doc(db, "users", uid), { role });
+}
+
+// ─── UYGULAMA İÇİ SATIN ALMA ─────────────────────────────────────────────────
+
+export async function recordIapPurchase(params: {
+  uid: string;
+  packageId: string;
+  productId: string;
+  totalJeton: number;
+  orderId: string;
+}): Promise<void> {
+  const { uid, packageId, productId, totalJeton, orderId } = params;
+  const userRef = doc(db, "users", uid);
+  const txRef = doc(collection(db, "jetonTransactions"));
+
+  await runTransaction(db, async t => {
+    const userSnap = await t.get(userRef);
+    const current = (userSnap.data()?.jetonBalance as number) ?? 0;
+    const newBalance = current + totalJeton;
+
+    t.update(userRef, {
+      jetonBalance: newBalance,
+      updatedAt: serverTimestamp(),
+    });
+
+    t.set(txRef, {
+      uid,
+      type: "earn",
+      amount: totalJeton,
+      balanceAfter: newBalance,
+      reason: `Jeton satın alındı: ${packageId} (${totalJeton} jeton)`,
+      refId: orderId,
+      productId,
+      createdAt: serverTimestamp(),
+    });
+  });
 }
