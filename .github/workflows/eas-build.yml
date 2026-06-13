@@ -84,7 +84,9 @@ jobs:
       - name: Hata varsa fail et
         run: |
           if grep -q "BUILD FAILED" /tmp/gradle.log; then
-            echo "BUILD FAILED — gradle-log artifact'ını indir"
+            echo "====== HATA BAŞLANGIÇ ======"
+            grep -A3 "What went wrong\|Execution failed\|Caused by\|error:" /tmp/gradle.log | head -80
+            echo "====== HATA BİTİŞ ======"
             exit 1
           fi
 
