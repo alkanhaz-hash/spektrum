@@ -69,16 +69,23 @@ jobs:
 
       - name: APK derle (Gradle)
         working-directory: artifacts/spektrum-mobile/android
-        run: |
-          ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee /tmp/gradle.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "=== HATA ÖZETI ==="
-            grep -n "FAILED\|error:\|> Task\|Caused by\|Could not" /tmp/gradle.log | grep -v "warning\|deprecated" | head -60
-            exit $EXIT_CODE
-          fi
+        run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee /tmp/gradle.log; exit ${PIPESTATUS[0]}
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
+        continue-on-error: true
+
+      - name: Gradle logunu yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: /tmp/gradle.log
+
+      - name: Hata varsa fail et
+        run: |
+          if grep -q "BUILD FAILED" /tmp/gradle.log; then
+            echo "BUILD FAILED — gradle-log artifact'ını indir"
+            exit 1
+          fi
 
       - name: APK kaydet
         uses: actions/upload-artifact@v4
