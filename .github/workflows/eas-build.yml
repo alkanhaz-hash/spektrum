@@ -67,14 +67,28 @@ jobs:
           echo "ndk.dir=$ANDROID_HOME/ndk/27.1.12297006" >> artifacts/spektrum-mobile/android/local.properties
           echo "NODE_BINARY=$(which node)" >> artifacts/spektrum-mobile/android/gradle.properties
           sed -i 's/kotlinVersion = "1\.9\.25"/kotlinVersion = "2.1.21"/g' artifacts/spektrum-mobile/android/build.gradle
-          echo "--- build.gradle kotlinVersion ---"
-          grep "kotlinVersion" artifacts/spektrum-mobile/android/build.gradle || echo "(bulunamadı)"
 
-      - name: APK derle (Gradle)
+      - name: Keystore oluştur (production)
+        if: ${{ github.event.inputs.profile == 'production' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/spektrum-release.jks
+
+      - name: AAB derle — Production (imzalı)
+        if: ${{ github.event.inputs.profile == 'production' }}
+        working-directory: artifacts/spektrum-mobile/android
+        run: |
+          ./gradlew bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" \
+            -Pandroid.injected.signing.store.file=/tmp/spektrum-release.jks \
+            -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            2>&1 | tee /tmp/gradle.log; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: APK derle — Preview (debug)
+        if: ${{ github.event.inputs.profile == 'preview' }}
         working-directory: artifacts/spektrum-mobile/android
         run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee /tmp/gradle.log; exit ${PIPESTATUS[0]}
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
         continue-on-error: true
 
       - name: Gradle logunu yükle
@@ -92,8 +106,16 @@ jobs:
             exit 1
           fi
 
-      - name: APK kaydet
+      - name: APK kaydet (preview)
+        if: ${{ github.event.inputs.profile == 'preview' }}
         uses: actions/upload-artifact@v4
         with:
-          name: spektrum-${{ github.event.inputs.profile }}
+          name: spektrum-preview-apk
           path: artifacts/spektrum-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: AAB kaydet (production)
+        if: ${{ github.event.inputs.profile == 'production' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: spektrum-production-aab
+          path: artifacts/spektrum-mobile/android/app/build/outputs/bundle/release/app-release.aab
