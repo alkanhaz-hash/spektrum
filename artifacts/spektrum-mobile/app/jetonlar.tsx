@@ -26,8 +26,7 @@ import {
   MIN_CHAPTER_COST,
   type JetonPackage,
 } from "@/lib/jeton-packages";
-import { useIap } from "@/lib/iap-service";
-import type { Purchase } from "react-native-iap";
+import { useIap, type Purchase } from "@/lib/iap-service";
 
 // ─── İşlem tipi etiketi ───────────────────────────────────────────────────────
 
