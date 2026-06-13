@@ -66,7 +66,9 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > artifacts/spektrum-mobile/android/local.properties
           echo "ndk.dir=$ANDROID_HOME/ndk/27.1.12297006" >> artifacts/spektrum-mobile/android/local.properties
           echo "NODE_BINARY=$(which node)" >> artifacts/spektrum-mobile/android/gradle.properties
-          echo "kotlinVersion=2.1.21" >> artifacts/spektrum-mobile/android/gradle.properties
+          sed -i 's/^kotlinVersion=.*/kotlinVersion=2.1.21/' artifacts/spektrum-mobile/android/gradle.properties
+          echo "--- gradle.properties kotlinVersion ---"
+          grep "kotlinVersion" artifacts/spektrum-mobile/android/gradle.properties
 
       - name: APK derle (Gradle)
         working-directory: artifacts/spektrum-mobile/android
