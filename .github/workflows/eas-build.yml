@@ -101,7 +101,13 @@ jobs:
         run: |
           if grep -q "BUILD FAILED" /tmp/gradle.log; then
             echo "====== HATA BAŞLANGIÇ ======"
-            grep -A3 "What went wrong\|Execution failed\|Caused by\|error:" /tmp/gradle.log | head -80
+            grep -A5 "What went wrong\|Execution failed\|Caused by\|error:\|Error:" /tmp/gradle.log | head -120
+            echo ""
+            echo "====== METRO / NODE HATA DETAYI ======"
+            grep -A10 "createBundle\|Metro\|SyntaxError\|Cannot find\|Unable to resolve\|Module not found\|ENOENT\|node.*exit\|non-zero" /tmp/gradle.log | head -100
+            echo ""
+            echo "====== SON 60 SATIR ======"
+            tail -60 /tmp/gradle.log
             echo "====== HATA BİTİŞ ======"
             exit 1
           fi
