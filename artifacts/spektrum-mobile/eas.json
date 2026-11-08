@@ -20,6 +20,7 @@
         "EXPO_PUBLIC_API_BASE": "https://spektrumapp.com.tr"
       },
       "android": {
+        "image": "ubuntu-24.04-jdk-17-ndk-r27b",
         "buildType": "app-bundle"
       },
       "ios": {
