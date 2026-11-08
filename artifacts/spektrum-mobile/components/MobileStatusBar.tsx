@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -21,35 +21,44 @@ import {
   createStatus,
   markStatusViewed,
   deleteStatus,
+  getFollowing,
   UserStatus,
 } from "@/lib/firestore-service";
 import { uploadStatusImage } from "@/lib/storage-service";
 
 const TEXT_COLORS = [
-  "#7c3aed", "#06b6d4", "#ec4899", "#10b981",
+  "#A07FE6", "#E6A545", "#ec4899", "#10b981",
   "#f59e0b", "#ef4444", "#8b5cf6", "#3b82f6",
 ];
+
+interface MobileStatusGroup {
+  uid: string;
+  latest: UserStatus;
+  statuses: UserStatus[];
+  hasUnviewed: boolean;
+}
 
 // ─── Durum dairesi ────────────────────────────────────────────────────────────
 
 function StatusAvatar({
-  status,
+  group,
   isOwn,
   userId,
   onPress,
 }: {
-  status: UserStatus;
+  group: MobileStatusGroup;
   isOwn: boolean;
   userId?: string;
-  onPress: (s: UserStatus) => void;
+  onPress: (group: MobileStatusGroup) => void;
 }) {
   const colors = useColors();
-  const viewed = userId ? status.viewedBy.includes(userId) : false;
+  const status = group.latest;
+  const viewed = userId ? !group.hasUnviewed : false;
 
   return (
     <TouchableOpacity
       style={styles.statusItem}
-      onPress={() => onPress(status)}
+      onPress={() => onPress(group)}
       activeOpacity={0.8}
     >
       <View
@@ -58,7 +67,7 @@ function StatusAvatar({
           viewed
             ? { borderColor: colors.border }
             : { borderColor: colors.primary },
-          isOwn && { borderColor: "#06b6d4" },
+          isOwn && { borderColor: "#E6A545" },
         ]}
       >
         <View style={[styles.ringInner, { backgroundColor: colors.background }]}>
@@ -89,11 +98,13 @@ function StatusAvatar({
 
 export default function MobileStatusBar() {
   const colors = useColors();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [statuses, setStatuses] = useState<UserStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [viewedStatus, setViewedStatus] = useState<UserStatus | null>(null);
+  const [viewedGroup, setViewedGroup] = useState<MobileStatusGroup | null>(null);
+  const [viewedIndex, setViewedIndex] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
 
   const [createType, setCreateType] = useState<"text" | "image">("text");
@@ -101,27 +112,108 @@ export default function MobileStatusBar() {
   const [createBg, setCreateBg] = useState(TEXT_COLORS[0]);
   const [createImageUri, setCreateImageUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [createImageDataUrl, setCreateImageDataUrl] = useState<string | null>(null);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
+    if (authLoading) return;
+    if (!user) {
+      setStatuses([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
-      const data = await getActiveStatuses();
+      const [data, following] = await Promise.all([
+        getActiveStatuses(),
+        getFollowing(user.uid),
+      ]);
       setStatuses(data);
-    } catch { /* sessiz */ }
+      setFollowingIds(new Set(following.map(person => person.uid)));
+    } catch (error) {
+      console.error("[MobileStatusBar] Durumlar yüklenemedi:", error);
+      setStatuses([]);
+    }
     finally { setLoading(false); }
-  }, []);
+  }, [authLoading, user?.uid]);
 
   useEffect(() => { load(); }, [load]);
 
-  const ownStatus = user ? statuses.find((s) => s.uid === user.uid) ?? null : null;
-  const othersStatuses = user ? statuses.filter((s) => s.uid !== user.uid) : statuses;
+  const statusGroups = useMemo(() => {
+    const groups = new Map<string, MobileStatusGroup>();
+    for (const status of statuses) {
+      const existing = groups.get(status.uid);
+      if (existing) {
+        existing.statuses.push(status);
+        if ((status.createdAt?.seconds ?? 0) > (existing.latest.createdAt?.seconds ?? 0)) {
+          existing.latest = status;
+        }
+        if (!status.viewedBy.includes(user?.uid ?? "")) existing.hasUnviewed = true;
+      } else {
+        groups.set(status.uid, {
+          uid: status.uid,
+          latest: status,
+          statuses: [status],
+          hasUnviewed: !status.viewedBy.includes(user?.uid ?? ""),
+        });
+      }
+    }
+    for (const group of groups.values()) {
+      group.statuses.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
+    }
+    return groups;
+  }, [statuses, user?.uid]);
 
-  const handleOpenStatus = async (s: UserStatus) => {
+  const ownGroup = user ? statusGroups.get(user.uid) ?? null : null;
+  const othersGroups = useMemo(() => {
+    return Array.from(statusGroups.values()).filter(group => group.uid !== user?.uid).sort((a, b) => {
+      const followDifference = Number(followingIds.has(b.uid)) - Number(followingIds.has(a.uid));
+      if (followDifference !== 0) return followDifference;
+      if (a.hasUnviewed !== b.hasUnviewed) return Number(b.hasUnviewed) - Number(a.hasUnviewed);
+      return (b.latest.createdAt?.seconds ?? 0) - (a.latest.createdAt?.seconds ?? 0);
+    });
+  }, [statusGroups, user?.uid, followingIds]);
+
+  const showStatus = async (group: MobileStatusGroup, index: number) => {
+    const s = group.statuses[index];
+    setViewedGroup(group);
+    setViewedIndex(index);
     setViewedStatus(s);
     if (user && !s.viewedBy.includes(user.uid)) {
-      await markStatusViewed(s.id, user.uid);
-      setStatuses((prev) =>
-        prev.map((x) => x.id === s.id ? { ...x, viewedBy: [...x.viewedBy, user.uid] } : x)
-      );
+      try {
+        await markStatusViewed(s.id, user.uid);
+        setStatuses((prev) =>
+          prev.map((x) => x.id === s.id ? { ...x, viewedBy: [...x.viewedBy, user.uid] } : x)
+        );
+      } catch (error) {
+        console.error("[MobileStatusBar] Görüntüleme kaydedilemedi:", error);
+      }
+    }
+  };
+
+  const handleOpenStatus = (group: MobileStatusGroup) => {
+    const firstUnviewed = user
+      ? group.statuses.findIndex(status => !status.viewedBy.includes(user.uid))
+      : -1;
+    void showStatus(group, firstUnviewed >= 0 ? firstUnviewed : 0);
+  };
+
+  const closeViewer = () => {
+    setViewedStatus(null);
+    setViewedGroup(null);
+    setViewedIndex(0);
+  };
+
+  const goPreviousStatus = () => {
+    if (viewedGroup && viewedIndex > 0) void showStatus(viewedGroup, viewedIndex - 1);
+  };
+
+  const goNextStatus = () => {
+    if (!viewedGroup) return;
+    if (viewedIndex < viewedGroup.statuses.length - 1) {
+      void showStatus(viewedGroup, viewedIndex + 1);
+    } else {
+      closeViewer();
     }
   };
 
@@ -133,10 +225,16 @@ export default function MobileStatusBar() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
+      quality: 0.55,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
       setCreateImageUri(result.assets[0].uri);
+      setCreateImageDataUrl(
+        result.assets[0].base64
+          ? `data:${result.assets[0].mimeType ?? "image/jpeg"};base64,${result.assets[0].base64}`
+          : null
+      );
       setCreateType("image");
     }
   };
@@ -150,7 +248,15 @@ export default function MobileStatusBar() {
     try {
       let mediaUrl: string | undefined;
       if (createType === "image" && createImageUri) {
-        mediaUrl = await uploadStatusImage(user.uid, createImageUri);
+        try {
+          mediaUrl = await uploadStatusImage(user.uid, createImageUri);
+        } catch (uploadError) {
+          console.warn("[MobileStatusBar] Storage yüklemesi başarısız, yerel görsel verisi kullanılıyor:", uploadError);
+          if (!createImageDataUrl || createImageDataUrl.length > 850_000) {
+            throw new Error("Fotoğraf yüklenemedi. Daha küçük bir fotoğraf seç.");
+          }
+          mediaUrl = createImageDataUrl;
+        }
       }
       await createStatus(user.uid, {
         displayName: profile.displayName,
@@ -162,39 +268,39 @@ export default function MobileStatusBar() {
       });
       setCreateText("");
       setCreateImageUri(null);
+      setCreateImageDataUrl(null);
       setCreateBg(TEXT_COLORS[0]);
       setCreateType("text");
       setShowCreate(false);
       await load();
-    } catch {
-      Alert.alert("Hata", "Durum paylaşılamadı.");
+    } catch (error) {
+      Alert.alert("Hata", error instanceof Error ? error.message : "Durum paylaşılamadı.");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteOwn = async () => {
-    if (!ownStatus) return;
+    if (!ownGroup) return;
+    const ownStatus = ownGroup.statuses[ownGroup.statuses.length - 1];
     Alert.alert("Durumu sil", "24h durumunu silmek istiyor musun?", [
       { text: "Vazgeç", style: "cancel" },
       {
         text: "Sil",
         style: "destructive",
         onPress: async () => {
-          await deleteStatus(ownStatus.id);
-          setStatuses((prev) => prev.filter((s) => s.id !== ownStatus.id));
+            try {
+              await deleteStatus(ownStatus.id);
+              setStatuses((prev) => prev.filter((s) => s.id !== ownStatus.id));
+            } catch {
+              Alert.alert("Hata", "Durum silinemedi.");
+            }
         },
       },
     ]);
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.loadingRow, { borderBottomColor: colors.border }]}>
-        <ActivityIndicator size="small" color={colors.primary} />
-      </View>
-    );
-  }
+  if (!user) return null;
 
   return (
     <>
@@ -205,22 +311,21 @@ export default function MobileStatusBar() {
           contentContainerStyle={styles.barScroll}
         >
           {/* + Ekle / Kendi durumu */}
-          {user ? (
-            ownStatus ? (
+          {ownGroup ? (
               <TouchableOpacity
                 style={styles.statusItem}
-                onPress={() => handleOpenStatus(ownStatus)}
+                onPress={() => handleOpenStatus(ownGroup)}
                 onLongPress={handleDeleteOwn}
                 activeOpacity={0.8}
               >
-                <View style={[styles.ringOuter, { borderColor: "#06b6d4" }]}>
+                <View style={[styles.ringOuter, { borderColor: "#E6A545" }]}>
                   <View style={[styles.ringInner, { backgroundColor: colors.background }]}>
-                    {ownStatus.type === "image" && ownStatus.mediaUrl ? (
-                      <Image source={{ uri: ownStatus.mediaUrl }} style={styles.statusAvatar} />
+                    {ownGroup.latest.type === "image" && ownGroup.latest.mediaUrl ? (
+                      <Image source={{ uri: ownGroup.latest.mediaUrl }} style={styles.statusAvatar} />
                     ) : (
-                      <View style={[styles.statusAvatar, { backgroundColor: ownStatus.backgroundColor ?? colors.primary, alignItems: "center", justifyContent: "center" }]}>
+                      <View style={[styles.statusAvatar, { backgroundColor: ownGroup.latest.backgroundColor ?? colors.primary, alignItems: "center", justifyContent: "center" }]}>
                         <Text style={[styles.statusAvatarInitial, { color: "#fff" }]}>
-                          {ownStatus.displayName.charAt(0).toUpperCase()}
+                          {ownGroup.latest.displayName.charAt(0).toUpperCase()}
                         </Text>
                       </View>
                     )}
@@ -243,14 +348,38 @@ export default function MobileStatusBar() {
                 </View>
                 <Text style={[styles.statusName, { color: colors.mutedForeground }]}>Durum Ekle</Text>
               </TouchableOpacity>
-            )
-          ) : null}
+            )}
+
+          {ownGroup && (
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => setShowCreate(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Yeni durum ekle"
+            >
+              <View style={[styles.ringOuter, { borderColor: colors.primary, borderStyle: "dashed" }]}>
+                <View style={[styles.ringInner, { backgroundColor: colors.primary + "12" }]}>
+                  <View style={styles.addBtn}>
+                    <Feather name="plus" size={22} color={colors.primary} />
+                  </View>
+                </View>
+              </View>
+              <Text style={[styles.statusName, { color: colors.mutedForeground }]}>Durum Ekle</Text>
+            </TouchableOpacity>
+          )}
+
+          {loading && (
+            <View style={styles.loadingItem}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
 
           {/* Diğer kullanıcıların durumları */}
-          {othersStatuses.map((s) => (
+          {othersGroups.map((group) => (
             <StatusAvatar
-              key={s.id}
-              status={s}
+              key={group.uid}
+              group={group}
               isOwn={false}
               userId={user?.uid}
               onPress={handleOpenStatus}
@@ -265,15 +394,28 @@ export default function MobileStatusBar() {
           visible
           transparent
           animationType="fade"
-          onRequestClose={() => setViewedStatus(null)}
+          onRequestClose={closeViewer}
           statusBarTranslucent
         >
           <TouchableOpacity
             style={styles.viewerBackdrop}
             activeOpacity={1}
-            onPress={() => setViewedStatus(null)}
+            onPress={closeViewer}
           >
             <View style={[styles.viewerCard, { backgroundColor: viewedStatus.backgroundColor ?? "#1a0a2e" }]}>
+              {viewedGroup && (
+                <View style={styles.viewerProgress}>
+                  {viewedGroup.statuses.map((status, index) => (
+                    <View
+                      key={status.id}
+                      style={[
+                        styles.viewerProgressSegment,
+                        { backgroundColor: index <= viewedIndex ? "#fff" : "rgba(255,255,255,0.3)" },
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
               {viewedStatus.type === "image" && viewedStatus.mediaUrl ? (
                 <Image
                   source={{ uri: viewedStatus.mediaUrl }}
@@ -291,10 +433,12 @@ export default function MobileStatusBar() {
               </View>
               <TouchableOpacity
                 style={styles.viewerClose}
-                onPress={() => setViewedStatus(null)}
+                onPress={closeViewer}
               >
                 <Feather name="x" size={24} color="#fff" />
               </TouchableOpacity>
+              <TouchableOpacity style={styles.viewerPrevious} onPress={goPreviousStatus} />
+              <TouchableOpacity style={styles.viewerNext} onPress={goNextStatus} />
             </View>
           </TouchableOpacity>
         </Modal>
@@ -402,7 +546,6 @@ export default function MobileStatusBar() {
 }
 
 const styles = StyleSheet.create({
-  loadingRow: { height: 90, alignItems: "center", justifyContent: "center", borderBottomWidth: 1 },
   bar: { borderBottomWidth: 1 },
   barScroll: { paddingHorizontal: 12, paddingVertical: 10, gap: 14 },
   statusItem: { alignItems: "center", gap: 5, width: 62 },
@@ -411,6 +554,7 @@ const styles = StyleSheet.create({
   statusAvatar: { width: "100%", height: "100%", borderRadius: 26 },
   statusAvatarInitial: { fontSize: 20, fontFamily: "Inter_700Bold" },
   addBtn: { flex: 1, alignItems: "center", justifyContent: "center" },
+  loadingItem: { width: 48, alignItems: "center", justifyContent: "center" },
   statusName: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
 
   viewerBackdrop: {
@@ -428,6 +572,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+  },
+  viewerProgress: {
+    position: "absolute",
+    top: 8,
+    left: 10,
+    right: 10,
+    zIndex: 4,
+    flexDirection: "row",
+    gap: 4,
+  },
+  viewerProgressSegment: {
+    height: 3,
+    flex: 1,
+    borderRadius: 2,
+  },
+  viewerPrevious: {
+    position: "absolute",
+    top: 56,
+    bottom: 56,
+    left: 0,
+    width: "35%",
+    zIndex: 2,
+  },
+  viewerNext: {
+    position: "absolute",
+    top: 56,
+    bottom: 56,
+    right: 0,
+    width: "35%",
+    zIndex: 2,
   },
   viewerImage: { width: "100%", height: 300, borderRadius: 12 },
   viewerText: {

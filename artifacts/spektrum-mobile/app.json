@@ -2,37 +2,42 @@
   "expo": {
     "name": "SPEKTRUM",
     "slug": "spektrum-mobile",
-    "owner": "keremclk",
-    "version": "1.0.0",
+    "owner": "kerimd642",
+    "version": "2.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "spektrum",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "backgroundColor": "#080811",
+    "newArchEnabled": false,
+    "backgroundColor": "#100E19",
+    "updates": {
+      "enabled": false
+    },
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#080811"
+      "backgroundColor": "#100E19"
     },
     "ios": {
+      "infoPlist": { "UIBackgroundModes": ["audio"] },
       "supportsTablet": false,
-      "bundleIdentifier": "com.alkanhaz.spektrum",
+      "bundleIdentifier": "com.alkanhaz.spektrum2",
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.alkanhaz.spektrum",
+      "package": "com.alkanhaz.spektrum2",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#080811"
+        "backgroundColor": "#100E19"
       },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
@@ -49,6 +54,17 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
+      "./plugins/with-play-existing",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": false,
+            "extraProguardRules": "-keep class expo.modules.** { *; }\n-keep class expo.modules.kotlin.types.** { *; }\n-keep class com.facebook.react.** { *; }"
+          }
+        }
+      ],
       [
         "expo-router",
         {
@@ -64,11 +80,24 @@
           "cameraPermission": "SPEKTRUM profil fotoğrafı çekmek için kamera erişimi istiyor.",
           "microphonePermission": false
         }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
+    },
+    "extra": {
+      "publicWebsiteUrl": "https://spektrumapp.com.tr",
+      "eas": {
+        "projectId": "78619c66-ac99-49c1-93fd-b94a1e9441be"
+      }
     }
   }
 }

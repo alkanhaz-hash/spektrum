@@ -1,0 +1,25 @@
+# EAS Build ignore — git yerine bu dosyayı kullanır (git lock sorununu atlar)
+.git/
+.gitignore
+.github/
+*.log
+node_modules/.cache/
+node_modules/.pnpm/
+__tests__/
+tests/
+coverage/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+static-build/
+dist/
+build/
+.vscode/
+.idea/
+*.md
+README*
+.replit
+.replit-artifact/
+scripts/build.js
+scripts/start.js

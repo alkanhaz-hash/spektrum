@@ -8,6 +8,284 @@
 import * as zod from 'zod';
 
 
+export const GetChapterAudioParams = zod.object({
+  "chapterId": zod.coerce.string()
+})
+
+export const GetChapterAudioResponse = zod.object({
+  "audio": zod.union([zod.object({
+  "id": zod.string(),
+  "fileName": zod.string(),
+  "sizeBytes": zod.number(),
+  "playbackUrl": zod.string()
+}),zod.null()])
+})
+
+
+export const UploadChapterAudioParams = zod.object({
+  "chapterId": zod.coerce.string()
+})
+
+export const UploadChapterAudioHeader = zod.object({
+  "If-Match": zod.string(),
+  "X-Audio-Name": zod.string()
+})
+
+export const UploadChapterAudioResponse = zod.object({
+  "audio": zod.union([zod.object({
+  "id": zod.string(),
+  "fileName": zod.string(),
+  "sizeBytes": zod.number(),
+  "playbackUrl": zod.string()
+}),zod.null()])
+})
+
+
+export const RemoveChapterAudioParams = zod.object({
+  "chapterId": zod.coerce.string()
+})
+
+export const RemoveChapterAudioHeader = zod.object({
+  "If-Match": zod.string()
+})
+
+
+export const StreamChapterAudioQueryParams = zod.object({
+  "ticket": zod.coerce.string()
+})
+
+
+export const getPushDeviceQueryInstallationIdRegExp = new RegExp('^[a-f0-9]{32}$');
+
+
+export const GetPushDeviceQueryParams = zod.object({
+  "installationId": zod.coerce.string().regex(getPushDeviceQueryInstallationIdRegExp)
+})
+
+export const GetPushDeviceResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean(),
+  "preferences": zod.object({
+  "messages": zod.boolean(),
+  "newChapters": zod.boolean(),
+  "comments": zod.boolean(),
+  "qa": zod.boolean()
+})
+})
+
+
+export const registerPushDeviceBodyInstallationIdRegExp = new RegExp('^[a-f0-9]{32}$');
+export const registerPushDeviceBodyRevokeSecretRegExp = new RegExp('^[a-f0-9]{64}$');
+export const registerPushDeviceBodyRevisionMax = 9007199254740991;
+
+export const registerPushDeviceBodyTokenMin = 20;
+export const registerPushDeviceBodyTokenMax = 4096;
+
+
+export const registerPushDeviceBodyTokenRegExp = new RegExp('^[A-Za-z0-9_:.-]+$');
+
+
+export const RegisterPushDeviceBody = zod.object({
+  "installationId": zod.string().regex(registerPushDeviceBodyInstallationIdRegExp),
+  "revokeSecret": zod.string().regex(registerPushDeviceBodyRevokeSecretRegExp),
+  "revision": zod.number().min(1).max(registerPushDeviceBodyRevisionMax),
+  "token": zod.string().min(registerPushDeviceBodyTokenMin).max(registerPushDeviceBodyTokenMax).regex(registerPushDeviceBodyTokenRegExp),
+  "platform": zod.enum(['android']),
+  "preferences": zod.object({
+  "messages": zod.boolean(),
+  "newChapters": zod.boolean(),
+  "comments": zod.boolean(),
+  "qa": zod.boolean()
+})
+})
+
+export const RegisterPushDeviceResponse = zod.object({
+  "registered": zod.boolean(),
+  "enabled": zod.boolean(),
+  "preferences": zod.object({
+  "messages": zod.boolean(),
+  "newChapters": zod.boolean(),
+  "comments": zod.boolean(),
+  "qa": zod.boolean()
+})
+})
+
+
+export const disablePushDeviceBodyInstallationIdRegExp = new RegExp('^[a-f0-9]{32}$');
+export const disablePushDeviceBodyRevokeSecretRegExp = new RegExp('^[a-f0-9]{64}$');
+export const disablePushDeviceBodyRevisionMax = 9007199254740991;
+
+
+
+export const DisablePushDeviceBody = zod.object({
+  "installationId": zod.string().regex(disablePushDeviceBodyInstallationIdRegExp),
+  "revokeSecret": zod.string().regex(disablePushDeviceBodyRevokeSecretRegExp),
+  "revision": zod.number().min(1).max(disablePushDeviceBodyRevisionMax)
+})
+
+export const DisablePushDeviceResponse = zod.object({
+  "accepted": zod.boolean()
+})
+
+
+export const testPushDeviceBodyInstallationIdRegExp = new RegExp('^[a-f0-9]{32}$');
+
+
+export const TestPushDeviceBody = zod.object({
+  "installationId": zod.string().regex(testPushDeviceBodyInstallationIdRegExp)
+})
+
+export const TestPushDeviceResponse = zod.object({
+  "accepted": zod.boolean()
+})
+
+
+/**
+ * @summary Anonymous chapter-session progress, never a verified reader count
+ */
+export const recordReadingObservationBodyStoryIdMax = 160;
+
+
+export const recordReadingObservationBodyStoryIdRegExp = new RegExp('^[A-Za-z0-9_-]+$');
+export const recordReadingObservationBodyChapterIdMax = 200;
+
+
+export const recordReadingObservationBodyChapterIdRegExp = new RegExp('^[A-Za-z0-9_-]+$');
+export const recordReadingObservationBodyVisitIdMin = 20;
+export const recordReadingObservationBodyVisitIdMax = 80;
+
+
+export const recordReadingObservationBodyVisitIdRegExp = new RegExp('^[A-Za-z0-9_-]+$');
+export const recordReadingObservationBodyProgressMin = 0;
+export const recordReadingObservationBodyProgressMax = 100;
+
+export const recordReadingObservationBodyActiveSecondsMin = 0;
+export const recordReadingObservationBodyActiveSecondsMax = 86400;
+
+
+
+export const RecordReadingObservationBody = zod.object({
+  "storyId": zod.string().min(1).max(recordReadingObservationBodyStoryIdMax).regex(recordReadingObservationBodyStoryIdRegExp),
+  "chapterId": zod.string().min(1).max(recordReadingObservationBodyChapterIdMax).regex(recordReadingObservationBodyChapterIdRegExp),
+  "visitId": zod.string().min(recordReadingObservationBodyVisitIdMin).max(recordReadingObservationBodyVisitIdMax).regex(recordReadingObservationBodyVisitIdRegExp),
+  "progress": zod.number().min(recordReadingObservationBodyProgressMin).max(recordReadingObservationBodyProgressMax),
+  "activeSeconds": zod.number().min(recordReadingObservationBodyActiveSecondsMin).max(recordReadingObservationBodyActiveSecondsMax)
+})
+
+export const RecordReadingObservationResponse = zod.object({
+  "accepted": zod.boolean()
+})
+
+
+/**
+ * @summary Owner-only aggregate chapter reading and inactivity report
+ */
+export const getStoryReadingReportQueryDaysDefault = 30;
+
+export const GetStoryReadingReportQueryParams = zod.object({
+  "storyId": zod.coerce.string(),
+  "days": zod.union([zod.literal(7),zod.literal(30),zod.literal(90)]).default(getStoryReadingReportQueryDaysDefault)
+})
+
+export const GetStoryReadingReportResponse = zod.object({
+  "storyId": zod.string(),
+  "title": zod.string(),
+  "days": zod.number(),
+  "measuredFrom": zod.string(),
+  "generatedAt": zod.string(),
+  "sessionCount": zod.number(),
+  "visitCount": zod.number(),
+  "completedCount": zod.number(),
+  "staleCount": zod.number(),
+  "activeSeconds": zod.number(),
+  "truncated": zod.boolean(),
+  "chapters": zod.array(zod.object({
+  "chapterId": zod.string(),
+  "title": zod.string(),
+  "order": zod.number(),
+  "sessions": zod.number(),
+  "reached25": zod.number(),
+  "reached50": zod.number(),
+  "reached75": zod.number(),
+  "completed": zod.number(),
+  "completionRate": zod.number(),
+  "stale": zod.number(),
+  "recentUnfinished": zod.number(),
+  "continued": zod.number(),
+  "meanActiveSeconds": zod.number(),
+  "exit0to24": zod.number(),
+  "exit25to49": zod.number(),
+  "exit50to74": zod.number(),
+  "exit75to100": zod.number()
+}))
+})
+
+
+/**
+ * @summary Current Istanbul Monday-to-Monday top three published stories
+ */
+
+export const getWeeklyLeaderboardResponseTwoEntriesItemRankMax = 3;
+
+export const getWeeklyLeaderboardResponseTwoEntriesMax = 3;
+
+
+
+export const GetWeeklyLeaderboardResponse = zod.object({
+  "weekId": zod.string(),
+  "startsAt": zod.string(),
+  "endsAt": zod.string()
+}).and(zod.object({
+  "entries": zod.array(zod.object({
+  "storyId": zod.string(),
+  "title": zod.string(),
+  "authorName": zod.string(),
+  "coverUrl": zod.string(),
+  "votes": zod.number().min(1),
+  "rank": zod.number().min(1).max(getWeeklyLeaderboardResponseTwoEntriesItemRankMax)
+})).max(getWeeklyLeaderboardResponseTwoEntriesMax)
+}))
+
+
+/**
+ * @summary Cast one immutable weekly vote; retrying the same choice is idempotent
+ */
+export const CastWeeklyVoteHeader = zod.object({
+  "Authorization": zod.string()
+})
+
+export const castWeeklyVoteBodyStoryIdRegExp = new RegExp('^[A-Za-z0-9_-]{1,128}$');
+
+
+export const CastWeeklyVoteBody = zod.object({
+  "storyId": zod.string().regex(castWeeklyVoteBodyStoryIdRegExp)
+})
+
+export const CastWeeklyVoteResponse = zod.object({
+  "weekId": zod.string(),
+  "startsAt": zod.string(),
+  "endsAt": zod.string()
+}).and(zod.object({
+  "storyId": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Current authenticated user's private weekly choice
+ */
+export const GetMyWeeklyVoteHeader = zod.object({
+  "Authorization": zod.string()
+})
+
+export const GetMyWeeklyVoteResponse = zod.object({
+  "weekId": zod.string(),
+  "startsAt": zod.string(),
+  "endsAt": zod.string()
+}).and(zod.object({
+  "storyId": zod.string().nullable()
+}))
+
+
 /**
  * Returns server health status
  * @summary Health check

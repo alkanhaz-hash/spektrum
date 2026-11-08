@@ -5,12 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Timestamp } from "firebase/firestore";
 import {
   BookOpen, Users, Edit3, Instagram, Globe, Camera,
-  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Bookmark, Flag, Ban, ShieldOff
+  MessageSquarePlus, Check, Trash2, Send, X, Pencil, ExternalLink, Bookmark, Flag, Ban, ShieldOff, AlertTriangle, Share2
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { qaErrorMessage } from "@/lib/anonymous-qa";
+import { questionInvitationUrl, shareQuestionInvitation, shareQuestionCard } from "@/lib/qa-sharing";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUserProfile, updateUserProfile, ensureUserProfile, UserProfile } from "@/lib/auth-service";
+import { getUserProfile, updateUserProfile, ensureUserProfile, deleteAccount, UserProfile } from "@/lib/auth-service";
 import {
   getStoriesByAuthor, Story,
   listenAnsweredQuestions, listenUnansweredQuestions, sendAnonymousQuestion, answerQuestion, deleteQuestion, AnonymousQuestion,
@@ -243,6 +245,7 @@ function EditPanel({ profile, onSave, onClose }: EditPanelProps) {
 // ─── ANONYMOUS Q&A ────────────────────────────────────────────────────────────
 
 function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolean }) {
+  const { locale } = useLocale();
   const { user } = useAuth();
   const { toast } = useToast();
   const [answered, setAnswered] = useState<AnonymousQuestion[]>([]);
@@ -252,8 +255,12 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
   const [sending, setSending] = useState(false);
   const [answerText, setAnswerText] = useState<Record<string, string>>({});
   const [answeringId, setAnsweringId] = useState<string | null>(null);
+  const [qaError, setQaError] = useState("");
+  const [sharingId, setSharingId] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true); setAnswered([]); setPending([]); setQaError("");
+    setQuestion(""); setAnswerText({}); setAnsweringId(null);
     let unsubAnswered: (() => void) | null = null;
     let unsubPending: (() => void) | null = null;
     let answeredReady = false;
@@ -261,18 +268,19 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
 
     const checkReady = () => { if (answeredReady && pendingReady) setLoading(false); };
 
+    const onError = (error: Error) => { setQaError(error.message); setLoading(false); };
     unsubAnswered = listenAnsweredQuestions(profile.uid, list => {
       setAnswered(list);
       answeredReady = true;
       checkReady();
-    });
+    }, onError);
 
     if (isOwner) {
       unsubPending = listenUnansweredQuestions(profile.uid, list => {
         setPending(list);
         pendingReady = true;
         checkReady();
-      });
+      }, onError);
     }
 
     return () => {
@@ -285,16 +293,11 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
     if (!question.trim() || sending) return;
     setSending(true);
     try {
-      const result = await moderateText(question, "tr");
-      if (result.action === "rejected") {
-        toast({ title: "Soru gönderilemedi", description: "Uygunsuz içerik tespit edildi.", variant: "destructive" });
-        return;
-      }
-      await sendAnonymousQuestion(profile.uid, question.trim(), user?.uid);
+      await sendAnonymousQuestion(profile.uid, question.trim());
       setQuestion("");
       toast({ title: "Soru gönderildi!", description: "Yanıtlandığında profilinde görünecek." });
-    } catch {
-      toast({ title: "Hata", description: "Soru gönderilemedi.", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Soru gönderilemedi", description: qaErrorMessage(error), variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -304,48 +307,47 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
     const ans = answerText[qid];
     if (!ans?.trim()) return;
     try {
-      const modResult = await moderateText(ans.trim(), "tr");
-      if (modResult.action === "rejected") {
-        toast({ title: "Yanıt gönderilemedi", description: "Uygunsuz içerik tespit edildi.", variant: "destructive" });
-        return;
-      }
       await answerQuestion(qid, ans.trim());
       setAnsweringId(null);
       toast({ title: "Yanıtlandı!" });
-      const q = pending.find(p => p.id === qid);
-      if (q?.senderUid) {
-        createNotification({
-          recipientId: q.senderUid,
-          senderId: profile.uid,
-          senderName: profile.displayName,
-          senderAvatar: profile.avatarUrl ?? "",
-          type: "qa_answer",
-          questionId: qid,
-        }).catch(() => {});
-      }
-    } catch {
-      toast({ title: "Hata", variant: "destructive" });
+    } catch (error) {
+      toast({ title: "Yanıt gönderilemedi", description: qaErrorMessage(error), variant: "destructive" });
     }
   };
 
   const handleDelete = async (qid: string, isPending: boolean) => {
-    await deleteQuestion(qid);
-    if (isPending) setPending(prev => prev.filter(p => p.id !== qid));
-    else setAnswered(prev => prev.filter(a => a.id !== qid));
+    try {
+      await deleteQuestion(qid);
+      if (isPending) setPending(prev => prev.filter(p => p.id !== qid));
+      else setAnswered(prev => prev.filter(a => a.id !== qid));
+    } catch (error) {
+      toast({ title: "Soru silinemedi", description: qaErrorMessage(error), variant: "destructive" });
+    }
   };
 
   if (loading) return <div className="py-8 flex justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
     <div className="space-y-6">
+      {qaError && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{qaError}</p>}
+      {isOwner && <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-3">
+        <h3 className="font-semibold">Sosyal medyadan anonim soru topla</h3>
+        <p className="text-sm text-muted-foreground">Bağlantını Instagram veya Snapchat’te paylaş. Sorular buraya gelir; cevapladıklarını görsel kart olarak paylaşabilirsin. Uygulama seçenekleri cihazının paylaşım menüsüne bağlıdır; doğrudan Story paylaşımı garanti değildir. Görseldeki adres tıklanmaz; soru bağlantını ayrıca ekle.</p>
+        <input aria-label="Anonim soru bağlantın" readOnly value={questionInvitationUrl(profile.uid)} className="w-full rounded-lg border border-border bg-background p-2 text-sm" onFocus={e => e.target.select()} />
+        <button data-testid="qa-share-invitation" className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" onClick={async () => {
+          try { const result = await shareQuestionInvitation(profile.uid, profile.displayName, locale); if (result) toast({ title: result }); }
+          catch (error) { toast({ title: "Bağlantı paylaşılamadı", description: qaErrorMessage(error), variant: "destructive" }); }
+        }}><Share2 className="h-4 w-4" /> Soru bağlantımı paylaş</button>
+      </div>}
       {/* Send question box (not shown to owner) */}
       {!isOwner && (
         <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquarePlus className="w-5 h-5 text-primary" />
             <span className="font-semibold text-sm">Anonim Soru Sor</span>
-            <span className="text-xs text-muted-foreground ml-auto">Kim olduğun gizli kalır</span>
+            <span className="text-xs text-muted-foreground ml-auto">Gönderen gösterilmez</span>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">Kimliğin güvenlik için sistemde tutulur; soruyu alan kişiye veya paylaşımı görenlere gösterilmez. Sorun ve cevabı herkese açık paylaşılabilir.</p>
           <textarea
             value={question}
             onChange={e => setQuestion(e.target.value)}
@@ -388,6 +390,7 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
                       onChange={e => setAnswerText(prev => ({ ...prev, [q.id]: e.target.value }))}
                       placeholder="Yanıtını yaz..."
                       rows={2}
+                      maxLength={1000}
                       className="w-full bg-background border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
                     />
                     <div className="flex gap-2">
@@ -423,10 +426,18 @@ function QASection({ profile, isOwner }: { profile: UserProfile; isOwner: boolea
             <motion.div key={q.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
               className="border border-border rounded-2xl overflow-hidden">
               <div className="bg-muted/30 px-5 py-3">
-                <p className="text-sm text-muted-foreground">🙋 {q.question}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{q.question}</p>
               </div>
               <div className="px-5 py-3 flex items-start justify-between gap-2">
-                <p className="text-sm">{q.answer}</p>
+                <div className="min-w-0">
+                  <p className="text-sm whitespace-pre-wrap break-words">{q.answer}</p>
+                  {isOwner && <button disabled={sharingId !== null} data-testid={`qa-share-card-${q.id}`} className="mt-3 flex items-center gap-2 text-xs text-primary disabled:opacity-50" onClick={async () => {
+                    setSharingId(q.id);
+                    try { const result = await shareQuestionCard(q, profile.displayName, locale); if (result) toast({ title: result }); }
+                    catch (error) { toast({ title: "Kart paylaşılamadı", description: qaErrorMessage(error), variant: "destructive" }); }
+                    finally { setSharingId(null); }
+                  }}><Share2 className="h-3.5 w-3.5" />{sharingId === q.id ? "Kart hazırlanıyor…" : "Kartı paylaş / PNG indir"}</button>}
+                </div>
                 {isOwner && (
                   <button onClick={() => handleDelete(q.id, false)} className="text-muted-foreground hover:text-destructive shrink-0 mt-0.5">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -499,7 +510,10 @@ function FollowListModal({ uid, type, onClose }: { uid: string; type: "followers
 
 // ─── MAIN PROFILE PAGE ────────────────────────────────────────────────────────
 
+import { useLocale } from "@/contexts/LocaleContext";
+
 export default function ProfilePage() {
+  const { t } = useLocale();
   const { uid } = useParams<{ uid: string }>();
   const [, setLocation] = useLocation();
   const { user, profile: myProfile, loading: authLoading, refreshProfile } = useAuth();
@@ -521,6 +535,10 @@ export default function ProfilePage() {
   const [followListModal, setFollowListModal] = useState<"followers" | "following" | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const needsDeletePassword = user?.providerData.some(provider => provider.providerId === "password") ?? false;
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!uid || authLoading) return;
@@ -550,13 +568,13 @@ export default function ProfilePage() {
   }, [user, uid, isOwner]);
 
   useEffect(() => {
-    if (activeTab !== "bookmarks" || !user || !isOwner) return;
+    if (activeTab !== "bookmarks" || !uid) return;
     setBookmarksLoading(true);
-    getBookmarkedStories(user.uid)
+    getBookmarkedStories(uid)
       .then(setBookmarkedStories)
       .catch(() => {})
       .finally(() => setBookmarksLoading(false));
-  }, [activeTab, user?.uid, isOwner, bookmarksKey]);
+  }, [activeTab, uid, bookmarksKey]);
 
   const handleFollow = async () => {
     if (!user) { setLocation("/auth"); return; }
@@ -584,6 +602,28 @@ export default function ProfilePage() {
       toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  const handleShareProfile = async () => {
+    const url = new URL(`${import.meta.env.BASE_URL}profile/${encodeURIComponent(uid)}`, window.location.origin).href;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${profile?.displayName ?? "Yazar"} | SPEKTRUM`,
+          text: `${profile?.displayName ?? "Bu yazar"}’ın SPEKTRUM profilini keşfet.`,
+          url,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Profil bağlantısı kopyalandı" });
+    } catch {
+      toast({ title: "Bağlantı kopyalanamadı", description: "Tarayıcının adres çubuğundaki bağlantıyı paylaşabilirsin.", variant: "destructive" });
     }
   };
 
@@ -639,6 +679,20 @@ export default function ProfilePage() {
       toast({ title: "Kullanıcı şikayet edildi", description: "Moderatörler inceleyecek." });
     } catch {
       toast({ title: "Şikayet gönderilemedi", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (needsDeletePassword && !deletePassword) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePassword);
+      toast({ title: "Hesap silindi", description: "Hesabın kalıcı olarak silindi." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Doğrulama başarısız.";
+      toast({ title: "Hata", description: msg, variant: "destructive" });
+      setDeleting(false);
+      setDeletePassword("");
     }
   };
 
@@ -700,6 +754,68 @@ export default function ProfilePage() {
             type={followListModal}
             onClose={() => setFollowListModal(null)}
           />
+        )}
+        {deleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !deleting && (setDeleteModal(false), setDeletePassword(""))}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card border border-red-500/30 rounded-2xl p-6 w-full max-w-sm space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <p className="font-semibold">Hesabı Kalıcı Sil</p>
+                  <p className="text-xs text-muted-foreground">Bu işlem geri alınamaz</p>
+                </div>
+                <button onClick={() => !deleting && (setDeleteModal(false), setDeletePassword(""))} className="ml-auto text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Hesabınla birlikte tüm hikayeler, yorumlar ve mesajlar kalıcı olarak silinecek.{" "}
+                {needsDeletePassword ? "Devam etmek için şifreni gir." : "Devam edersen Google hesabınla doğrulama yapacaksın."}
+              </p>
+              {needsDeletePassword && <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Şifre</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => setDeletePassword(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleDeleteAccount()}
+                  placeholder="Mevcut şifreni gir"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                  disabled={deleting}
+                />
+              </div>}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => !deleting && (setDeleteModal(false), setDeletePassword(""))}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-border text-sm font-semibold hover:border-primary/50 transition-colors"
+                  disabled={deleting}
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={(needsDeletePassword && !deletePassword) || deleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+                >
+                  {deleting ? "Siliniyor..." : "Hesabı Sil"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -817,6 +933,14 @@ export default function ProfilePage() {
           {/* Bio */}
           {profile.bio && <p className="text-muted-foreground text-sm mb-4 max-w-lg leading-relaxed">{profile.bio}</p>}
 
+          <button
+            onClick={handleShareProfile}
+            className="inline-flex items-center gap-2 px-4 py-2 mb-4 rounded-xl border border-border text-sm font-semibold hover:border-primary/50 hover:text-primary transition-colors"
+            data-testid="button-share-profile"
+          >
+            <Share2 className="w-4 h-4" /> Profili paylaş
+          </button>
+
           {/* Social Links */}
           {(profile.instagram || profile.tiktok || profile.pinterest || profile.snapchat || profile.website) && (
             <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -882,10 +1006,10 @@ export default function ProfilePage() {
           {badges.length > 0 && (
             <div className="flex items-center gap-2 mb-6 flex-wrap">
               {badges.map(b => (
-                <div key={b.id} title={b.desc}
+                <div key={b.id} title={t(b.desc)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 text-xs font-semibold cursor-default">
                   <span>{b.emoji}</span>
-                  <span>{b.label}</span>
+                  <span>{t(b.label)}</span>
                 </div>
               ))}
             </div>
@@ -896,7 +1020,7 @@ export default function ProfilePage() {
             {[
               { key: "stories", label: "Hikayeleri", icon: <BookOpen className="w-4 h-4" /> },
               { key: "qa", label: "Soru & Cevap", icon: <MessageSquarePlus className="w-4 h-4" /> },
-              ...(isOwner ? [{ key: "bookmarks", label: "Favori Kitaplarım", icon: <Bookmark className="w-4 h-4" /> }] : []),
+              { key: "bookmarks", label: isOwner ? "Favori Kitaplarım" : "Favorileri", icon: <Bookmark className="w-4 h-4" /> },
             ].map(tab => (
               <button key={tab.key}
                 onClick={() => {
@@ -908,7 +1032,7 @@ export default function ProfilePage() {
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}>
-                {tab.icon} {tab.label}
+                {tab.icon} {t(tab.label)}
               </button>
             ))}
           </div>
@@ -971,7 +1095,7 @@ export default function ProfilePage() {
           )}
 
           {/* ── Kaydedilenler Tab ── */}
-          {activeTab === "bookmarks" && isOwner && (
+          {activeTab === "bookmarks" && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {bookmarksLoading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -980,8 +1104,14 @@ export default function ProfilePage() {
               ) : bookmarkedStories.length === 0 ? (
                 <div className="py-16 text-center border border-dashed border-border rounded-2xl">
                   <Bookmark className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-muted-foreground">Henüz kaydettiğin hikaye yok.</p>
-                  <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasında "Kaydet" butonuna basarak buraya ekleyebilirsin.</p>
+                  {isOwner ? (
+                    <>
+                      <p className="text-muted-foreground">Henüz kaydettiğin hikaye yok.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Bir hikaye sayfasında "Kaydet" butonuna basarak buraya ekleyebilirsin.</p>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">Henüz favori kitap eklenmemiş.</p>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

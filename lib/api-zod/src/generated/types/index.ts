@@ -6,8 +6,30 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './chapterAudio';
+export * from './chapterAudioState';
+export * from './getPushDeviceParams';
+export * from './getStoryReadingReportDays';
+export * from './getStoryReadingReportParams';
 export * from './healthStatus';
 export * from './moderationResult';
 export * from './moderationResultAction';
+export * from './pushAcknowledgement';
+export * from './pushDeviceState';
+export * from './pushPreferences';
+export * from './pushRegistration';
+export * from './pushRegistrationPlatform';
+export * from './pushRevocation';
+export * from './pushTestInput';
+export * from './readingAcknowledgement';
+export * from './readingChapterStats';
+export * from './readingObservation';
+export * from './storyReadingReport';
+export * from './streamChapterAudioParams';
 export * from './textModerationInput';
 export * from './trendingStory';
+export * from './votingWeek';
+export * from './weeklyLeaderboard';
+export * from './weeklyLeaderboardEntriesItem';
+export * from './weeklyVoteInput';
+export * from './weeklyVoteStatus';

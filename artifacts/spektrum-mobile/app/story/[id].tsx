@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createReactionPressGate } from "@workspace/story-reactions/press-gate";
 import {
   View,
   Text,
@@ -10,18 +11,29 @@ import {
   Dimensions,
   Modal,
   Alert,
+  TextInput,
+  Share,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import ViewShot from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import { translateGenre } from "@workspace/spektrum-i18n";
+import { WeeklyVoteButton } from "@/components/WeeklyVoteButton";
+import { getPublicStoryUrl } from "@/lib/share-links";
 import {
   getStory,
   getChapters,
   likeStory,
   unlikeStory,
+  hasUserLikedStory,
   incrementStoryRead,
   getTalentPortfoliosByStory,
   reportContent,
@@ -92,6 +104,7 @@ function TalentCard({ p }: { p: TalentPortfolio }) {
 
 export default function StoryDetailScreen() {
   const colors = useColors();
+  const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -102,12 +115,23 @@ export default function StoryDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [likePending, setLikePending] = useState(false);
+  const likeBusy = useRef(false);
+  const claimLikePress = useRef(createReactionPressGate());
+  const likeContext = useRef("");
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   // şikayet modal
   const [showReport, setShowReport] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [showQuoteCard, setShowQuoteCard] = useState(false);
+  const [quoteText, setQuoteText] = useState("");
+  const [sharingQuote, setSharingQuote] = useState(false);
+  const quoteCardRef = useRef<ViewShot>(null);
 
   const storyId = Array.isArray(id) ? id[0] : id;
+  likeContext.current = `${storyId}:${user?.uid ?? ""}`;
 
   useEffect(() => {
     if (!storyId) return;
@@ -123,8 +147,11 @@ export default function StoryDetailScreen() {
         setPortfolios(pt);
         if (s) {
           setLikeCount(s.likeCount ?? 0);
-          if (user) setLiked((s.likedBy ?? []).includes(user.uid));
-          await incrementStoryRead(storyId);
+          if (user) {
+            const context = `${storyId}:${user.uid}`;
+            const isLiked = await hasUserLikedStory(s.id, user.uid);
+            if (mounted.current && likeContext.current === context) setLiked(isLiked);
+          } else setLiked(false);
         }
       } catch { /* sessiz */ }
       finally { setLoading(false); }
@@ -133,14 +160,29 @@ export default function StoryDetailScreen() {
 
   const handleLike = async () => {
     if (!user || !story) { router.push("/auth"); return; }
-    if (liked) {
-      setLiked(false);
-      setLikeCount((c) => c - 1);
-      await unlikeStory(story.id, user.uid);
-    } else {
-      setLiked(true);
-      setLikeCount((c) => c + 1);
-      await likeStory(story.id, user.uid);
+    if (likeBusy.current || !claimLikePress.current()) return;
+    likeBusy.current = true;
+    setLikePending(true);
+    const uid = user.uid;
+    const context = likeContext.current;
+    const wasLiked = liked;
+    try {
+      const applied = wasLiked
+        ? await unlikeStory(story.id, uid)
+        : await likeStory(story.id, uid);
+      if (mounted.current && likeContext.current === context) {
+        setLiked(!wasLiked);
+        if (applied) setLikeCount((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
+        else {
+          const latest = await getStory(story.id);
+          if (latest && mounted.current && likeContext.current === context) setLikeCount(latest.likeCount ?? 0);
+        }
+      }
+    } catch {
+      Alert.alert(t("Beğeni kaydedilemedi"), t("Bağlantını kontrol edip tekrar dene."));
+    } finally {
+      likeBusy.current = false;
+      if (mounted.current) setLikePending(false);
     }
   };
 
@@ -155,11 +197,90 @@ export default function StoryDetailScreen() {
         reason,
       });
       setShowReport(false);
-      Alert.alert("Şikayet alındı", "İnceleme için moderatörlere iletildi.");
+      Alert.alert(t("Şikayet alındı"), t("İnceleme için moderatörlere iletildi."));
     } catch {
-      Alert.alert("Hata", "Şikayet gönderilemedi.");
+      Alert.alert(t("Hata"), t("Şikayet gönderilemedi"));
     } finally {
       setReportSubmitting(false);
+    }
+  };
+
+  const handleShareStory = async () => {
+    if (!story) return;
+    const url = getPublicStoryUrl(story.id);
+    if (!url) {
+      Alert.alert(t("Paylaşım bağlantısı hazır değil"), t("Web alan adı bu derlemede yapılandırılmamış."));
+      return;
+    }
+
+    const message = [
+      `${story.title} — ${story.authorName}`,
+      story.summary?.trim(),
+      url,
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      await Share.share({ title: `${story.title} | SPEKTRUM`, message, url });
+    } catch {
+      Alert.alert(t("Paylaşım açılamadı"), t("Hikâye bağlantısı paylaşılırken bir hata oluştu."));
+    }
+  };
+
+  const handleOpenQuoteCard = () => {
+    const firstPublishedChapter = chapters.find(
+      (chapter) => chapter.status === "published" && chapter.content?.trim(),
+    );
+    const source = firstPublishedChapter?.content ?? "";
+    const plainText = source
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li)>/gi, "\n")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .split(/\n+/)
+      .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+      .find(Boolean);
+
+    if (!plainText) {
+      Alert.alert(t("Alıntı bulunamadı"), t("Paylaşmak için yayımlanmış bir bölüm gerekli."));
+      return;
+    }
+
+    const trimmed = plainText.length > 260
+      ? `${plainText.slice(0, 257).trimEnd()}…`
+      : plainText;
+    setQuoteText(trimmed);
+    setShowQuoteCard(true);
+  };
+
+  const handleShareQuoteCard = async () => {
+    if (sharingQuote || !quoteText.trim()) return;
+    if (Platform.OS === "web") {
+      Alert.alert(t("Mobil uygulamada paylaş"), t("PNG alıntı kartını paylaşmak için SPEKTRUM mobil uygulamasını kullan."));
+      return;
+    }
+    setSharingQuote(true);
+    try {
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert(t("Görsel paylaşımı kullanılamıyor"), t("Bu cihaz dosya paylaşımını desteklemiyor."));
+        return;
+      }
+      const imageUri = await quoteCardRef.current?.capture?.();
+      if (!imageUri) throw new Error(t("Kart görseli oluşturulamadı."));
+      await Sharing.shareAsync(imageUri, {
+        dialogTitle: t("Alıntı kartını paylaş"),
+        mimeType: "image/png",
+        UTI: "public.png",
+      });
+    } catch {
+      Alert.alert(t("Kart paylaşılamadı"), t("Görsel oluşturulamadı. Lütfen tekrar dene."));
+    } finally {
+      setSharingQuote(false);
     }
   };
 
@@ -175,13 +296,17 @@ export default function StoryDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Feather name="alert-circle" size={40} color={colors.mutedForeground} />
-        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>Hikaye bulunamadı.</Text>
+        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>{t("Hikaye bulunamadı.")}</Text>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>Geri Dön</Text>
+          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>{t("Geri Dön")}</Text>
         </TouchableOpacity>
       </View>
     );
   }
+
+  const canSharePublicly = story.status === "published" || story.status === "completed";
+  const publicStoryUrl = getPublicStoryUrl(story.id);
+  const shareAddress = publicStoryUrl?.replace(/^https?:\/\//i, "") ?? "SPEKTRUM";
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -219,7 +344,7 @@ export default function StoryDetailScreen() {
         <View style={styles.infoSection}>
           <View style={styles.genreReportRow}>
             <View style={[styles.genreBadge, { backgroundColor: colors.primary + "33" }]}>
-              <Text style={[styles.genreBadgeText, { color: colors.primary }]}>{story.genre}</Text>
+              <Text style={[styles.genreBadgeText, { color: colors.primary }]}>{translateGenre(locale, story.genre)}</Text>
             </View>
           </View>
           <Text style={[styles.title, { color: colors.foreground }]}>{story.title}</Text>
@@ -233,7 +358,7 @@ export default function StoryDetailScreen() {
 
           {/* İstatistikler */}
           <View style={styles.statsRow}>
-            <TouchableOpacity style={styles.statBtn} onPress={handleLike}>
+            <TouchableOpacity style={[styles.statBtn, likePending && { opacity: 0.5 }]} onPress={handleLike} disabled={likePending} accessibilityRole="button" accessibilityLabel={liked ? t("Beğeniyi geri al") : t("Beğen")} accessibilityState={{ disabled: likePending }} testID="button-like-story">
               <Feather name="heart" size={18} color={liked ? "#ec4899" : colors.mutedForeground} />
               <Text style={[styles.statText, { color: liked ? "#ec4899" : colors.mutedForeground }]}>
                 {likeCount.toLocaleString("tr")}
@@ -248,7 +373,7 @@ export default function StoryDetailScreen() {
             <View style={styles.statBtn}>
               <Feather name="book-open" size={18} color={colors.mutedForeground} />
               <Text style={[styles.statText, { color: colors.mutedForeground }]}>
-                {story.chapterCount ?? 0} bölüm
+                {story.chapterCount ?? 0} {t("Bölüm")}
               </Text>
             </View>
           </View>
@@ -257,6 +382,31 @@ export default function StoryDetailScreen() {
           {!!story.summary && (
             <View style={[styles.summaryBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.summaryText, { color: colors.foreground }]}>{story.summary}</Text>
+            </View>
+          )}
+
+          <WeeklyVoteButton storyId={story.id} authorId={story.authorId} status={story.status} />
+
+          {canSharePublicly && (
+            <View style={styles.shareActions}>
+              <TouchableOpacity
+                style={[styles.shareAction, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={handleShareStory}
+                accessibilityRole="button"
+                accessibilityLabel={t("Hikâye bağlantısını paylaş")}
+              >
+                <Feather name="share-2" size={17} color={colors.foreground} />
+                <Text style={[styles.shareActionText, { color: colors.foreground }]}>{t("Hikâyeyi paylaş")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.shareAction, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                onPress={handleOpenQuoteCard}
+                accessibilityRole="button"
+                accessibilityLabel={t("Alıntı kartı oluştur ve paylaş")}
+              >
+                <Feather name="image" size={17} color={colors.primaryForeground} />
+                <Text style={[styles.shareActionText, { color: colors.primaryForeground }]}>{t("Alıntı kartı")}</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -285,13 +435,13 @@ export default function StoryDetailScreen() {
               }
             >
               <LinearGradient
-                colors={["#7c3aed", "#6d28d9"]}
+                colors={["#A07FE6", "#8B6AC5"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.readBtnGrad}
               >
                 <Feather name="book-open" size={18} color="#fff" />
-                <Text style={styles.readBtnText}>Okumaya Başla</Text>
+                <Text style={styles.readBtnText}>{t("Okumaya Başla")}</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
@@ -301,7 +451,7 @@ export default function StoryDetailScreen() {
         {chapters.length > 0 && (
           <View style={[styles.section, { borderTopColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-              Bölümler ({chapters.length})
+              {t("Bölümler")} ({chapters.length})
             </Text>
             {chapters.map((ch, idx) => (
               <TouchableOpacity
@@ -340,11 +490,11 @@ export default function StoryDetailScreen() {
             <View style={styles.sectionHeader}>
               <Feather name="star" size={16} color={colors.primary} />
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Yetenek Portföyleri
+                {t("Yetenek Portföyleri")}
               </Text>
             </View>
             <Text style={[styles.sectionSub, { color: colors.mutedForeground }]}>
-              Bu hikaye için kapak tasarımı sunan çizerler
+              {t("Bu hikaye için kapak tasarımı sunan çizerler")}
             </Text>
             {portfolios.map((p) => (
               <TalentCard key={p.id} p={p} />
@@ -368,9 +518,9 @@ export default function StoryDetailScreen() {
         />
         <View style={[styles.reportSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 12 }]}>
           <View style={styles.handle} />
-          <Text style={[styles.reportTitle, { color: colors.foreground }]}>Hikayeyi Şikayet Et</Text>
+          <Text style={[styles.reportTitle, { color: colors.foreground }]}>{t("Hikayeyi Şikayet Et")}</Text>
           <Text style={[styles.reportSub, { color: colors.mutedForeground }]}>
-            Neden şikayet ediyorsun?
+            {t("Neden şikayet ediyorsun?")}
           </Text>
           {REPORT_REASONS.map((r) => (
             <TouchableOpacity
@@ -389,6 +539,118 @@ export default function StoryDetailScreen() {
               )}
             </TouchableOpacity>
           ))}
+        </View>
+      </Modal>
+
+      {/* Alıntı kartı */}
+      <Modal
+        visible={showQuoteCard}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowQuoteCard(false)}
+        statusBarTranslucent
+      >
+        <View style={styles.quoteModalBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowQuoteCard(false)}
+            accessibilityLabel={t("Alıntı kartını kapat")}
+          />
+          <KeyboardAvoidingView
+            style={{ flex: 1, width: "100%", justifyContent: "flex-end" }}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={[styles.quoteSheet, { backgroundColor: colors.card, borderColor: colors.border, paddingBottom: insets.bottom + 12 }]}>
+              <View style={styles.quoteSheetHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.quoteSheetTitle, { color: colors.foreground }]}>{t("Alıntı kartın")}</Text>
+                  <Text style={[styles.quoteSheetSubtitle, { color: colors.mutedForeground }]}>
+                    {t("Metni düzenle, sonra görsel olarak paylaş.")}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowQuoteCard(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kapat"
+                >
+                  <Feather name="x" size={22} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.quoteSheetContent}
+              >
+                <TextInput
+                  value={quoteText}
+                  onChangeText={setQuoteText}
+                  multiline
+                  maxLength={260}
+                  textAlignVertical="top"
+                  style={[styles.quoteInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                  accessibilityLabel={t("Paylaşılacak alıntı metni")}
+                />
+                <ViewShot
+                  ref={quoteCardRef}
+                  style={styles.quoteCardShot}
+                  options={{ format: "png", quality: 1, width: 1080, height: 1350 }}
+                >
+                  <LinearGradient
+                    colors={[colors.foreground, colors.foreground]}
+                    style={styles.quoteCard}
+                  >
+                    <View style={[styles.quoteGlow, { backgroundColor: colors.primary + "33" }]} />
+                    <View style={[styles.quoteGlowSmall, { backgroundColor: colors.secondary + "33" }]} />
+                    <View style={styles.quoteCardBrand}>
+                      <View style={[styles.quoteBrandMark, { backgroundColor: colors.secondary }]} />
+                      <Text style={[styles.quoteBrandText, { color: colors.primaryForeground }]}>SPEKTRUM</Text>
+                    </View>
+                    <View style={styles.quoteCardMain}>
+                      <Feather name="book-open" size={34} color={colors.secondary} />
+                      <Text
+                        style={[styles.quoteCardText, { color: colors.primaryForeground }]}
+                        numberOfLines={7}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.78}
+                      >
+                        {quoteText.trim() || t("Alıntını buraya yaz")}
+                      </Text>
+                    </View>
+                    <View style={[styles.quoteCardFooter, { borderTopColor: colors.primaryForeground + "30" }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.quoteAuthor, { color: colors.primaryForeground }]} numberOfLines={1}>
+                          {story.authorName}
+                        </Text>
+                        <Text style={[styles.quoteStoryTitle, { color: colors.primaryForeground + "B8" }]} numberOfLines={1}>
+                          {story.title}
+                        </Text>
+                      </View>
+                      <Text style={[styles.quoteDomain, { color: colors.secondary }]} numberOfLines={2}>
+                        {shareAddress}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </ViewShot>
+                <TouchableOpacity
+                  style={[styles.quoteShareButton, { backgroundColor: colors.primary }]}
+                  onPress={handleShareQuoteCard}
+                  disabled={sharingQuote || !quoteText.trim()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Alıntı görselini paylaş")}
+                >
+                  {sharingQuote ? (
+                    <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  ) : (
+                    <Feather name="share-2" size={17} color={colors.primaryForeground} />
+                  )}
+                  <Text style={[styles.quoteShareButtonText, { color: colors.primaryForeground }]}>
+                    {sharingQuote ? t("Görsel hazırlanıyor…") : t("Görseli paylaş")}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -432,6 +694,9 @@ const styles = StyleSheet.create({
   statText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   summaryBox: { padding: 14, borderRadius: 14, borderWidth: 1, marginTop: 4 },
   summaryText: { fontSize: 14, fontFamily: "Inter_400Regular", lineHeight: 22 },
+  shareActions: { flexDirection: "row", gap: 10, marginTop: 2 },
+  shareAction: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1 },
+  shareActionText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   tagRow: { flexDirection: "row", gap: 8, paddingVertical: 2 },
   tag: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
   tagText: { fontSize: 12, fontFamily: "Inter_400Regular" },
@@ -471,6 +736,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   reportOptionText: { fontSize: 15, fontFamily: "Inter_400Regular" },
+  quoteModalBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
+  quoteSheet: { maxHeight: "94%", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderBottomWidth: 0, paddingHorizontal: 16, paddingTop: 18 },
+  quoteSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  quoteSheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  quoteSheetSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  quoteSheetContent: { gap: 12, paddingBottom: 2 },
+  quoteInput: { minHeight: 72, maxHeight: 100, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular" },
+  quoteCardShot: { width: "100%", aspectRatio: 0.8, overflow: "hidden", borderRadius: 20 },
+  quoteCard: { flex: 1, padding: 22, justifyContent: "space-between", overflow: "hidden" },
+  quoteGlow: { position: "absolute", width: 220, height: 220, borderRadius: 110, top: -100, right: -80 },
+  quoteGlowSmall: { position: "absolute", width: 150, height: 150, borderRadius: 75, bottom: 20, left: -90 },
+  quoteCardBrand: { flexDirection: "row", alignItems: "center", gap: 8 },
+  quoteBrandMark: { width: 9, height: 9, borderRadius: 5 },
+  quoteBrandText: { fontSize: 12, letterSpacing: 2.5, fontFamily: "Inter_700Bold" },
+  quoteCardMain: { gap: 12, paddingVertical: 12 },
+  quoteCardText: { fontSize: 22, lineHeight: 31, fontFamily: "Inter_400Regular" },
+  quoteCardFooter: { gap: 8, borderTopWidth: 1, paddingTop: 14 },
+  quoteAuthor: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  quoteStoryTitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  quoteDomain: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  quoteShareButton: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, marginTop: 2 },
+  quoteShareButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 });
 
 const tc = StyleSheet.create({

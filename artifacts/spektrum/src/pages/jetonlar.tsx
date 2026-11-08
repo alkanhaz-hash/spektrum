@@ -6,11 +6,13 @@ import { subscribeJetonTransactions, JetonTransaction } from "@/lib/firestore-se
 import { JETON_PACKAGES, JETON_COSTS, WORDS_PER_JETON, MIN_CHAPTER_COST } from "@/lib/jeton-packages";
 import { Coins, TrendingUp, TrendingDown, RotateCcw, Lock, Star, Zap, Gift, Sparkles, BookOpen } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
+import { useLocale } from "@/contexts/LocaleContext";
+import { formatLocale, type Locale } from "@workspace/spektrum-i18n";
 
-function formatDate(ts: Timestamp | undefined): string {
+function formatDate(ts: Timestamp | undefined, locale: Locale): string {
   if (!ts) return "";
   const d = ts.toDate();
-  return d.toLocaleDateString("tr-TR", {
+  return d.toLocaleDateString(formatLocale(locale), {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -53,6 +55,7 @@ const FEATURE_CARDS = [
 ];
 
 export default function JetonlarPage() {
+  const { t, locale } = useLocale();
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
   const [transactions, setTransactions] = useState<JetonTransaction[]>([]);
@@ -137,7 +140,7 @@ export default function JetonlarPage() {
                   )}
                 </div>
 
-                <span className="text-xs text-muted-foreground">{pkg.label}</span>
+                <span className="text-xs text-muted-foreground">{t(pkg.label)}</span>
 
                 <div className="mt-1.5 w-full">
                   {pkg.priceTRY !== null ? (
@@ -176,8 +179,8 @@ export default function JetonlarPage() {
                   <fc.icon className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">{fc.label}</p>
-                  <p className="text-xs text-muted-foreground">{fc.desc}</p>
+                  <p className="text-sm font-semibold">{t(fc.label)}</p>
+                  <p className="text-xs text-muted-foreground">{t(fc.desc)}</p>
                 </div>
                 <div className="shrink-0 flex items-center gap-1">
                   <Coins className="w-3.5 h-3.5 text-amber-500" />
@@ -231,8 +234,8 @@ export default function JetonlarPage() {
                     <TxIcon type={tx.type} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{tx.reason}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
+                    <p className="text-sm font-medium truncate">{t(tx.reason)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt, locale)}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <p

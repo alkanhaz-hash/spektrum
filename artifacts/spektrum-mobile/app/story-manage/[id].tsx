@@ -14,7 +14,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
-import { getStory, getAllChapters, Story, Chapter } from "@/lib/firestore-service";
+import { getStory, getAllChapters, updateStory, Story, Chapter } from "@/lib/firestore-service";
 
 const CHAPTER_STATUS: Record<string, { label: string; color: string }> = {
   published: { label: "Yayınlandı", color: "#22c55e" },
@@ -23,7 +23,10 @@ const CHAPTER_STATUS: Record<string, { label: string; color: string }> = {
   rejected: { label: "Reddedildi", color: "#ef4444" },
 };
 
+import { useLocale } from "@/contexts/LocaleContext";
+
 export default function StoryManageScreen() {
+  const { t } = useLocale();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -103,6 +106,52 @@ export default function StoryManageScreen() {
               </View>
             )}
 
+            {story && user?.uid === story.authorId && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_600SemiBold", fontSize: 12, marginBottom: 8 }}>
+                  Hikaye dili
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(["tr", "en"] as const).map(language => (
+                    <TouchableOpacity
+                      key={language}
+                      onPress={async () => {
+                        try {
+                          await updateStory(story.id, { contentLanguage: language });
+                          setStory({ ...story, contentLanguage: language });
+                        } catch {
+                          Alert.alert("Hata", "Hikaye dili kaydedilemedi.");
+                        }
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: (story.contentLanguage ?? "tr") === language }}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: (story.contentLanguage ?? "tr") === language ? colors.primary : colors.border,
+                        backgroundColor: (story.contentLanguage ?? "tr") === language ? colors.primary + "22" : colors.card,
+                        borderRadius: 18,
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                      }}
+                    >
+                      <Text style={{ color: (story.contentLanguage ?? "tr") === language ? colors.primary : colors.mutedForeground, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>
+                        {language === "tr" ? "Türkçe" : "English"}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {story && user?.uid === story.authorId && (
+              <TouchableOpacity
+                style={[styles.addBtn, { borderColor: colors.primary, alignSelf: "flex-start", marginBottom: 14 }]}
+                onPress={() => router.push({ pathname: "/reading-stats/[id]", params: { id } })}
+              >
+                <Feather name="bar-chart-2" size={16} color={colors.primary} />
+                <Text style={[styles.addBtnText, { color: colors.primary }]}>Okuma istatistikleri</Text>
+              </TouchableOpacity>
+            )}
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Bölümler</Text>
               <TouchableOpacity
@@ -141,7 +190,7 @@ export default function StoryManageScreen() {
               </View>
               <View style={{ alignItems: "flex-end", gap: 8 }}>
                 <View style={[styles.statusBadge, { backgroundColor: st.color + "22" }]}>
-                  <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
+                      <Text style={[styles.statusText, { color: st.color }]}>{t(st.label)}</Text>
                 </View>
                 <Feather name="edit-2" size={16} color={colors.mutedForeground} />
               </View>

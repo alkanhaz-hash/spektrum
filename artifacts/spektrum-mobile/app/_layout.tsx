@@ -10,11 +10,14 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { View, Text } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { LocaleProvider } from "@/contexts/LocaleContext";
+import { firebaseInitError } from "@/lib/firebase";
+import { PushRuntime } from "@/components/PushRuntime";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,9 +33,14 @@ function RootLayoutNav() {
       <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="story-manage/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="reading-stats/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="book-import" options={{ headerShown: false }} />
       <Stack.Screen name="chapter-editor/[storyId]" options={{ headerShown: false }} />
       <Stack.Screen name="jetonlar" options={{ headerShown: false }} />
       <Stack.Screen name="moderator" options={{ headerShown: false }} />
+      <Stack.Screen name="push-settings" options={{ headerShown: false }} />
+      <Stack.Screen name="ask/[uid]" options={{ headerShown: false }} />
+      <Stack.Screen name="qa/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="kvkk" options={{ headerShown: false }} />
       <Stack.Screen name="terms" options={{ headerShown: false }} />
       <Stack.Screen name="odeme" options={{ headerShown: false }} />
@@ -56,16 +64,32 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
+  if (firebaseInitError) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: "#0B0D14", justifyContent: "center", alignItems: "center", padding: 24 }}>
+          <Text style={{ color: "#A07FE6", fontSize: 18, fontWeight: "700", marginBottom: 12 }}>
+            Firebase Bağlatı Hatası
+          </Text>
+          <Text style={{ color: "#a1a1aa", fontSize: 13, textAlign: "center" }}>
+            {firebaseInitError}
+          </Text>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
+            <LocaleProvider>
               <AuthProvider>
+                <PushRuntime />
                 <RootLayoutNav />
               </AuthProvider>
-            </KeyboardProvider>
+            </LocaleProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>

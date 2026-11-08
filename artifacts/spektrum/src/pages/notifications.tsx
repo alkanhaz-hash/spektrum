@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, SpektrumNotification } from "@/lib/firestore-service";
-import { Bell, Heart, MessageSquare, UserPlus, CheckCircle, XCircle, HelpCircle } from "lucide-react";
+import { Bell, Heart, MessageSquare, UserPlus, CheckCircle, XCircle, HelpCircle, Shield } from "lucide-react";
 import { motion } from "framer-motion";
 
 function getNotifUrl(n: SpektrumNotification): string {
@@ -11,6 +11,7 @@ function getNotifUrl(n: SpektrumNotification): string {
   if (n.type === "like" || n.type === "comment") return n.storyId ? `/story/${n.storyId}` : `/profile/${n.senderId}`;
   if (n.type === "qa_answer") return `/profile/${n.senderId}`;
   if (n.type === "chapter_approved" || n.type === "chapter_rejected") return n.storyId ? `/write/${n.storyId}` : "/";
+  if (n.type === "moderator_directive") return n.storyId ? `/write/${n.storyId}` : "/";
   return "/";
 }
 
@@ -32,45 +33,57 @@ function NotifIcon({ type }: { type: SpektrumNotification["type"] }) {
   if (type === "chapter_approved") return <CheckCircle className={`${base} text-emerald-400`} />;
   if (type === "chapter_rejected") return <XCircle className={`${base} text-destructive`} />;
   if (type === "qa_answer") return <HelpCircle className={`${base} text-yellow-400`} />;
+  if (type === "moderator_directive") return <Shield className={`${base} text-amber-400`} />;
   return <Bell className={`${base} text-muted-foreground`} />;
 }
 
-function notifText(n: SpektrumNotification): { main: string; highlight?: string; highlightColor?: string } {
+import { useLocale } from "@/contexts/LocaleContext";
+import { notificationSummary, type Locale } from "@workspace/spektrum-i18n";
+
+function notifText(n: SpektrumNotification, locale: Locale): { main: string; highlight?: string; highlightColor?: string } {
+  const main = notificationSummary(locale, n.type, n.senderName);
   switch (n.type) {
     case "follow":
-      return { main: `${n.senderName} seni takip etmeye başladı.` };
+      return { main };
     case "like":
       return {
-        main: `${n.senderName} hikayeni beğendi.`,
+        main,
         highlight: n.storyTitle,
         highlightColor: "text-pink-400",
       };
     case "comment":
       return {
-        main: `${n.senderName} hikayene yorum yaptı.`,
+        main,
         highlight: n.storyTitle,
         highlightColor: "text-primary",
       };
     case "qa_answer":
-      return { main: `${n.senderName} anonim sorunuzu yanıtladı.` };
+      return { main };
     case "chapter_approved":
       return {
-        main: "Bölümün onaylandı ve yayınlandı.",
+        main,
         highlight: n.storyTitle,
         highlightColor: "text-emerald-400",
       };
     case "chapter_rejected":
       return {
-        main: "Bölümün reddedildi.",
+        main,
         highlight: n.storyTitle,
         highlightColor: "text-destructive",
       };
+    case "moderator_directive":
+      return {
+        main,
+        highlight: n.directiveMessage ?? "",
+        highlightColor: "text-amber-400",
+      };
     default:
-      return { main: "Yeni bildirim." };
+      return { main };
   }
 }
 
 export default function NotificationsPage() {
+  const { locale } = useLocale();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [notifs, setNotifs] = useState<SpektrumNotification[]>([]);
@@ -133,7 +146,7 @@ export default function NotificationsPage() {
         ) : (
           <div className="space-y-2">
             {notifs.map((n, i) => {
-              const txt = notifText(n);
+              const txt = notifText(n, locale);
               return (
                 <motion.button
                   key={n.id}

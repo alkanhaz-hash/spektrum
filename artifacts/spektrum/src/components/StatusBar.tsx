@@ -7,6 +7,7 @@ import {
   createStatus,
   markStatusViewed,
   deleteStatus,
+  getFollowing,
   UserStatus,
 } from "@/lib/firestore-service";
 import { uploadStatusImage } from "@/lib/storage-service";
@@ -31,8 +32,43 @@ interface StatusGroup {
   uid: string;
   displayName: string;
   avatarUrl: string;
+  statuses: UserStatus[];
   latest: UserStatus;
   hasUnviewed: boolean;
+}
+
+async function createCompressedStatusDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      const maxWidth = 720;
+      const maxHeight = 1280;
+      const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Görsel işlenemedi."));
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+      if (dataUrl.length > 850_000) {
+        reject(new Error("Görsel çok büyük. Daha küçük bir fotoğraf seç."));
+        return;
+      }
+      resolve(dataUrl);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Görsel okunamadı."));
+    };
+    image.src = objectUrl;
+  });
 }
 
 // ─── Yardımcı: zaman bilgisi ─────────────────────────────────────────────────
@@ -56,31 +92,47 @@ interface ViewModalProps {
 
 function ViewStatusModal({ group, currentUid, onClose, onDelete, onViewed }: ViewModalProps) {
   const [progress, setProgress] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const firstUnviewed = group.statuses.findIndex(status => !status.viewedBy.includes(currentUid));
+    return firstUnviewed >= 0 ? firstUnviewed : 0;
+  });
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isOwn = group.uid === currentUid;
   const DURATION = 5000;
+  const s = group.statuses[currentIndex];
+
+  const goPrevious = () => {
+    if (currentIndex > 0) setCurrentIndex(index => index - 1);
+  };
+
+  const goNext = useCallback(() => {
+    if (currentIndex < group.statuses.length - 1) {
+      setCurrentIndex(index => index + 1);
+    } else {
+      onClose();
+    }
+  }, [currentIndex, group.statuses.length, onClose]);
 
   useEffect(() => {
-    onViewed(group.latest.id);
+    onViewed(s.id);
     setProgress(0);
     timerRef.current = setInterval(() => {
       setProgress(p => {
         if (p >= 100) {
-          onClose();
+          goNext();
           return 100;
         }
         return p + 100 / (DURATION / 100);
       });
     }, 100);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [group.latest.id]);
+  }, [s.id, goNext, onViewed]);
 
   const handleDelete = () => {
-    onDelete(group.latest.id);
-    onClose();
+    onDelete(s.id);
+    if (group.statuses.length === 1) onClose();
+    else if (currentIndex === group.statuses.length - 1) setCurrentIndex(index => index - 1);
   };
-
-  const s = group.latest;
 
   return (
     <motion.div
@@ -114,13 +166,30 @@ function ViewStatusModal({ group, currentUid, onClose, onDelete, onViewed }: Vie
           </div>
         )}
 
-        {/* Progres çubuğu */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-white/20">
-          <motion.div
-            className="h-full bg-white"
-            style={{ width: `${progress}%` }}
-          />
+        {/* Her durum için ayrı ilerleme çubuğu */}
+        <div className="absolute top-0 left-2 right-2 z-20 flex gap-1 pt-1">
+          {group.statuses.map((status, index) => (
+            <div key={status.id} className="h-1 flex-1 rounded-full bg-white/25 overflow-hidden">
+              <div
+                className="h-full bg-white"
+                style={{ width: index < currentIndex ? "100%" : index === currentIndex ? `${progress}%` : "0%" }}
+              />
+            </div>
+          ))}
         </div>
+
+        <button
+          type="button"
+          aria-label="Önceki durum"
+          className="absolute inset-y-16 left-0 z-10 w-1/3 cursor-pointer"
+          onClick={goPrevious}
+        />
+        <button
+          type="button"
+          aria-label="Sonraki durum"
+          className="absolute inset-y-16 right-0 z-10 w-1/3 cursor-pointer"
+          onClick={goNext}
+        />
 
         {/* Üst bilgi */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
@@ -209,7 +278,12 @@ function CreateStatusModal({ onClose, onCreated }: CreateModalProps) {
     try {
       let mediaUrl: string | undefined;
       if (tab === "image" && imageFile) {
-        mediaUrl = await uploadStatusImage(user.uid, imageFile);
+        try {
+          mediaUrl = await uploadStatusImage(user.uid, imageFile);
+        } catch (uploadError) {
+          console.warn("[StatusBar] Storage yüklemesi başarısız, sıkıştırılmış görsel kullanılıyor:", uploadError);
+          mediaUrl = await createCompressedStatusDataUrl(imageFile);
+        }
       }
       const id = await createStatus(user.uid, {
         displayName: profile.displayName,
@@ -232,8 +306,12 @@ function CreateStatusModal({ onClose, onCreated }: CreateModalProps) {
       onCreated(newStatus);
       toast({ title: "Durum paylaşıldı", description: "24 saat boyunca görünecek." });
       onClose();
-    } catch {
-      toast({ title: "Hata", description: "Durum paylaşılamadı.", variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: "Hata",
+        description: error instanceof Error ? error.message : "Durum paylaşılamadı.",
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -409,8 +487,8 @@ function AvatarItem({ group, isMe, hasStatus, displayName, avatarUrl, onClick }:
           )}
         </div>
       </div>
-      <span className="text-xs text-muted-foreground max-w-[60px] truncate">
-        {isMe ? "Durumum" : displayName}
+      <span className="text-xs text-muted-foreground max-w-[72px] truncate">
+        {isMe ? (hasStatus ? "Durumum" : "Durum Ekle") : displayName}
       </span>
     </button>
   );
@@ -424,13 +502,27 @@ export function StatusBar() {
   const [loading, setLoading] = useState(true);
   const [viewingGroup, setViewingGroup] = useState<StatusGroup | null>(null);
   const [creating, setCreating] = useState(false);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
 
   const loadStatuses = useCallback(() => {
-    if (!user) return;
-    getActiveStatuses()
-      .then(s => { setStatuses(s); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [user]);
+    if (!user) {
+      setStatuses([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([getActiveStatuses(), getFollowing(user.uid)])
+      .then(([s, following]) => {
+        setStatuses(s);
+        setFollowingIds(new Set(following.map(person => person.uid)));
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error("[StatusBar] Durumlar yüklenemedi:", error);
+        setStatuses([]);
+        setLoading(false);
+      });
+  }, [user?.uid]);
 
   useEffect(() => {
     loadStatuses();
@@ -445,20 +537,31 @@ export function StatusBar() {
           uid: s.uid,
           displayName: s.displayName,
           avatarUrl: s.avatarUrl,
+          statuses: [],
           latest: s,
           hasUnviewed: false,
         });
       }
       const g = map.get(s.uid)!;
+      g.statuses.push(s);
       if (s.createdAt?.seconds > (g.latest.createdAt?.seconds ?? 0)) g.latest = s;
       if (!s.viewedBy.includes(user?.uid ?? "")) g.hasUnviewed = true;
+    }
+    for (const group of map.values()) {
+      group.statuses.sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
     }
     const my = user ? map.get(user.uid) ?? null : null;
     const others = Array.from(map.values())
       .filter(g => g.uid !== user?.uid)
-      .sort((a, b) => (b.hasUnviewed ? 1 : 0) - (a.hasUnviewed ? 1 : 0));
+      .sort((a, b) => {
+        const followDifference = Number(followingIds.has(b.uid)) - Number(followingIds.has(a.uid));
+        if (followDifference !== 0) return followDifference;
+        const unseenDifference = Number(b.hasUnviewed) - Number(a.hasUnviewed);
+        if (unseenDifference !== 0) return unseenDifference;
+        return (b.latest.createdAt?.seconds ?? 0) - (a.latest.createdAt?.seconds ?? 0);
+      });
     return { myGroup: my, othersGroups: others };
-  }, [statuses, user]);
+  }, [statuses, user, followingIds]);
 
   const handleViewed = useCallback(async (statusId: string) => {
     if (!user) return;
@@ -473,14 +576,28 @@ export function StatusBar() {
 
   const handleDelete = useCallback(async (statusId: string) => {
     setStatuses(prev => prev.filter(s => s.id !== statusId));
+    setViewingGroup(current => {
+      if (!current) return null;
+      const remaining = current.statuses.filter(status => status.id !== statusId);
+      if (remaining.length === 0) return null;
+      const latest = remaining.reduce((newest, status) =>
+        (status.createdAt?.seconds ?? 0) > (newest.createdAt?.seconds ?? 0) ? status : newest
+      );
+      return {
+        ...current,
+        statuses: remaining,
+        latest,
+        hasUnviewed: remaining.some(status => !status.viewedBy.includes(user?.uid ?? "")),
+      };
+    });
     try { await deleteStatus(statusId); } catch { /* sessiz */ }
-  }, []);
+  }, [user?.uid]);
 
   const handleCreated = useCallback((newStatus: UserStatus) => {
     setStatuses(prev => [newStatus, ...prev]);
   }, []);
 
-  if (!user || loading) return null;
+  if (!user) return null;
 
   const hasAnyContent = myGroup || othersGroups.length > 0;
   if (!hasAnyContent && !profile) return null;
@@ -492,6 +609,7 @@ export function StatusBar() {
           <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           <h2 className="text-base font-semibold text-muted-foreground">Durumlar</h2>
           <span className="text-xs text-muted-foreground/50">· 24 saat</span>
+          {loading && <span className="text-xs text-muted-foreground/50">Yükleniyor…</span>}
         </div>
         <div className="relative">
           <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: "none" }}>
@@ -504,6 +622,20 @@ export function StatusBar() {
               avatarUrl={profile?.avatarUrl ?? ""}
               onClick={() => myGroup ? setViewingGroup(myGroup) : setCreating(true)}
             />
+
+            {myGroup && (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="flex flex-col items-center gap-1.5 flex-shrink-0"
+                aria-label="Yeni durum ekle"
+              >
+                <div className="w-14 h-14 rounded-full border-2 border-dashed border-primary/50 bg-primary/5 flex items-center justify-center hover:bg-primary/10 transition-colors">
+                  <Plus className="w-5 h-5 text-primary" />
+                </div>
+                <span className="text-xs text-muted-foreground">Durum Ekle</span>
+              </button>
+            )}
 
             {/* Diğer kullanıcılar */}
             {othersGroups.map(g => (

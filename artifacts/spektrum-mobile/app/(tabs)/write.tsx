@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,33 +13,36 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  AppState,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { getStoriesByAuthor, createStory, updateStory, GENRES, Story } from "@/lib/firestore-service";
 import { uploadStoryCover } from "@/lib/storage-service";
+import { useLocale } from "@/contexts/LocaleContext";
+import { translateGenre, type Locale } from "@workspace/spektrum-i18n";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   published: { label: "Yayında", color: "#22c55e" },
   draft: { label: "Taslak", color: "#f59e0b" },
-  completed: { label: "Tamamlandı", color: "#06b6d4" },
+  completed: { label: "Tamamlandı", color: "#E6A545" },
 };
 
-function LoginPrompt() {
+function LoginPrompt({ t }: { t: (key: string) => string }) {
   const colors = useColors();
   return (
     <View style={[lp.container, { backgroundColor: colors.background }]}>
       <Feather name="edit-2" size={52} color={colors.mutedForeground + "60"} />
-      <Text style={[lp.title, { color: colors.foreground }]}>Yazmaya Başla</Text>
+      <Text style={[lp.title, { color: colors.foreground }]}>{t("Yazmaya Başla")}</Text>
       <Text style={[lp.sub, { color: colors.mutedForeground }]}>
-        Hikayelerini paylaşmak için giriş yapman gerekiyor.
+        {t("Hikayelerini paylaşmak için giriş yapman gerekiyor.")}
       </Text>
       <TouchableOpacity style={[lp.btn, { backgroundColor: colors.primary }]} onPress={() => router.push("/auth")}>
-        <Text style={lp.btnText}>Giriş Yap / Kayıt Ol</Text>
+        <Text style={lp.btnText}>{t("Giriş Yap / Kayıt Ol")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -67,34 +70,57 @@ function BanBanner({ reason, colors }: { reason?: string; colors: ReturnType<typ
 
 export default function WriteScreen() {
   const colors = useColors();
+  const { locale, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const loadSequence = useRef(0);
+  const activeUid = useRef(user?.uid);
+  activeUid.current = user?.uid;
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [genre, setGenre] = useState(GENRES[0]);
+  const [contentLanguage, setContentLanguage] = useState<Locale>(locale);
   const [coverUri, setCoverUri] = useState<string | null>(null);
+
+  useEffect(() => setContentLanguage(locale), [locale]);
 
   const loadStories = useCallback(async () => {
     if (!user) return;
+    const sequence = ++loadSequence.current;
     setLoading(true);
+    setLoadError(false);
     try {
       const data = await getStoriesByAuthor(user.uid);
-      setStories(data);
-    } catch { /* sessiz */ }
-    finally { setLoading(false); }
+      if (sequence === loadSequence.current && activeUid.current === user.uid) setStories(data);
+    } catch {
+      if (sequence === loadSequence.current && activeUid.current === user.uid) setLoadError(true);
+    } finally {
+      if (sequence === loadSequence.current && activeUid.current === user.uid) setLoading(false);
+    }
   }, [user]);
 
-  useEffect(() => { if (user) loadStories(); else setLoading(false); }, [user, loadStories]);
+  useFocusEffect(useCallback(() => {
+    if (user) void loadStories();
+    else { setStories([]); setLoading(false); }
+  }, [user, loadStories]));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active" && user) void loadStories();
+    });
+    return () => subscription.remove();
+  }, [user, loadStories]);
 
   const pickCover = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("İzin Gerekli", "Fotoğraf seçmek için galeri iznine ihtiyaç var.");
+      Alert.alert(t("İzin Gerekli"), t("Fotoğraf seçmek için galeri iznine ihtiyaç var."));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -109,10 +135,10 @@ export default function WriteScreen() {
   };
 
   const handleCreate = async () => {
-    if (!title.trim()) { Alert.alert("Başlık gerekli"); return; }
+    if (!title.trim()) { Alert.alert(t("Başlık gerekli")); return; }
     if (!user || !profile) return;
     if (profile.banned) {
-      Alert.alert("Hesap Askıya Alındı", "Yeni hikaye oluşturamazsın.");
+      Alert.alert(t("Hesabın Askıya Alındı"), t("Yeni hikaye oluşturamazsın."));
       return;
     }
     setSaving(true);
@@ -121,6 +147,7 @@ export default function WriteScreen() {
         title: title.trim(),
         summary: summary.trim(),
         genre,
+        contentLanguage,
         tags: [],
         authorId: user.uid,
         authorName: profile.displayName,
@@ -133,29 +160,29 @@ export default function WriteScreen() {
         } catch { /* kapak yükleme hatası sessiz geçer */ }
       }
       setCreating(false);
-      setTitle(""); setSummary(""); setGenre(GENRES[0]); setCoverUri(null);
+      setTitle(""); setSummary(""); setGenre(GENRES[0]); setContentLanguage(locale); setCoverUri(null);
       await loadStories();
       router.push({ pathname: "/story-manage/[id]", params: { id } });
     } catch {
-      Alert.alert("Hata", "Hikaye oluşturulamadı.");
+      Alert.alert(t("Hata"), t("Hikaye oluşturulamadı."));
     } finally { setSaving(false); }
   };
 
   const closeModal = () => {
     setCreating(false);
-    setTitle(""); setSummary(""); setGenre(GENRES[0]); setCoverUri(null);
+    setTitle(""); setSummary(""); setGenre(GENRES[0]); setContentLanguage(locale); setCoverUri(null);
   };
 
-  if (!user) return <LoginPrompt />;
+  if (!user) return <LoginPrompt t={t} />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Hikayelerim</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>{t("Hikayelerim")}</Text>
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: profile?.banned ? colors.mutedForeground : colors.primary }]}
           onPress={() => {
-            if (profile?.banned) { Alert.alert("Hesap Askıya Alındı", "Yeni hikaye oluşturamazsın."); return; }
+            if (profile?.banned) { Alert.alert(t("Hesabın Askıya Alındı"), t("Yeni hikaye oluşturamazsın.")); return; }
             setCreating(true);
           }}
         >
@@ -164,6 +191,24 @@ export default function WriteScreen() {
         </TouchableOpacity>
       </View>
 
+      {!profile?.banned && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={t("Kitabını aktar")}
+          testID="button-import-book"
+          onPress={() => router.push("/book-import")}
+          style={{ margin: 16, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Feather name="upload" size={18} color={colors.primary} />
+            <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>{t("Kitabını taşı")}</Text>
+          </View>
+          <Text style={{ marginTop: 6, color: colors.mutedForeground, fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 }}>
+            {t("TXT, DOCX veya yapıştırdığın metinle kitabını taslak olarak aktar.")}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {profile?.banned && (
         <BanBanner reason={profile.banReason} colors={colors} />
       )}
@@ -171,6 +216,13 @@ export default function WriteScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : loadError ? (
+        <View style={styles.center}>
+          <Text style={{ color: colors.destructive }} accessibilityRole="alert">{t("Hikâyelerin yüklenemedi.")}</Text>
+          <TouchableOpacity onPress={loadStories} accessibilityRole="button" testID="button-retry-my-stories">
+            <Text style={{ color: colors.primary, marginTop: 12 }}>{t("Yeniden dene")}</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -198,11 +250,11 @@ export default function WriteScreen() {
                     {s.title}
                   </Text>
                   <Text style={[styles.storyMeta, { color: colors.mutedForeground }]}>
-                    {s.genre} · {s.chapterCount ?? 0} bölüm
+                    {translateGenre(locale, s.genre)} · {s.chapterCount ?? 0} {t("Bölüm")}
                   </Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: st.color + "22" }]}>
-                  <Text style={[styles.statusText, { color: st.color }]}>{st.label}</Text>
+                  <Text style={[styles.statusText, { color: st.color }]}>{t(st.label)}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -210,9 +262,9 @@ export default function WriteScreen() {
           ListEmptyComponent={
             <View style={styles.center}>
               <Feather name="feather" size={44} color={colors.mutedForeground + "60"} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Henüz hikaye yok</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{t("Henüz hikaye yok")}</Text>
               <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                İlk hikayeni oluşturmak için "Yeni" butonuna dokun.
+                {t("İlk hikayeni oluşturmak için \"Yeni\" butonuna dokun.")}
               </Text>
             </View>
           }
@@ -228,12 +280,12 @@ export default function WriteScreen() {
             <TouchableOpacity onPress={closeModal}>
               <Feather name="x" size={22} color={colors.mutedForeground} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Yeni Hikaye</Text>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>{t("Yeni Hikaye")}</Text>
             <TouchableOpacity onPress={handleCreate} disabled={saving}>
               {saving ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Text style={[styles.saveBtn, { color: colors.primary }]}>Oluştur</Text>
+                <Text style={[styles.saveBtn, { color: colors.primary }]}>{t("Oluştur")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -244,26 +296,26 @@ export default function WriteScreen() {
               ) : (
                 <View style={styles.coverPickerPlaceholder}>
                   <Feather name="image" size={28} color={colors.mutedForeground} />
-                  <Text style={[styles.coverPickerLabel, { color: colors.mutedForeground }]}>Kapak Seç</Text>
-                  <Text style={[styles.coverPickerSub, { color: colors.mutedForeground + "80" }]}>İsteğe bağlı</Text>
+                  <Text style={[styles.coverPickerLabel, { color: colors.mutedForeground }]}>{t("Kapak Seç")}</Text>
+                  <Text style={[styles.coverPickerSub, { color: colors.mutedForeground + "80" }]}>{t("İsteğe bağlı")}</Text>
                 </View>
               )}
             </TouchableOpacity>
 
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Başlık *</Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{t("Başlık *")}</Text>
             <TextInput
               style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-              placeholder="Hikaye başlığı..."
+              placeholder={t("Hikaye başlığı...")}
               placeholderTextColor={colors.mutedForeground}
               value={title}
               onChangeText={setTitle}
               maxLength={100}
             />
 
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Özet</Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{t("Özet")}</Text>
             <TextInput
               style={[styles.textInput, styles.textArea, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-              placeholder="Hikayeni kısaca anlat..."
+              placeholder={t("Hikayeni kısaca anlat...")}
               placeholderTextColor={colors.mutedForeground}
               value={summary}
               onChangeText={setSummary}
@@ -272,7 +324,7 @@ export default function WriteScreen() {
               maxLength={300}
             />
 
-            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Tür</Text>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{t("Tür")}</Text>
             <View style={styles.genreGrid}>
               {GENRES.map((g) => (
                 <TouchableOpacity
@@ -285,11 +337,35 @@ export default function WriteScreen() {
                   onPress={() => setGenre(g)}
                 >
                   <Text style={[styles.genreChipText, { color: genre === g ? "#fff" : colors.mutedForeground }]}>
-                    {g}
+                    {translateGenre(locale, g)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>{t("Hikaye dili")}</Text>
+            <View style={styles.genreGrid}>
+              {(["tr", "en"] as const).map((language) => (
+                <TouchableOpacity
+                  key={language}
+                  style={[
+                    styles.genreChip,
+                    { borderColor: colors.border },
+                    contentLanguage === language && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
+                  onPress={() => setContentLanguage(language)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: contentLanguage === language }}
+                >
+                  <Text style={[styles.genreChipText, { color: contentLanguage === language ? "#fff" : colors.mutedForeground }]}>
+                    {t(language === "tr" ? "Türkçe" : "English")}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
+              {t("Bu seçim arayüz dilinden bağımsızdır.")}
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>

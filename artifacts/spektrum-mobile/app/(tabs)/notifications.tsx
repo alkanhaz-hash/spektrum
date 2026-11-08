@@ -13,6 +13,8 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import { notificationSummary, type Locale } from "@workspace/spektrum-i18n";
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -38,20 +40,16 @@ function notifRoute(n: SpektrumNotification): { pathname: string; params?: Recor
     return { pathname: "/story/[id]", params: { id: n.storyId } };
   if ((n.type === "chapter_approved" || n.type === "chapter_rejected") && n.storyId)
     return { pathname: "/story-manage/[id]", params: { id: n.storyId } };
+  if (n.type === "moderator_directive" && n.storyId)
+    return { pathname: "/story-manage/[id]", params: { id: n.storyId } };
   if (n.type === "qa_answer") return { pathname: "/user/[id]", params: { id: n.senderId } };
   return null;
 }
 
-function notifText(n: SpektrumNotification): string {
-  switch (n.type) {
-    case "follow": return `${n.senderName} seni takip etmeye başladı.`;
-    case "like": return `${n.senderName} hikayeni beğendi${n.storyTitle ? ` — "${n.storyTitle}"` : ""}.`;
-    case "comment": return `${n.senderName} hikayene yorum yaptı${n.storyTitle ? ` — "${n.storyTitle}"` : ""}.`;
-    case "qa_answer": return `${n.senderName} sorunuzu yanıtladı.`;
-    case "chapter_approved": return `Bölümün onaylandı ve yayınlandı${n.storyTitle ? ` — "${n.storyTitle}"` : ""}.`;
-    case "chapter_rejected": return `Bölümün reddedildi${n.storyTitle ? ` — "${n.storyTitle}"` : ""}.`;
-    default: return "Yeni bildirim.";
-  }
+function notifText(n: SpektrumNotification, locale: Locale): string {
+  const summary = notificationSummary(locale, n.type, n.senderName);
+  if (n.type === "moderator_directive") return `${summary} ${n.directiveMessage ?? ""}`;
+  return n.storyTitle ? `${summary} — "${n.storyTitle}"` : summary;
 }
 
 function typeIcon(type: SpektrumNotification["type"], colors: ReturnType<typeof useColors>): React.ReactElement {
@@ -62,6 +60,7 @@ function typeIcon(type: SpektrumNotification["type"], colors: ReturnType<typeof 
     chapter_approved: ["check-circle", "#34d399"],
     chapter_rejected: ["x-circle", "#f87171"],
     qa_answer: ["help-circle", "#fbbf24"],
+    moderator_directive: ["shield", "#f59e0b"],
   };
   const [name, color] = iconMap[type] ?? ["bell", colors.mutedForeground];
   return <Feather name={name as any} size={12} color={color} />;
@@ -76,6 +75,7 @@ function NotifRow({
   item: SpektrumNotification;
   onPress: (n: SpektrumNotification) => void;
 }) {
+  const { locale } = useLocale();
   const colors = useColors();
   return (
     <TouchableOpacity
@@ -109,7 +109,7 @@ function NotifRow({
       {/* İçerik */}
       <View style={styles.content}>
         <Text style={[styles.text, { color: colors.foreground }]} numberOfLines={2}>
-          {notifText(item)}
+          {notifText(item, locale)}
         </Text>
         <Text style={[styles.time, { color: colors.mutedForeground }]}>
           {timeAgo(item.createdAt as { seconds: number } | undefined)}
@@ -156,6 +156,14 @@ export default function NotificationsScreen() {
       {/* Başlık */}
       <View style={[styles.header, { paddingTop: insets.top + 12, borderColor: colors.border }]}>
         <Text style={[styles.title, { color: colors.foreground }]}>Bildirimler</Text>
+        <TouchableOpacity
+          onPress={() => router.push("/push-settings" as any)}
+          accessibilityLabel="Push bildirim ayarları"
+          testID="open-push-settings"
+          hitSlop={8}
+        >
+          <Feather name="settings" size={20} color={colors.mutedForeground} />
+        </TouchableOpacity>
         {hasUnread && (
           <TouchableOpacity
             onPress={() => user && markAllNotificationsRead(user.uid).catch(() => {})}

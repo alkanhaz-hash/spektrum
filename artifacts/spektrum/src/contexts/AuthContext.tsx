@@ -3,6 +3,7 @@ import { User, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { onAuthChange, UserProfile, ensureUserProfile } from "@/lib/auth-service";
+import { clearImportRecovery } from "@/lib/book-import-recovery";
 
 interface AuthContextType {
   user: User | null;
@@ -30,7 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let lastUid: string | null = null;
     const unsubAuth = onAuthChange(async (u) => {
+      if (lastUid && lastUid !== u?.uid) {
+        try { clearImportRecovery(lastUid); }
+        catch { console.warn("Kitap aktarımı için sekme saklama alanı temizlenemedi."); }
+      }
+      lastUid = u?.uid ?? null;
       setUser(u);
       if (u) {
         try {

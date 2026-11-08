@@ -12,7 +12,10 @@ import { UserProfile } from "@/lib/auth-service";
 
 type Tab = "stories" | "users";
 
+import { useLocale } from "@/contexts/LocaleContext";
+
 export default function SearchPage() {
+  const { t: ui } = useLocale();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
   const initialQuery = new URLSearchParams(searchString).get("q") ?? "";
@@ -80,7 +83,7 @@ export default function SearchPage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t.label}
+              {ui(t.label)}
               {searched && (
                 <span className="ml-1.5 text-xs bg-primary/10 text-primary rounded-full px-1.5 py-0.5">
                   {t.count}

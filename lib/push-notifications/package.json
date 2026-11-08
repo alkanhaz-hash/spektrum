@@ -1,0 +1,12 @@
+{
+  "name": "@workspace/push-notifications",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "main": "dist/index.cjs",
+  "exports": { "./server": "./src/devices.ts", "./delivery": "./src/delivery.ts" },
+  "engines": { "node": "22" },
+  "scripts": { "build": "node build.mjs" },
+  "dependencies": { "firebase-admin": "^13.10.0", "firebase-functions": "^6.4.0" },
+  "devDependencies": { "esbuild": "0.27.3" }
+}

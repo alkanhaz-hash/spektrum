@@ -7,16 +7,17 @@ import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, AlertTriangle, CheckCircle, Clock,
-  Mic, MicOff, Info, ShieldOff
+  Mic, MicOff, Info, ShieldOff, Coins, Lock, Unlock
 } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
-import { createChapter, getChapter, updateChapter, updateChapterStatus, updateStory, getChaptersByStory, Chapter } from "@/lib/firestore-service";
+import { createChapter, getChapter, getStory, updateChapter, updateChapterStatus, updateStory, getChaptersByStory, Chapter } from "@/lib/firestore-service";
 import { moderateText } from "@/lib/moderation-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import ChapterAudioSection from "@/components/ChapterAudioSection";
 
 const schema = z.object({
   title: z.string().min(1, "Başlık zorunlu").max(200),
@@ -208,6 +209,8 @@ export default function ChapterEditorPage() {
   const [moderationStatus, setModerationStatus] = useState<ModerationStatus>("idle");
   const [moderationReason, setModerationReason] = useState<string | null>(null);
   const [nextOrder, setNextOrder] = useState(1);
+  const [isPaid, setIsPaid] = useState(false);
+  const [storyLanguage, setStoryLanguage] = useState<"tr" | "en">("tr");
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -216,6 +219,9 @@ export default function ChapterEditorPage() {
 
   useEffect(() => {
     if (!user) { setLocation("/auth"); return; }
+    getStory(storyId)
+      .then(story => setStoryLanguage(story?.contentLanguage ?? "tr"))
+      .catch(() => setStoryLanguage("tr"));
     if (chapterId === "new") {
       getChaptersByStory(storyId)
         .then(chs => { setNextOrder(chs.length + 1); setLoading(false); })
@@ -224,15 +230,17 @@ export default function ChapterEditorPage() {
     }
     getChapter(chapterId)
       .then(ch => {
-        if (ch) { setChapter(ch); form.reset({ title: ch.title, content: ch.content }); }
+        if (ch) { setChapter(ch); form.reset({ title: ch.title, content: ch.content }); setIsPaid(ch.isPaid ?? false); }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [chapterId, user]);
+  }, [chapterId, storyId, user]);
 
   const contentVal = form.watch("content");
   const titleVal = form.watch("title");
+  const hasTextChanges = form.formState.isDirty;
   const wordCount = useMemo(() => contentVal.split(/\s+/).filter(Boolean).length, [contentVal]);
+  const chapterPrice = useMemo(() => isPaid ? Math.max(1, Math.ceil(wordCount / 500)) : 0, [isPaid, wordCount]);
 
   const [autoSaveLabel, setAutoSaveLabel] = useState<"saved" | "saving" | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -240,7 +248,7 @@ export default function ChapterEditorPage() {
   const publishedRef = useRef(false);
 
   useEffect(() => {
-    if (!titleVal || !contentVal || chapterId === "new") return;
+    if (!hasTextChanges || !titleVal || !contentVal || chapterId === "new") return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       if (publishedRef.current) return; // Yayınlandıysa auto-save çalışmasın
@@ -254,7 +262,7 @@ export default function ChapterEditorPage() {
       }
     }, 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [contentVal, titleVal]);
+  }, [contentVal, titleVal, chapterId, hasTextChanges]);
 
   const saveDraft = async () => {
     const data = form.getValues();
@@ -267,12 +275,12 @@ export default function ChapterEditorPage() {
       if (chapterId === "new") {
         const newId = await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
-          wordCount, status: "draft",
+          wordCount, status: "draft", isPaid, price: isPaid ? chapterPrice : undefined,
         });
         toast({ title: "Taslak kaydedildi" });
         setLocation(`/write/${storyId}/chapter/${newId}`);
       } else {
-        await updateChapter(chapterId, { title: data.title, content: data.content, status: "draft", wordCount });
+        await updateChapter(chapterId, { title: data.title, content: data.content, status: "draft", wordCount, isPaid, price: isPaid ? chapterPrice : undefined });
         toast({ title: "Taslak güncellendi" });
       }
     } catch {
@@ -291,7 +299,7 @@ export default function ChapterEditorPage() {
     setModerationReason(null);
 
     try {
-      const result = await moderateText(data.content, "tr");
+      const result = await moderateText(data.content, storyLanguage);
 
       if (result.action === "rejected") {
         setModerationStatus("rejected");
@@ -309,7 +317,7 @@ export default function ChapterEditorPage() {
       if (chapterId === "new") {
         await createChapter({
           storyId, title: data.title, content: data.content, order: nextOrder,
-          wordCount, status: chapterStatus,
+          wordCount, status: chapterStatus, isPaid, price: isPaid ? chapterPrice : undefined,
           ...(result.categories.length ? { moderationCategories: result.categories } : {}),
         });
       } else {
@@ -318,6 +326,8 @@ export default function ChapterEditorPage() {
           content: data.content,
           status: chapterStatus,
           wordCount,
+          isPaid,
+          price: isPaid ? chapterPrice : undefined,
           ...(result.categories.length ? { moderationCategories: result.categories } : {}),
         });
       }
@@ -461,6 +471,41 @@ export default function ChapterEditorPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Ücretli / Ücretsiz seçimi */}
+              <div className="rounded-xl border border-border p-4 space-y-3">
+                <p className="text-sm font-medium">Bölüm Erişim Türü</p>
+                <div className="flex items-center gap-2">
+                  <button type="button"
+                    onClick={() => setIsPaid(false)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-all ${
+                      !isPaid ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border text-muted-foreground hover:border-primary/40"
+                    }`}>
+                    <Unlock className="w-4 h-4" /> Ücretsiz
+                  </button>
+                  <button type="button"
+                    onClick={() => setIsPaid(true)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm transition-all ${
+                      isPaid ? "border-amber-500 bg-amber-500/10 text-amber-400 font-semibold" : "border-border text-muted-foreground hover:border-amber-500/40"
+                    }`}>
+                    <Lock className="w-4 h-4" /> Ücretli
+                  </button>
+                </div>
+                {isPaid && (
+                  <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-500/10 rounded-lg px-3 py-2">
+                    <Coins className="w-4 h-4 shrink-0" />
+                    <span>Bu bölümü okumak için <strong>{chapterPrice} jeton</strong> gerekir
+                      <span className="text-muted-foreground ml-1">(her 500 kelime = 1 jeton)</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Sesli bölüm */}
+              <ChapterAudioSection
+                chapterId={chapterId !== "new" && chapter ? chapter.id : undefined}
+                canManage={chapterId !== "new" && !!chapter}
+              />
 
               {/* Aksiyon butonları */}
               <div className="flex items-center gap-3 pt-2">

@@ -10,8 +10,11 @@ import { motion } from "framer-motion";
 import { BookOpen, Clock, MessageSquare, TrendingUp, Pen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatusBar } from "@/components/StatusBar";
+import { useLocale } from "@/contexts/LocaleContext";
+import { translateGenre } from "@workspace/spektrum-i18n";
 
 export default function HomePage() {
+  const { locale, t } = useLocale();
   const { data: trending, isLoading: trendingLoading, isError: trendingError } = useGetTrendingStories();
   const { user } = useAuth();
   const [discoverStories, setDiscoverStories] = useState<Story[]>([]);
@@ -32,6 +35,9 @@ export default function HomePage() {
     <AppLayout>
       <div className="container mx-auto px-4 py-8">
 
+        {/* 24 saatlik durumlar — ana sayfanın en üstünde */}
+        <StatusBar />
+
         {/* Hero Section */}
         <section className="py-20 flex flex-col items-center text-center space-y-8 relative overflow-hidden rounded-3xl mb-16" style={{ background: "linear-gradient(135deg, #f8f7ff 0%, #ede9fe 40%, #e0f2fe 100%)" }}>
           <div className="absolute top-0 right-0 w-96 h-96 rounded-full pointer-events-none opacity-40" style={{ background: "radial-gradient(circle, #8b5cf630, transparent 70%)", transform: "translate(30%, -30%)" }} />
@@ -45,36 +51,33 @@ export default function HomePage() {
           >
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-widest border" style={{ background: "rgba(255,255,255,0.8)", color: "#6b7280", borderColor: "#e5e7eb" }}>
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Türkçe Yazarlık Platformu
+              {t("Türkçe Yazarlık Platformu")}
             </div>
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-balance leading-tight font-serif text-gray-900">
-              Hikayeler{" "}
+              {t("Hikayeler")}{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
-                Burada Yaşar
+                {t("Burada Yaşar")}
               </span>
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
-              Spektrum; satır aralarında kaybolabileceğin, düşüncelerini her paragrafta paylaşabileceğin ve yeni yetenekleri keşfedebileceğin temiz bir kütüphane.
+              {t("Spektrum; satır aralarında kaybolabileceğin, düşüncelerini her paragrafta paylaşabileceğin ve yeni yetenekleri keşfedebileceğin temiz bir kütüphane.")}
             </p>
             <div className="flex items-center justify-center gap-4 pt-4">
               <Link href="/discover" className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 h-12 px-8">
-                Keşfetmeye Başla
+                {t("Keşfetmeye Başla")}
               </Link>
               <Link href="/write" className="inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring border-2 border-border bg-white/80 text-foreground hover:bg-white h-12 px-8">
-                Hikayeni Yaz
+                {t("Hikayeni Yaz")}
               </Link>
             </div>
           </motion.div>
         </section>
 
-        {/* Status Bar */}
-        {user && <StatusBar />}
-
         {/* Trending Section */}
         <section className="mb-16">
           <div className="flex items-center gap-2 mb-6">
             <TrendingUp className="text-primary w-5 h-5" />
-            <h2 className="text-2xl font-bold font-serif">Trend Olanlar</h2>
+            <h2 className="text-2xl font-bold font-serif">{t("Trend Olanlar")}</h2>
           </div>
           
           {trendingLoading ? (
@@ -85,7 +88,7 @@ export default function HomePage() {
             <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
               <TrendingUp className="w-10 h-10 opacity-20" />
               <p className="text-sm">
-                {trendingError ? "Trend verisi yüklenemedi. Lütfen sayfayı yenile." : "Henüz trend hikaye yok."}
+                {trendingError ? t("Trend verisi yüklenemedi. Lütfen sayfayı yenile.") : t("Henüz trend hikaye yok.")}
               </p>
             </div>
           ) : (
@@ -102,15 +105,15 @@ export default function HomePage() {
                       <CardContent className="p-6 h-full flex flex-col justify-between">
                         <div>
                           <div className="flex justify-between items-start mb-4">
-                            <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20">{story.genre}</Badge>
+                            <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20">{translateGenre(locale, story.genre)}</Badge>
                             <span className="text-2xl font-bold text-primary/20 group-hover:text-primary/40 transition-colors">#{i + 1}</span>
                           </div>
                           <h3 className="text-xl font-bold font-serif mb-2 line-clamp-2">{story.title}</h3>
-                          <p className="text-sm text-muted-foreground mb-4">Yazar: <span className="text-foreground">{story.authorName}</span></p>
+                          <p className="text-sm text-muted-foreground mb-4">{t("Yazar: ")}<span className="text-foreground">{story.authorName}</span></p>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MessageSquare className="w-4 h-4" /> {story.commentCount}</span>
-                          <span className="flex items-center gap-1"><TrendingUp className="w-4 h-4" /> {Math.round(story.engagementScore)} Puan</span>
+                           <span className="flex items-center gap-1"><TrendingUp className="w-4 h-4" /> {Math.round(story.engagementScore)}{t(" Puan")}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -123,12 +126,12 @@ export default function HomePage() {
 
         {/* Genres */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold font-serif mb-6">Kategoriler</h2>
+          <h2 className="text-2xl font-bold font-serif mb-6">{t("Kategoriler")}</h2>
           <div className="flex flex-wrap gap-2">
             {GENRES.map(genre => (
               <Link key={genre} href={`/discover?genre=${genre}`}>
                 <Badge variant="outline" className="px-4 py-2 hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer text-sm">
-                  {genre}
+                  {translateGenre(locale, genre)}
                 </Badge>
               </Link>
             ))}
@@ -139,7 +142,7 @@ export default function HomePage() {
         <section>
           <div className="flex items-center gap-2 mb-6">
             <Clock className="text-secondary w-5 h-5" />
-            <h2 className="text-2xl font-bold font-serif">Yeni Eklenenler</h2>
+            <h2 className="text-2xl font-bold font-serif">{t("Yeni Eklenenler")}</h2>
           </div>
           
           {discoverLoading ? (
@@ -150,12 +153,12 @@ export default function HomePage() {
             <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
               <BookOpen className="w-10 h-10 opacity-20" />
               <p className="text-sm">
-                {discoverError ? "Hikayeler yüklenemedi. Lütfen sayfayı yenile." : "Henüz yayınlanmış hikaye yok."}
+                {discoverError ? t("Hikayeler yüklenemedi. Lütfen sayfayı yenile.") : t("Henüz yayınlanmış hikaye yok.")}
               </p>
               {!discoverError && (
                 <Link href="/write">
                   <button className="flex items-center gap-2 mt-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm transition-all hover:shadow-[0_0_14px_hsl(var(--primary)/0.3)]">
-                    <Pen className="w-4 h-4" /> İlk Hikayeyi Sen Yaz
+                    <Pen className="w-4 h-4" /> {t("İlk Hikayeyi Sen Yaz")}
                   </button>
                 </Link>
               )}
@@ -181,7 +184,7 @@ export default function HomePage() {
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
                         <div className="absolute bottom-4 left-4 right-4">
-                          <Badge variant="secondary" className="mb-2 bg-background/50 backdrop-blur text-xs">{story.genre}</Badge>
+                          <Badge variant="secondary" className="mb-2 bg-background/50 backdrop-blur text-xs">{translateGenre(locale, story.genre)}</Badge>
                           <h3 className="font-bold font-serif leading-tight text-lg shadow-sm">{story.title}</h3>
                         </div>
                       </div>

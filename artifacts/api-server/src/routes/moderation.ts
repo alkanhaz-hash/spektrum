@@ -143,7 +143,8 @@ router.post("/text", async (req: Request, res: Response) => {
     return;
   }
 
-  const { text } = parsed.data;
+  const { text, language = "tr" } = parsed.data;
+  const responseLanguage = language.toLowerCase().startsWith("en") ? "en" : "tr";
   const result = scanText(text);
 
   if (!result.flagged) {
@@ -153,8 +154,20 @@ router.post("/text", async (req: Request, res: Response) => {
 
   const hardBlock: Category[] = ["child_safety", "suicide"];
   const isHardBlock = result.categories.some((c) => hardBlock.includes(c));
-  const labels = result.categories.map((c) => CATEGORY_LABELS[c]).join(", ");
-  const reason = `İçerik şu kategorilerde uygunsuz içerik barındırıyor: ${labels}.`;
+  const englishLabels: Record<string, string> = {
+    sexual: "sexual content",
+    violence: "violence",
+    drugs: "drugs",
+    suicide: "self-harm",
+    child_safety: "child safety",
+    weapons: "weapons",
+  };
+  const labels = result.categories
+    .map((category) => responseLanguage === "en" ? englishLabels[category] ?? category : CATEGORY_LABELS[category])
+    .join(", ");
+  const reason = responseLanguage === "en"
+    ? `Content was flagged in these categories: ${labels}.`
+    : `İçerik şu kategorilerde uygunsuz içerik barındırıyor: ${labels}.`;
 
   res.json({
     safe: false,

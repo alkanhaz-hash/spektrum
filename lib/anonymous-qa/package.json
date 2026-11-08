@@ -1,0 +1,23 @@
+{
+  "name": "@workspace/anonymous-qa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-test-module-mocks --experimental-strip-types --test src/index.test.ts",
+    "emulators": "firebase emulators:start --project demo-spektrum-qa --config ../../firebase.qa-emulator.json --only auth,firestore",
+    "test:fixtures": "node src/seed-browser-fixture.mjs",
+    "test:cleanup": "node src/cleanup-browser-fixture.mjs",
+    "test:rules": "firebase emulators:exec --project demo-spektrum-qa --config ../../firebase.qa-emulator.json --only auth,firestore \"node --test src/firestore.emulator.test.mjs\""
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "firebase": "^12.14.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase-tools": "^15.33.0"
+  }
+}

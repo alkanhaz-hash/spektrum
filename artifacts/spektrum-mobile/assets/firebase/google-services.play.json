@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "898562015762",
+    "project_id": "spektrum-5c7cc",
+    "storage_bucket": "spektrum-5c7cc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898562015762:android:4287f3b98a1a7696e40ecb",
+        "android_client_info": {
+          "package_name": "com.alkanhaz.spektrum"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898562015762-icocpqisfdok9g3skg9l46ui21dav7ka.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.alkanhaz.spektrum",
+            "certificate_hash": "47beb50ffa88c25fb87060d4a9f364366f23dd54"
+          }
+        },
+        {
+          "client_id": "898562015762-s7gsvtru3afb3nu41rihgr79gsdr1vq4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHbDDgIrMLXwBDp89EUM_2ZcmdOg36OuE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898562015762-s7gsvtru3afb3nu41rihgr79gsdr1vq4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

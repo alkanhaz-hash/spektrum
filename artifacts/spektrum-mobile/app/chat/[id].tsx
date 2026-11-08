@@ -146,7 +146,7 @@ export default function ChatScreen() {
         Alert.alert("Görsel Uygun Değil", check.reason ?? "Bu görsel gönderilemez.");
         return;
       }
-      const url = await uploadMessageMedia(convId, asset.uri);
+      const url = await uploadMessageMedia(convId, user.uid, asset.uri);
       await sendMessage(convId, {
         senderId: user.uid,
         senderName: profile.displayName,

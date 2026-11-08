@@ -40,11 +40,14 @@ function txColor(tx: JetonTransaction, colors: ReturnType<typeof useColors>): st
   return tx.type === "earn" || tx.type === "refund" ? "#22c55e" : "#ef4444";
 }
 
-function formatDate(ts: JetonTransaction["createdAt"]): string {
+import { useLocale } from "@/contexts/LocaleContext";
+import { formatLocale, type Locale } from "@workspace/spektrum-i18n";
+
+function formatDate(ts: JetonTransaction["createdAt"], locale: Locale): string {
   try {
     const d = ts?.toDate?.();
     if (!d) return "";
-    return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short", year: "numeric" });
+    return d.toLocaleDateString(formatLocale(locale), { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return "";
   }
@@ -53,6 +56,7 @@ function formatDate(ts: JetonTransaction["createdAt"]): string {
 // ─── Ana ekran ────────────────────────────────────────────────────────────────
 
 export default function JetonlarScreen() {
+  const { t, locale } = useLocale();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user, profile } = useAuth();
@@ -199,7 +203,7 @@ export default function JetonlarScreen() {
                   )}
                   <View style={s.packageRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.packageLabel, { color: colors.foreground }]}>{pkg.label}</Text>
+                      <Text style={[s.packageLabel, { color: colors.foreground }]}>{t(pkg.label)}</Text>
                       <Text style={[s.packageJeton, { color: colors.primary }]}>
                         ⚡ {pkg.totalJeton.toLocaleString("tr")} Jeton
                         {pkg.bonusAmount > 0 && (
@@ -259,7 +263,7 @@ export default function JetonlarScreen() {
                   key={row.label}
                   style={[s.costRow, i < arr.length - 1 && { borderBottomWidth: 1, borderColor: colors.border }]}
                 >
-                  <Text style={[s.costLabel, { color: colors.foreground }]}>{row.label}</Text>
+                  <Text style={[s.costLabel, { color: colors.foreground }]}>{t(row.label)}</Text>
                   <Text style={[s.costValue, { color: colors.primary }]}>⚡ {row.cost}</Text>
                 </View>
               ))}
@@ -289,9 +293,9 @@ export default function JetonlarScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[s.txReason, { color: colors.foreground }]} numberOfLines={1}>
-                      {tx.reason}
+                      {t(tx.reason)}
                     </Text>
-                    <Text style={[s.txDate, { color: colors.mutedForeground }]}>{formatDate(tx.createdAt)}</Text>
+                    <Text style={[s.txDate, { color: colors.mutedForeground }]}>{formatDate(tx.createdAt, locale)}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={[s.txAmount, { color: txColor(tx, colors) }]}>{txLabel(tx)}</Text>

@@ -13,6 +13,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Share,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,9 +22,11 @@ import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
-import { logoutUser, updateUserProfile, UserProfile } from "@/lib/auth-service";
-import { getStoriesByAuthor, getFollowers, getFollowing, Story } from "@/lib/firestore-service";
+import { logoutUser, updateUserProfile, deleteAccount, UserProfile } from "@/lib/auth-service";
+import { getStoriesByAuthor, getFollowers, getFollowing, getBookmarkedStories, Story } from "@/lib/firestore-service";
 import { uploadUserAvatar, uploadUserCover } from "@/lib/storage-service";
+import { getPublicProfileUrl } from "@/lib/share-links";
+import { useLocale } from "@/contexts/LocaleContext";
 
 // ─── ROZET SİSTEMİ ───────────────────────────────────────────────────────────
 
@@ -352,7 +355,7 @@ function LoginPrompt() {
   const insets = useSafeAreaInsets();
   return (
     <View style={[lp.container, { backgroundColor: colors.background, paddingTop: insets.top + 16 }]}>
-      <LinearGradient colors={["#7c3aed22", "#06b6d422", colors.background]} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={["#A07FE622", "#E6A54522", colors.background]} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
       <Feather name="user" size={64} color={colors.mutedForeground + "60"} />
       <Text style={[lp.title, { color: colors.foreground }]}>Profilini Oluştur</Text>
       <Text style={[lp.sub, { color: colors.mutedForeground }]}>
@@ -376,11 +379,14 @@ const lp = StyleSheet.create({
 // ─── ANA EKRAN ────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
+  const { t } = useLocale();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, profile: authProfile, loading: authLoading, refreshProfile } = useAuth();
   const [stories, setStories] = useState<Story[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
+  const [bookmarks, setBookmarks] = useState<Story[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = useState(false);
   const [followModal, setFollowModal] = useState<"followers" | "following" | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [localProfile, setLocalProfile] = useState<UserProfile | null>(null);
@@ -408,11 +414,56 @@ export default function ProfileScreen() {
     else setStoriesLoading(false);
   }, [user, loadStories]);
 
+  useEffect(() => {
+    if (!user) return;
+    setBookmarksLoading(true);
+    getBookmarkedStories(user.uid)
+      .then(setBookmarks)
+      .catch(() => {})
+      .finally(() => setBookmarksLoading(false));
+  }, [user?.uid]);
+
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   const handleLogout = () => {
     Alert.alert("Çıkış Yap", "Oturumu kapatmak istediğine emin misin?", [
       { text: "İptal", style: "cancel" },
       { text: "Çıkış Yap", style: "destructive", onPress: async () => { try { await logoutUser(); } catch { /* sessiz */ } } },
     ]);
+  };
+
+  const handleShareProfile = async () => {
+    if (!user || !profile) return;
+    const url = getPublicProfileUrl(user.uid);
+    if (!url) {
+      Alert.alert("Paylaşım bağlantısı hazır değil", "Web alan adı bu derlemede yapılandırılmamış.");
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: `${profile.displayName} | SPEKTRUM`,
+        message: `${profile.displayName}’in SPEKTRUM profilini keşfet: ${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Paylaşım açılamadı", "Profil bağlantısı paylaşılırken bir hata oluştu.");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(deletePassword);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Doğrulama başarısız.";
+      Alert.alert("Hata", msg);
+      setDeleting(false);
+      setDeletePassword("");
+    }
   };
 
   const handleProfileSave = async (updated: Partial<UserProfile>) => {
@@ -440,6 +491,52 @@ export default function ProfileScreen() {
       {editOpen && (
         <EditProfileModal profile={profile} onSave={handleProfileSave} onClose={() => setEditOpen(false)} />
       )}
+
+      <Modal visible={deleteModal} transparent animationType="fade" onRequestClose={() => !deleting && (setDeleteModal(false), setDeletePassword(""))}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: "#00000099", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <View style={[s.deleteCard, { backgroundColor: colors.card, borderColor: "#ef444440" }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#ef444418", borderWidth: 1, borderColor: "#ef444440", alignItems: "center", justifyContent: "center" }}>
+                  <Feather name="alert-triangle" size={20} color="#ef4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.menuLabel, { color: colors.foreground }]}>Hesabı Kalıcı Sil</Text>
+                  <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Bu işlem geri alınamaz</Text>
+                </View>
+              </View>
+              <Text style={[s.menuSub, { color: colors.mutedForeground, lineHeight: 18, marginBottom: 16 }]}>
+                Tüm hikayeler, yorumlar ve mesajlar kalıcı olarak silinecek. Devam etmek için şifreni gir.
+              </Text>
+              <TextInput
+                style={[s.deleteInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+                placeholder="Mevcut şifreni gir"
+                placeholderTextColor={colors.mutedForeground}
+                secureTextEntry
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                editable={!deleting}
+              />
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+                <TouchableOpacity
+                  style={[s.deleteBtn, { borderWidth: 1, borderColor: colors.border }]}
+                  onPress={() => { if (!deleting) { setDeleteModal(false); setDeletePassword(""); } }}
+                  disabled={deleting}
+                >
+                  <Text style={[s.menuLabel, { color: colors.foreground }]}>İptal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.deleteBtn, { backgroundColor: deletePassword && !deleting ? "#ef4444" : "#ef444460" }]}
+                  onPress={handleDeleteAccount}
+                  disabled={!deletePassword || deleting}
+                >
+                  <Text style={[s.menuLabel, { color: "#fff" }]}>{deleting ? "Siliniyor..." : "Hesabı Sil"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <ScrollView
         style={{ backgroundColor: colors.background }}
@@ -491,7 +588,7 @@ export default function ProfileScreen() {
               {badges.map((b) => (
                 <View key={b.id} style={[s.badge, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "40" }]}>
                   <Text style={s.badgeEmoji}>{b.emoji}</Text>
-                  <Text style={[s.badgeLabel, { color: colors.primary }]}>{b.label}</Text>
+                  <Text style={[s.badgeLabel, { color: colors.primary }]}>{t(b.label)}</Text>
                 </View>
               ))}
             </View>
@@ -521,6 +618,14 @@ export default function ProfileScreen() {
               <Feather name="edit-2" size={15} color={colors.foreground} />
               <Text style={[s.actionBtnText, { color: colors.foreground }]}>Profil Düzenle</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.iconBtn, { borderColor: colors.border }]}
+              onPress={handleShareProfile}
+              accessibilityRole="button"
+              accessibilityLabel="Profil bağlantısını paylaş"
+            >
+              <Feather name="share-2" size={18} color={colors.primary} />
+            </TouchableOpacity>
             <TouchableOpacity style={[s.iconBtn, { borderColor: colors.border }]} onPress={handleLogout}>
               <Feather name="log-out" size={18} color={colors.destructive} />
             </TouchableOpacity>
@@ -528,6 +633,14 @@ export default function ProfileScreen() {
 
           {/* Menü */}
           <View style={[s.menuSection, { borderColor: colors.border }]}>
+            <TouchableOpacity style={[s.menuRow, { borderColor: colors.border }]} onPress={() => router.push("/anonymous-questions")}>
+              <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}><Feather name="help-circle" size={17} color={colors.primary} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Anonim soru-cevap</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Soru bağlantın · Gelen sorular · Paylaşım kartları</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
             <TouchableOpacity
               style={[s.menuRow, { borderColor: colors.border }]}
               onPress={() => router.push("/jetonlar")}
@@ -540,6 +653,34 @@ export default function ProfileScreen() {
                 <Text style={[s.menuSub, { color: colors.mutedForeground }]}>
                   Bakiye · Paketler · İşlem Geçmişi
                 </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/durumlar")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="plus-circle" size={17} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Durumlar</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>24 saatlik fotoğraf ve yazı paylaş</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/hesap-ayarlari")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="settings" size={17} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>{t("Hesap Ayarları")}</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>{t("Hesabı dondur veya kalıcı olarak sil")}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
@@ -564,6 +705,48 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/hakkimizda")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="info" size={17} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Hakkımızda</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Spektrum'u tanı</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/iletisim")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: "#E6A54518" }]}>
+                <Feather name="mail" size={17} color="#E6A545" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>İletişim</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Bize ulaş · Destek</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/sss")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: "#f59e0b18" }]}>
+                <Feather name="help-circle" size={17} color="#f59e0b" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Sık Sorulan Sorular</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>SSS · Yardım</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
               onPress={() => router.push("/kvkk")}
             >
               <View style={[s.menuIconWrap, { backgroundColor: "#22c55e18" }]}>
@@ -577,7 +760,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[s.menuRow, { borderColor: "transparent" }]}
+              style={[s.menuRow, { borderColor: colors.border }]}
               onPress={() => router.push("/terms")}
             >
               <View style={[s.menuIconWrap, { backgroundColor: "#f59e0b18" }]}>
@@ -589,7 +772,59 @@ export default function ProfileScreen() {
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.menuRow, { borderColor: colors.border }]}
+              onPress={() => router.push("/engellenenler")}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: "#ef444418" }]}>
+                <Feather name="slash" size={17} color="#ef4444" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>Engellenen Kullanıcılar</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Engellediğin hesapları yönet</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+
           </View>
+        </View>
+
+        {/* Favori Kitaplarım */}
+        <View style={s.storiesSection}>
+          <Text style={[s.sectionTitle, { color: colors.foreground }]}>Favori Kitaplarım</Text>
+          {bookmarksLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
+          ) : bookmarks.length === 0 ? (
+            <View style={s.emptyStories}>
+              <Feather name="bookmark" size={32} color={colors.mutedForeground + "60"} />
+              <Text style={[s.emptyText, { color: colors.mutedForeground }]}>Henüz favori yok</Text>
+            </View>
+          ) : (
+            bookmarks.map((st) => (
+              <TouchableOpacity
+                key={st.id}
+                style={[s.storyItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => router.push({ pathname: "/story/[id]", params: { id: st.id } })}
+                activeOpacity={0.8}
+              >
+                {st.coverUrl ? (
+                  <Image source={{ uri: st.coverUrl }} style={s.storyThumb} resizeMode="cover" />
+                ) : (
+                  <LinearGradient colors={["#1a0a2e", "#0a1a2e"]} style={s.storyThumb}>
+                    <Feather name="book" size={18} color="#4a4a6a" />
+                  </LinearGradient>
+                )}
+                <View style={s.storyItemInfo}>
+                  <Text style={[s.storyItemTitle, { color: colors.foreground }]} numberOfLines={2}>{st.title}</Text>
+                  <Text style={[s.storyItemMeta, { color: colors.mutedForeground }]}>
+                    {st.authorName} · {st.genre}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         {/* Hikayelerim */}
@@ -679,6 +914,9 @@ const s = StyleSheet.create({
   statusBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 2 },
   statusBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   destructive: { color: "#ef4444" },
+  deleteCard: { width: "100%", borderRadius: 20, borderWidth: 1, padding: 20 },
+  deleteInput: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
+  deleteBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center" as const, justifyContent: "center" as const },
   menuSection: { borderWidth: 1, borderRadius: 16, overflow: "hidden", marginTop: 4 },
   menuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 14, borderBottomWidth: 1 },
   menuIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },

@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 let _app: App | null = null;
 
@@ -14,6 +15,7 @@ function getAdminApp(): App {
 
   const serviceAccountJson = process.env["FIREBASE_SERVICE_ACCOUNT_JSON"];
   const projectId = process.env["VITE_FIREBASE_PROJECT_ID"];
+  const storageBucket = process.env["VITE_FIREBASE_STORAGE_BUCKET"];
 
   if (serviceAccountJson) {
     // Tam servis hesabı JSON — üretim ortamı
@@ -23,7 +25,10 @@ function getAdminApp(): App {
           ? (serviceAccountJson as unknown as Buffer).toString()
           : serviceAccountJson,
       );
-      _app = initializeApp({ credential: cert(parsed as Parameters<typeof cert>[0]) });
+      _app = initializeApp({
+        credential: cert(parsed as Parameters<typeof cert>[0]),
+        ...(storageBucket ? { storageBucket } : {}),
+      });
     } catch {
       throw new Error(
         "FIREBASE_SERVICE_ACCOUNT_JSON geçerli JSON değil. " +
@@ -33,7 +38,10 @@ function getAdminApp(): App {
   } else if (projectId) {
     // Yalnızca proje ID'si ile başlat (token doğrulama çalışır ama Firestore Admin erişimi sınırlı)
     // Not: Firestore yazmaları için FIREBASE_SERVICE_ACCOUNT_JSON gereklidir.
-    _app = initializeApp({ projectId });
+    _app = initializeApp({
+      projectId,
+      ...(storageBucket ? { storageBucket } : {}),
+    });
   } else {
     throw new Error(
       "Firebase Admin başlatılamadı: FIREBASE_SERVICE_ACCOUNT_JSON veya VITE_FIREBASE_PROJECT_ID eksik.",
@@ -49,4 +57,8 @@ export function adminAuth() {
 
 export function adminDb() {
   return getFirestore(getAdminApp());
+}
+
+export function adminBucket() {
+  return getStorage(getAdminApp()).bucket();
 }

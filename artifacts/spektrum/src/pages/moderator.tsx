@@ -2,25 +2,23 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle, XCircle, Eye, Users, Search, Ban, ShieldOff, AlertTriangle, ExternalLink } from "lucide-react";
+import { Shield, CheckCircle, XCircle, Eye, Search, Ban, ShieldOff, AlertTriangle, ExternalLink, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getPendingChapters, updateChapterStatus, updateStory, getStory, Chapter,
-  banUser, unbanUser, searchUsersForMod, createNotification, setUserRole,
+  getPendingChapters, updateChapterStatus, updateStory, getStory, getChapter,
+  Chapter, Story, InlineComment,
+  banUser, unbanUser, searchUsersForMod, getAllUsersForMod, findAdminUserByEmail, createNotification, setUserRole,
   getReports, resolveReport, Report,
+  getUserById, getInlineCommentById, deleteInlineComment,
+  getPlatformStats, PlatformStats,
 } from "@/lib/firestore-service";
+import type { AdminUserSearchResult } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-
-interface UserSummary {
-  uid: string;
-  displayName: string;
-  avatarUrl: string;
-  role: "user" | "moderator" | "admin";
-}
 
 interface PendingItem extends Chapter {
   storyTitle?: string;
@@ -152,29 +150,68 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   const { toast } = useToast();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [emailResults, setEmailResults] = useState<AdminUserSearchResult[] | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSearchError, setEmailSearchError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(50);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = term.trim();
-    if (!t) { setResults([]); setSearched(false); return; }
-    setLoading(true);
+    setLoading(true); setError(""); setResults([]); setVisibleCount(50);
     let cancelled = false;
-    const handle = setTimeout(async () => {
+    void (async () => {
       try {
-        const users = await searchUsersForMod(t);
-        if (!cancelled) { setResults(users); setSearched(true); }
+        const users = await getAllUsersForMod();
+        if (!cancelled) setResults(users);
       } catch {
-        if (!cancelled) setResults([]);
+        if (!cancelled) setError("Kullanıcılar yüklenemedi. Bağlantını ve yönetici izinlerini kontrol edip yeniden dene.");
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 350);
-    return () => { cancelled = true; clearTimeout(handle); };
-  }, [term]);
+    })();
+    return () => { cancelled = true; };
+  }, [currentUid, reload]);
 
-  const handleRoleChange = async (u: UserProfile, newRole: "user" | "moderator") => {
+  const queryText = term.trim();
+  const emailMode = queryText.includes("@");
+  const needle = queryText.toLocaleLowerCase("tr");
+  useEffect(() => {
+    if (!emailMode) {
+      setEmailResults(null);
+      setEmailLoading(false);
+      setEmailSearchError("");
+      return;
+    }
+    setEmailResults([]);
+    setEmailLoading(true);
+    setEmailSearchError("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(queryText)) {
+      setEmailLoading(false);
+      setEmailSearchError("E-posta ile aramak için adresin tamamını yaz.");
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setEmailLoading(true);
+      void findAdminUserByEmail(queryText).then(found => {
+        if (!cancelled) setEmailResults(found);
+      }).catch((error: unknown) => {
+        if (!cancelled) setEmailSearchError(error instanceof Error ? error.message : "E-posta araması tamamlanamadı.");
+      }).finally(() => {
+        if (!cancelled) setEmailLoading(false);
+      });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [emailMode, queryText, currentUid]);
+  const filtered: Array<UserProfile | AdminUserSearchResult> = emailMode
+    ? emailResults ?? []
+    : results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
+      || u.uid.toLocaleLowerCase("tr").includes(needle));
+
+  const handleRoleChange = async (u: UserProfile | AdminUserSearchResult, newRole: "user" | "moderator") => {
     if (u.uid === currentUid) {
       toast({ title: "Kendi rolünü değiştiremezsin.", variant: "destructive" });
       return;
@@ -183,6 +220,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
     try {
       await setUserRole(u.uid, newRole);
       setResults(prev => prev.map(r => r.uid === u.uid ? { ...r, role: newRole } : r));
+      setEmailResults(prev => prev?.map(r => r.uid === u.uid ? { ...r, role: newRole } : r) ?? null);
       toast({ title: newRole === "moderator" ? `${u.displayName} moderatör yapıldı` : `${u.displayName} rolü kaldırıldı` });
     } catch (err: unknown) {
       const msg = (err as Error).message ?? "Bilinmeyen hata";
@@ -194,27 +232,35 @@ function UsersTab({ currentUid }: { currentUid: string }) {
 
   return (
     <div>
-      <p className="text-sm text-muted-foreground mb-4">Kullanıcı adıyla ara, moderatör yap veya rolü kaldır.</p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">Kayıtlı kullanıcıları görüntüle, profillerini aç ve rollerini yönet.</p>
+        <button type="button" disabled={loading} onClick={() => setReload(n => n + 1)} className="text-sm text-primary disabled:opacity-50">Yenile</button>
+      </div>
       <div className="relative mb-6">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           value={term}
-          onChange={e => setTerm(e.target.value)}
-          placeholder="Kullanıcı adı ara..."
+          onChange={e => { setTerm(e.target.value); setVisibleCount(50); }}
+          placeholder="İsim, kullanıcı kimliği veya tam e-posta ara..."
+          aria-label="İsim veya tam e-posta ile kullanıcı ara"
           className="w-full bg-card border border-border rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
 
-      {loading && <Skeleton className="h-16 rounded-xl" />}
+      <p className="text-xs text-muted-foreground mb-3">İsimle arayabilir veya e-posta adresinin tamamını yazabilirsin.</p>
+      {(loading || emailLoading) && <Skeleton className="h-16 rounded-xl" />}
 
-      {!loading && searched && results.length === 0 && (
-        <p className="text-muted-foreground text-sm text-center py-8">Kullanıcı bulunamadı.</p>
+      {error && <p role="alert" className="text-sm text-destructive py-4">{error}</p>}
+      {emailSearchError && <p role="alert" className="text-sm text-destructive py-4">{emailSearchError}</p>}
+      {!loading && !emailLoading && !error && !emailSearchError && <p className="text-xs text-muted-foreground mb-3" role="status">{emailMode ? `${filtered.length} kullanıcı bulundu` : `${filtered.length} / ${results.length} kullanıcı`}</p>}
+      {!loading && !emailLoading && !error && !emailSearchError && filtered.length === 0 && (
+        <p className="text-muted-foreground text-sm text-center py-8">{needle ? "Aramana uygun kullanıcı bulunamadı." : "Henüz kayıtlı kullanıcı yok."}</p>
       )}
 
-      {!loading && results.length > 0 && (
+      {!loading && !emailLoading && !error && !emailSearchError && filtered.length > 0 && (
         <div className="space-y-2">
-          {results.map(u => (
-            <div key={u.uid} className="flex items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card">
+          {filtered.slice(0, visibleCount).map(u => (
+            <div key={u.uid} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center">
                   {u.avatarUrl
@@ -224,12 +270,15 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{u.displayName}</p>
+                  {"email" in u && u.email && <p className="text-xs text-muted-foreground break-all">{u.email}</p>}
+                  <p className="text-xs text-muted-foreground truncate max-w-52" title={u.uid}>{u.uid}</p>
                   <span className={`text-xs border rounded-full px-2 py-0.5 ${ROLE_COLORS[u.role] ?? ROLE_COLORS.user}`}>
                     {ROLE_LABELS[u.role] ?? u.role}
                   </span>
                 </div>
               </div>
               <div className="flex gap-2 flex-shrink-0">
+                <Link href={`/profile/${encodeURIComponent(u.uid)}`} className="px-3 py-1.5 rounded-lg text-xs border border-border text-primary">Profili aç</Link>
                 {u.role !== "admin" && u.uid !== currentUid && (
                   u.role === "moderator" ? (
                     <button
@@ -259,9 +308,8 @@ function UsersTab({ currentUid }: { currentUid: string }) {
         </div>
       )}
 
-      {!searched && (
-        <p className="text-muted-foreground text-sm text-center py-8">Aramak için kullanıcı adı yaz.</p>
-      )}
+      {!loading && !emailLoading && !error && !emailSearchError && visibleCount < filtered.length && <button type="button" onClick={() => setVisibleCount(n => n + 50)}
+        className="mt-4 w-full rounded-xl border border-border py-3 text-sm text-primary">Daha fazla göster ({filtered.length - visibleCount})</button>}
     </div>
   );
 }
@@ -420,37 +468,179 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   user: "Kullanıcı",
 };
 
-const REPORT_TYPE_LINKS: Record<string, (id: string) => string> = {
-  story: (id) => `/story/${id}`,
-  chapter: (id) => `/read/unknown/${id}`,
-  comment: (id) => `/read/unknown/${id}`,
-  user: (id) => `/profile/${id}`,
-};
+interface ReportDetail {
+  loading: boolean;
+  reporterName: string;
+  reporterAvatar: string;
+  targetUser?: UserProfile | null;
+  targetStory?: Story | null;
+  targetChapter?: (Chapter & { storyTitle?: string; authorId?: string; authorName?: string }) | null;
+  targetComment?: InlineComment | null;
+  /** Hedef içerik yüklenemediğinde kısmi bilgi: yazar + hikaye adı contextId'den */
+  contextStory?: Story | null;
+}
 
-function ReportsTab() {
+function Avatar({ url, name, size = 8 }: { url?: string | null; name?: string | null; size?: number }) {
+  const cls = `w-${size} h-${size} rounded-full bg-muted flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden`;
+  return (
+    <div className={cls}>
+      {url ? <img src={url} className="w-full h-full object-cover" /> : <span>{name?.charAt(0) ?? "?"}</span>}
+    </div>
+  );
+}
+
+function ReportsTab({ modUid, modName, modAvatar }: { modUid: string; modName: string; modAvatar: string }) {
   const { toast } = useToast();
   const [reports, setReports] = useState<Report[]>([]);
+  const [details, setDetails] = useState<Record<string, ReportDetail>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [banModal, setBanModal] = useState<{ reportId: string; uid: string; name: string } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [directiveModal, setDirectiveModal] = useState<{
+    reportId: string; authorId: string; authorName: string;
+    storyId: string; storyTitle: string;
+  } | null>(null);
+  const [directiveText, setDirectiveText] = useState("");
 
   useEffect(() => {
-    getReports("pending").then(r => { setReports(r); setLoading(false); }).catch(() => setLoading(false));
+    getReports("pending").then(async (reps) => {
+      setReports(reps);
+      setLoading(false);
+      for (const r of reps) {
+        setDetails(prev => ({ ...prev, [r.id]: { loading: true, reporterName: "", reporterAvatar: "" } }));
+        loadDetail(r).then(d => setDetails(prev => ({ ...prev, [r.id]: d })));
+      }
+    }).catch(() => setLoading(false));
   }, []);
 
-  const handleResolve = async (reportId: string, resolution: "resolved" | "dismissed") => {
-    setProcessing(reportId);
+  const loadDetail = async (r: Report): Promise<ReportDetail> => {
+    const base: ReportDetail = { loading: false, reporterName: "Bilinmiyor", reporterAvatar: "" };
     try {
-      await resolveReport(reportId, resolution);
-      setReports(prev => prev.filter(r => r.id !== reportId));
-      toast({ title: resolution === "resolved" ? "Şikayet çözüldü" : "Şikayet reddedildi" });
-    } catch {
-      toast({ title: "Hata", description: "İşlem başarısız.", variant: "destructive" });
-    } finally {
-      setProcessing(null);
-    }
+      const reporter = await getUserById(r.reporterId).catch(() => null);
+      base.reporterName = reporter?.displayName ?? `#${r.reporterId.slice(0, 8)}`;
+      base.reporterAvatar = reporter?.avatarUrl ?? "";
+
+      if (r.reportedType === "user") {
+        base.targetUser = await getUserById(r.reportedId).catch(() => null);
+
+      } else if (r.reportedType === "story") {
+        base.targetStory = await getStory(r.reportedId).catch(() => null);
+
+      } else if (r.reportedType === "chapter") {
+        const ch = await getChapter(r.reportedId).catch(() => null);
+        if (ch) {
+          const story = await getStory(ch.storyId).catch(() => null);
+          base.targetChapter = { ...ch, storyTitle: story?.title, authorId: story?.authorId, authorName: story?.authorName };
+        } else {
+          // Bölüm okunamadı (kural hatası vb.) — contextId'den hikayeyi çek
+          const fallbackStoryId = r.contextId ?? null;
+          if (fallbackStoryId) {
+            base.contextStory = await getStory(fallbackStoryId).catch(() => null);
+          }
+        }
+
+      } else if (r.reportedType === "comment") {
+        base.targetComment = await getInlineCommentById(r.reportedId).catch(() => null);
+        // Yorum okunamadıysa contextId'den hikayeyi çek
+        if (!base.targetComment && r.contextId) {
+          base.contextStory = await getStory(r.contextId).catch(() => null);
+        }
+      }
+    } catch { /* ignore */ }
+    return base;
   };
 
-  if (loading) return <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>;
+  const drop = (id: string) => {
+    setReports(prev => prev.filter(r => r.id !== id));
+    setDetails(prev => { const d = { ...prev }; delete d[id]; return d; });
+  };
+
+  const handleResolve = async (reportId: string, res: "resolved" | "dismissed") => {
+    setProcessing(reportId);
+    try {
+      await resolveReport(reportId, res);
+      drop(reportId);
+      toast({ title: res === "resolved" ? "Şikayet çözüldü" : "Şikayet reddedildi" });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleBan = async () => {
+    if (!banModal) return;
+    setProcessing(banModal.reportId);
+    try {
+      await banUser(banModal.uid, banReason);
+      await resolveReport(banModal.reportId, "resolved");
+      drop(banModal.reportId);
+      setBanModal(null); setBanReason("");
+      toast({ title: "Hesap askıya alındı", description: `${banModal.name} hesabı askıya alındı.` });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleUnban = async (reportId: string, uid: string) => {
+    setProcessing(reportId);
+    try {
+      await unbanUser(uid);
+      await resolveReport(reportId, "resolved");
+      drop(reportId);
+      toast({ title: "Askı kaldırıldı" });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleDirective = async () => {
+    if (!directiveModal) return;
+    setProcessing(directiveModal.reportId);
+    try {
+      await createNotification({
+        recipientId: directiveModal.authorId,
+        senderId: modUid, senderName: modName, senderAvatar: modAvatar,
+        type: "moderator_directive",
+        storyId: directiveModal.storyId, storyTitle: directiveModal.storyTitle,
+        directiveMessage: directiveText,
+      });
+      setDirectiveModal(null); setDirectiveText("");
+      toast({ title: "Direktif gönderildi", description: `${directiveModal.authorName} yazara bildirim gönderildi.` });
+    } catch { toast({ title: "Gönderilemedi", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleUnpublishStory = async (reportId: string, storyId: string) => {
+    setProcessing(reportId);
+    try {
+      await updateStory(storyId, { status: "draft" });
+      await resolveReport(reportId, "resolved");
+      drop(reportId);
+      toast({ title: "Hikaye yayından kaldırıldı" });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleUnpublishChapter = async (reportId: string, chapterId: string) => {
+    setProcessing(reportId);
+    try {
+      await updateChapterStatus(chapterId, "rejected");
+      await resolveReport(reportId, "resolved");
+      drop(reportId);
+      toast({ title: "Bölüm yayından kaldırıldı" });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  const handleDeleteComment = async (reportId: string, commentId: string) => {
+    setProcessing(reportId);
+    try {
+      await deleteInlineComment(commentId);
+      await resolveReport(reportId, "resolved");
+      drop(reportId);
+      toast({ title: "Yorum silindi" });
+    } catch { toast({ title: "Hata", variant: "destructive" }); }
+    finally { setProcessing(null); }
+  };
+
+  if (loading) return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}</div>;
 
   if (reports.length === 0) {
     return (
@@ -463,64 +653,301 @@ function ReportsTab() {
   }
 
   return (
-    <div className="space-y-3">
-      {reports.map((r, i) => (
-        <motion.div
-          key={r.id}
-          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-          className="p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5"
-        >
-          <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-xs">
-                {REPORT_TYPE_LABELS[r.reportedType] ?? r.reportedType}
-              </Badge>
-              <span className="text-xs text-muted-foreground font-mono truncate max-w-[120px]">{r.reportedId}</span>
-            </div>
-            <a
-              href={REPORT_TYPE_LINKS[r.reportedType]?.(r.reportedId) ?? "#"}
-              className="flex items-center gap-1 text-xs text-primary hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink className="w-3 h-3" /> İçeriğe Git
-            </a>
-          </div>
+    <>
+      <div className="space-y-4">
+        {reports.map((r, i) => {
+          const d = details[r.id];
+          const busy = processing === r.id;
+          return (
+            <motion.div key={r.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+              className="rounded-2xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
 
-          {r.reason && (
-            <p className="text-sm text-foreground/70 bg-background rounded-lg px-3 py-2 mb-3 border border-border italic">
-              "{r.reason}"
-            </p>
-          )}
+              {/* Başlık */}
+              <div className="px-5 py-3 flex items-center justify-between gap-3 border-b border-amber-500/10">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-xs">
+                    {REPORT_TYPE_LABELS[r.reportedType] ?? r.reportedType} Şikayeti
+                  </Badge>
+                </div>
+                {r.createdAt && (
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(r.createdAt.seconds * 1000).toLocaleDateString("tr-TR")}
+                  </span>
+                )}
+              </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <p className="text-xs text-muted-foreground">
-              Şikayetçi UID:{" "}
-              <Link href={`/profile/${r.reporterId}`} className="text-primary/70 hover:text-primary underline underline-offset-2">
-                {r.reporterId.slice(0, 8)}…
-              </Link>
+              <div className="p-5 space-y-4">
+                {/* Şikayet eden ↔ şikayet edilen */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-background/60 rounded-xl p-3 border border-border">
+                    <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-widest font-semibold">Şikayet Eden</p>
+                    {!d || d.loading ? <Skeleton className="h-8 w-full" /> : (
+                      <Link href={`/profile/${r.reporterId}`} className="flex items-center gap-2 group">
+                        <Avatar url={d.reporterAvatar} name={d.reporterName} />
+                        <span className="text-sm font-medium group-hover:text-primary transition-colors truncate">{d.reporterName}</span>
+                        <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="bg-background/60 rounded-xl p-3 border border-border">
+                    <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-widest font-semibold">Şikayet Edilen</p>
+                    {!d || d.loading ? <Skeleton className="h-8 w-full" /> : (
+                      r.reportedType === "user" && d.targetUser ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar url={d.targetUser.avatarUrl} name={d.targetUser.displayName} />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Link href={`/profile/${r.reportedId}`} className="text-sm font-medium hover:text-primary transition-colors truncate">
+                                {d.targetUser.displayName}
+                              </Link>
+                              {d.targetUser.banned && (
+                                <span className="text-[10px] bg-red-500/15 text-red-400 border border-red-500/30 rounded px-1.5 py-0.5 shrink-0">Askıda</span>
+                              )}
+                            </div>
+                            {d.targetUser.bio && <p className="text-xs text-muted-foreground truncate">{d.targetUser.bio}</p>}
+                          </div>
+                        </div>
+                      ) : r.reportedType === "story" && d.targetStory ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                          {d.targetStory.coverUrl && <img src={d.targetStory.coverUrl} className="w-8 h-10 rounded object-cover shrink-0" />}
+                          <div className="min-w-0">
+                            <Link href={`/story/${r.reportedId}`} className="text-sm font-medium hover:text-primary transition-colors block truncate">
+                              {d.targetStory.title}
+                            </Link>
+                            <p className="text-xs text-muted-foreground truncate">Yazar: {d.targetStory.authorName}</p>
+                          </div>
+                        </div>
+                      ) : r.reportedType === "chapter" && d.targetChapter ? (
+                        <div className="min-w-0">
+                          <Link href={`/read/${d.targetChapter.storyId}/${r.reportedId}`} className="text-sm font-medium hover:text-primary transition-colors block truncate">
+                            {d.targetChapter.title}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            {d.targetChapter.storyTitle ?? "–"} · {d.targetChapter.authorName ?? "–"}
+                          </p>
+                        </div>
+                      ) : r.reportedType === "comment" && d.targetComment ? (
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{d.targetComment.authorName}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-2 italic">"{d.targetComment.text}"</p>
+                        </div>
+                      ) : d.contextStory ? (
+                        /* Bölüm/yorum doğrudan yüklenemedi ama üst hikaye bulundu */
+                        <div className="min-w-0">
+                          <Link href={`/story/${d.contextStory.id}`} className="text-sm font-medium hover:text-primary transition-colors block truncate">
+                            {d.contextStory.title}
+                          </Link>
+                          <p className="text-xs text-muted-foreground">
+                            Yazar: {d.contextStory.authorName} · {REPORT_TYPE_LABELS[r.reportedType]} içinde
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">ID: {r.reportedId.slice(0, 16)}…</p>
+                        </div>
+                      ) : (
+                        /* Hiçbir şey yüklenemedi — tür + ID göster, doğrudan link sun */
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-sm font-medium text-amber-400">
+                            {REPORT_TYPE_LABELS[r.reportedType] ?? r.reportedType} şikayeti
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 font-mono">ID: {r.reportedId}</p>
+                          {r.reportedType === "story" && (
+                            <Link href={`/story/${r.reportedId}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                              <ExternalLink className="w-3 h-3" /> Hikayeye git
+                            </Link>
+                          )}
+                          {r.reportedType === "user" && (
+                            <Link href={`/profile/${r.reportedId}`} className="text-xs text-primary hover:underline flex items-center gap-1">
+                              <ExternalLink className="w-3 h-3" /> Profile git
+                            </Link>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Bölüm içerik önizlemesi */}
+                {r.reportedType === "chapter" && d?.targetChapter?.content && (
+                  <div className="bg-background rounded-xl p-3 border border-border max-h-28 overflow-y-auto">
+                    <p className="text-xs text-foreground/70 leading-relaxed whitespace-pre-wrap">
+                      {d.targetChapter.content.slice(0, 500)}{d.targetChapter.content.length > 500 ? "…" : ""}
+                    </p>
+                  </div>
+                )}
+
+                {/* Şikayet sebebi */}
+                {r.reason && (
+                  <p className="text-sm text-foreground/70 bg-background rounded-xl px-3 py-2 border border-border italic">
+                    Sebep: "{r.reason}"
+                  </p>
+                )}
+
+                {/* Eylem butonları */}
+                <div className="flex items-center justify-between flex-wrap gap-3 pt-1 border-t border-amber-500/10">
+                  <div className="flex flex-wrap gap-2">
+                    {/* Kullanıcı aksiyonları */}
+                    {r.reportedType === "user" && d?.targetUser && (
+                      <>
+                        <Link href={`/profile/${r.reportedId}`} target="_blank">
+                          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+                            <ExternalLink className="w-3 h-3" /> Profili Gör
+                          </button>
+                        </Link>
+                        {d.targetUser.banned ? (
+                          <button onClick={() => handleUnban(r.id, r.reportedId)} disabled={busy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50">
+                            <ShieldOff className="w-3 h-3" /> Askıyı Kaldır
+                          </button>
+                        ) : (
+                          <button onClick={() => setBanModal({ reportId: r.id, uid: r.reportedId, name: d.targetUser?.displayName ?? "Kullanıcı" })} disabled={busy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                            <Ban className="w-3 h-3" /> Hesabı Askıya Al
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Hikaye aksiyonları */}
+                    {r.reportedType === "story" && d?.targetStory && (
+                      <>
+                        <Link href={`/story/${r.reportedId}`} target="_blank">
+                          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+                            <ExternalLink className="w-3 h-3" /> Hikayeyi Gör
+                          </button>
+                        </Link>
+                        <button onClick={() => handleUnpublishStory(r.id, r.reportedId)} disabled={busy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                          <XCircle className="w-3 h-3" /> Yayından Kaldır
+                        </button>
+                      </>
+                    )}
+
+                    {/* Bölüm aksiyonları */}
+                    {r.reportedType === "chapter" && d?.targetChapter && (
+                      <>
+                        <Link href={`/read/${d.targetChapter.storyId}/${r.reportedId}`} target="_blank">
+                          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+                            <ExternalLink className="w-3 h-3" /> Bölümü Gör
+                          </button>
+                        </Link>
+                        <button onClick={() => handleUnpublishChapter(r.id, r.reportedId)} disabled={busy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                          <XCircle className="w-3 h-3" /> Yayından Kaldır
+                        </button>
+                        {d.targetChapter.authorId && (
+                          <button onClick={() => setDirectiveModal({
+                            reportId: r.id, authorId: d.targetChapter!.authorId!,
+                            authorName: d.targetChapter!.authorName ?? "Yazar",
+                            storyId: d.targetChapter!.storyId, storyTitle: d.targetChapter!.storyTitle ?? "",
+                          })} disabled={busy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors disabled:opacity-50">
+                            <MessageSquare className="w-3 h-3" /> Yazara Direktif Gönder
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* Yorum aksiyonları */}
+                    {r.reportedType === "comment" && (
+                      <>
+                        {d?.targetComment && (
+                          <Link href={`/read/${d.targetComment.storyId}/${d.targetComment.chapterId}`} target="_blank">
+                            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors">
+                              <ExternalLink className="w-3 h-3" /> Konuma Git
+                            </button>
+                          </Link>
+                        )}
+                        <button onClick={() => handleDeleteComment(r.id, r.reportedId)} disabled={busy}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                          <XCircle className="w-3 h-3" /> Yorumu Sil
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Ortak: Reddet + Çözüldü */}
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => handleResolve(r.id, "dismissed")} disabled={busy}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
+                      <XCircle className="w-3.5 h-3.5" /> Geçersiz
+                    </button>
+                    <button onClick={() => handleResolve(r.id, "resolved")} disabled={busy}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50">
+                      <CheckCircle className="w-3.5 h-3.5" /> {busy ? "…" : "Çözüldü"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Ban modalı */}
+      {banModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setBanModal(null); setBanReason(""); }}>
+          <div className="bg-card border border-red-500/30 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <Ban className="w-5 h-5 text-red-400" />
+              <h3 className="font-bold text-lg">Hesabı Askıya Al</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span className="text-foreground font-medium">{banModal.name}</span> kullanıcısı hesabından çıkarılacak ve giriş yapamayacak.
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleResolve(r.id, "dismissed")}
-                disabled={processing === r.id}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50"
-              >
-                <XCircle className="w-3.5 h-3.5" /> Reddet
+            <textarea
+              value={banReason}
+              onChange={e => setBanReason(e.target.value)}
+              placeholder="Askıya alma sebebini yaz (zorunlu)…"
+              className="w-full bg-background border border-border rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:border-red-500/50"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setBanModal(null); setBanReason(""); }}
+                className="flex-1 px-4 py-2 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">
+                İptal
               </button>
-              <button
-                onClick={() => handleResolve(r.id, "resolved")}
-                disabled={processing === r.id}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50"
-              >
-                <CheckCircle className="w-3.5 h-3.5" /> {processing === r.id ? "İşleniyor…" : "Çözüldü"}
+              <button onClick={handleBan} disabled={!banReason.trim() || processing === banModal.reportId}
+                className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50">
+                {processing === banModal.reportId ? "İşleniyor…" : "Askıya Al"}
               </button>
             </div>
           </div>
-        </motion.div>
-      ))}
-    </div>
+        </div>
+      )}
+
+      {/* Direktif modalı */}
+      {directiveModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setDirectiveModal(null); setDirectiveText(""); }}>
+          <div className="bg-card border border-amber-500/30 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <MessageSquare className="w-5 h-5 text-amber-400" />
+              <h3 className="font-bold text-lg">Yazara Direktif Gönder</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span className="text-foreground font-medium">{directiveModal.authorName}</span> yazarına bildirim olarak iletilecek.
+            </p>
+            <textarea
+              value={directiveText}
+              onChange={e => setDirectiveText(e.target.value)}
+              placeholder="Direktif mesajı… (örn: '3. paragraftaki ifadeleri kaldırmanız gerekmektedir.')"
+              className="w-full bg-background border border-border rounded-xl p-3 text-sm resize-none h-28 focus:outline-none focus:border-amber-500/50"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setDirectiveModal(null); setDirectiveText(""); }}
+                className="flex-1 px-4 py-2 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">
+                İptal
+              </button>
+              <button onClick={handleDirective} disabled={!directiveText.trim() || processing === directiveModal.reportId}
+                className="flex-1 px-4 py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-50">
+                {processing === directiveModal.reportId ? "Gönderiliyor…" : "Gönder"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -529,7 +956,9 @@ function ReportsTab() {
 export default function ModeratorPage() {
   const [, setLocation] = useLocation();
   const { user, profile, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<"review" | "reports" | "ban" | "users">("review");
+  const [tab, setTab] = useState<"review" | "reports" | "ban">("review");
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [usersOpen, setUsersOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return; // auth yüklenene kadar bekle — erken yönlendirmeyi önler
@@ -538,6 +967,12 @@ export default function ModeratorPage() {
       setLocation("/");
     }
   }, [user, profile, authLoading]);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    if (profile.role !== "moderator" && profile.role !== "admin") return;
+    getPlatformStats().then(setStats).catch(() => {});
+  }, [user?.uid, profile?.role]);
 
   if (authLoading || !profile) return null;
 
@@ -573,6 +1008,45 @@ export default function ModeratorPage() {
           )}
         </motion.div>
 
+        {/* Platform İstatistikleri */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
+          {([
+            { label: "Kullanıcı", value: stats?.userCount, icon: "👤", color: "text-primary" },
+            { label: "Hikaye", value: stats?.storyCount, icon: "📖", color: "text-emerald-400" },
+            { label: "Yayın. Bölüm", value: stats?.chapterCount, icon: "📄", color: "text-cyan-400" },
+            { label: "İncelemede", value: stats?.pendingCount, icon: "⏳", color: "text-amber-400" },
+            { label: "Bekleyen Şikayet", value: stats?.reportCount, icon: "🚨", color: "text-red-400" },
+          ] as { label: string; value: number | undefined; icon: string; color: string }[]).map(({ label, value, icon, color }) => {
+            const content = (
+              <>
+                <span className="text-lg">{icon}</span>
+                <span className={`text-2xl font-bold tabular-nums ${color}`}>
+                  {value === undefined ? <span className="text-muted-foreground text-base animate-pulse">…</span> : value.toLocaleString("tr-TR")}
+                </span>
+                <span className="text-xs text-muted-foreground">{label}</span>
+              </>
+            );
+            return label === "Kullanıcı" && isAdmin ? (
+              <button
+                key={label}
+                type="button"
+                disabled={value === undefined}
+                onClick={() => setUsersOpen(true)}
+                aria-haspopup="dialog"
+                aria-expanded={usersOpen}
+                aria-label={`${value?.toLocaleString("tr-TR") ?? "Kullanıcı"} kullanıcıyı görüntüle`}
+                className="bg-card border border-border rounded-xl p-4 flex flex-col items-start text-left gap-1 hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait"
+              >
+                {content}
+              </button>
+            ) : (
+              <div key={label} className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1">
+                {content}
+              </div>
+            );
+          })}
+        </div>
+
         {/* Sekmeler */}
         <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
           <button
@@ -596,24 +1070,23 @@ export default function ModeratorPage() {
             }`}>
             <Ban className="w-4 h-4" /> Kullanıcı Askıya Al
           </button>
-          {isAdmin && (
-            <button
-              onClick={() => setTab("users")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
-                tab === "users" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}>
-              <Users className="w-4 h-4" /> Kullanıcı Yönetimi
-            </button>
-          )}
         </div>
 
         {tab === "review" && <ReviewTab />}
-        {tab === "reports" && <ReportsTab />}
-        {tab === "ban" && <BanTab />}
-        {tab === "users" && isAdmin && user && (
-          <UsersTab currentUid={user.uid} />
+        {tab === "reports" && user && profile && (
+          <ReportsTab modUid={user.uid} modName={profile.displayName ?? "Moderatör"} modAvatar={profile.avatarUrl ?? ""} />
         )}
+        {tab === "ban" && <BanTab />}
       </div>
+      <Dialog open={usersOpen} onOpenChange={setUsersOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Kullanıcılar {stats ? `(${stats.userCount})` : ""}</DialogTitle>
+            <DialogDescription>İsim veya kullanıcı kimliğiyle listede ara; e-postayla aramak için tam adresi yaz.</DialogDescription>
+          </DialogHeader>
+          {usersOpen && isAdmin && user && <UsersTab key={user.uid} currentUid={user.uid} />}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

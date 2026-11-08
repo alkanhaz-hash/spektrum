@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -17,13 +17,35 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
+import { WeeklyLeaderboard } from "@/components/WeeklyLeaderboard";
 import { getPublishedStories, searchStories, GENRES, Story } from "@/lib/firestore-service";
+import { useLocale } from "@/contexts/LocaleContext";
+import { translateGenre } from "@workspace/spektrum-i18n";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_W = (SCREEN_W - 48) / 2;
 
+// Tür → renk ve ikon eşleştirmesi
+const GENRE_META: Record<string, { icon: string; color: string; bg: string }> = {
+  "Fantastik":   { icon: "zap",        color: "#A07FE6", bg: "#A07FE622" },
+  "Romantik":    { icon: "heart",       color: "#f472b6", bg: "#ec489922" },
+  "Gizem":       { icon: "eye",         color: "#E6A545", bg: "#E6A54522" },
+  "Korku":       { icon: "alert-circle",color: "#f87171", bg: "#ef444422" },
+  "Bilim Kurgu": { icon: "cpu",         color: "#60a5fa", bg: "#3b82f622" },
+  "Macera":      { icon: "anchor",      color: "#fbbf24", bg: "#f59e0b22" },
+  "Dram":        { icon: "film",        color: "#34d399", bg: "#10b98122" },
+  "Psikolojik":  { icon: "activity",    color: "#e879f9", bg: "#d946ef22" },
+  "Tarihi":      { icon: "bookmark",    color: "#fb923c", bg: "#f9731622" },
+  "Gençlik":     { icon: "star",        color: "#a3e635", bg: "#84cc1622" },
+  "Gerilim":     { icon: "wind",        color: "#facc15", bg: "#eab30822" },
+  "Komedi":      { icon: "smile",       color: "#4ade80", bg: "#22c55e22" },
+  "Şiir":        { icon: "feather",     color: "#38bdf8", bg: "#0ea5e922" },
+  "Deneme":      { icon: "edit-3",      color: "#94a3b8", bg: "#64748b22" },
+};
+
 function StoryGridCard({ story }: { story: Story }) {
   const colors = useColors();
+  const { locale } = useLocale();
   return (
     <TouchableOpacity
       style={[styles.gridCard, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -46,7 +68,7 @@ function StoryGridCard({ story }: { story: Story }) {
       <View style={styles.gridBody}>
         <View style={[styles.genrePill, { backgroundColor: colors.primary + "33" }]}>
           <Text style={[styles.genrePillText, { color: colors.primary }]} numberOfLines={1}>
-            {story.genre}
+            {translateGenre(locale, story.genre)}
           </Text>
         </View>
         <Text style={[styles.gridTitle, { color: colors.foreground }]} numberOfLines={2}>
@@ -74,9 +96,12 @@ function StoryGridCard({ story }: { story: Story }) {
 
 export default function DiscoverScreen() {
   const colors = useColors();
+  const { locale, t } = useLocale();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [genre, setGenre] = useState<string | null>(null);
+  const [contentLanguage, setContentLanguage] = useState<"tr" | "en" | "all">(locale);
+  const [languageTouched, setLanguageTouched] = useState(false);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,20 +112,41 @@ export default function DiscoverScreen() {
     setLoading(true);
     setSearched(true);
     try {
-      const data = await getPublishedStories(40, g ?? undefined);
+      const data = await getPublishedStories(40, g ?? undefined, contentLanguage);
       setStories(data);
     } catch {
       setStories([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [contentLanguage]);
+
+  useEffect(() => {
+    if (languageTouched) return;
+    setContentLanguage(locale);
+    if (!searched) return;
+    setLoading(true);
+    const request = query.trim()
+      ? searchStories(query).then(data => data.filter(story => (story.contentLanguage ?? "tr") === locale))
+      : getPublishedStories(40, genre ?? undefined, locale);
+    request.then(setStories).catch(() => setStories([])).finally(() => setLoading(false));
+  }, [locale]);
+
+  const changeContentLanguage = (language: "tr" | "en" | "all") => {
+    setLanguageTouched(true);
+    setContentLanguage(language);
+    if (!searched) return;
+    setLoading(true);
+    const request = query.trim()
+      ? searchStories(query).then(data => data.filter(story => language === "all" || (story.contentLanguage ?? "tr") === language))
+      : getPublishedStories(40, genre ?? undefined, language);
+    request.then(setStories).catch(() => setStories([])).finally(() => setLoading(false));
+  };
 
   const handleSearch = (text: string) => {
     setQuery(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (!text.trim()) {
-      // Arama temizlendi: eğer tür seçiliyse onu yükle, yoksa boş durum
       if (genre) {
         loadByGenre(genre);
       } else {
@@ -114,7 +160,7 @@ export default function DiscoverScreen() {
       setSearched(true);
       try {
         const data = await searchStories(text);
-        setStories(data);
+        setStories(data.filter(story => contentLanguage === "all" || (story.contentLanguage ?? "tr") === contentLanguage));
       } catch {
         setStories([]);
       } finally {
@@ -127,7 +173,6 @@ export default function DiscoverScreen() {
     setQuery("");
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (g === null || genre === g) {
-      // "Tümü" veya aynı türe tekrar basıldı → tümünü yükle
       setGenre(null);
       loadByGenre(null);
     } else {
@@ -139,8 +184,8 @@ export default function DiscoverScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     const refreshPromise = query.trim()
-      ? searchStories(query)
-      : getPublishedStories(40, genre ?? undefined);
+      ? searchStories(query).then(data => data.filter(story => contentLanguage === "all" || (story.contentLanguage ?? "tr") === contentLanguage))
+      : getPublishedStories(40, genre ?? undefined, contentLanguage);
     refreshPromise
       .then(setStories)
       .catch(() => {})
@@ -153,15 +198,32 @@ export default function DiscoverScreen() {
     loadByGenre(null);
   };
 
+  const numGenreCols = 3;
+  const genreCardSize = (SCREEN_W - 32 - (numGenreCols - 1) * 10) / numGenreCols;
+
+  const allGenreItems = [
+    { key: "all", label: "Tümü", icon: "grid", color: colors.primary, bg: colors.primary + "22" },
+    ...GENRES.map(g => {
+      const meta = GENRE_META[g] ?? { icon: "book", color: colors.primary, bg: colors.primary + "22" };
+      return { key: g, label: g, icon: meta.icon, color: meta.color, bg: meta.bg };
+    }),
+  ] as const;
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+      }
+    >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Keşfet</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>{t("Keşfet")}</Text>
         <View style={styles.headerRight}>
           {genre && (
             <TouchableOpacity onPress={clearFilter} style={[styles.clearBtn, { borderColor: colors.primary + "60" }]}>
-              <Text style={[styles.clearBtnText, { color: colors.primary }]}>Filtreyi Temizle</Text>
+              <Text style={[styles.clearBtnText, { color: colors.primary }]}>Temizle</Text>
               <Feather name="x" size={13} color={colors.primary} />
             </TouchableOpacity>
           )}
@@ -175,11 +237,11 @@ export default function DiscoverScreen() {
       </View>
 
       {/* Arama */}
-      <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border, margin: 16, marginBottom: 8 }]}>
+      <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border, margin: 16, marginBottom: 12 }]}>
         <Feather name="search" size={18} color={colors.mutedForeground} />
         <TextInput
           style={[styles.searchInput, { color: colors.foreground }]}
-          placeholder="Hikaye, yazar veya etiket ara..."
+          placeholder={t("Hikaye, yazar veya etiket ara...")}
           placeholderTextColor={colors.mutedForeground}
           value={query}
           onChangeText={handleSearch}
@@ -192,43 +254,72 @@ export default function DiscoverScreen() {
         )}
       </View>
 
-      {/* Tür filtreleri */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.genreScroll}
-      >
-        <TouchableOpacity
-          style={[
-            styles.genreChip,
-            { borderColor: colors.border },
-            genre === null && searched && { backgroundColor: colors.primary, borderColor: colors.primary },
-          ]}
-          onPress={() => handleGenre(null)}
-        >
-          <Text style={[
-            styles.genreChipText,
-            { color: genre === null && searched ? "#fff" : colors.mutedForeground },
-          ]}>
-            Tümü
-          </Text>
-        </TouchableOpacity>
-        {GENRES.map((g) => (
+      <View style={styles.languageFilters} accessibilityLabel={t("Yayın dili")}>
+        {(["tr", "en", "all"] as const).map(language => (
           <TouchableOpacity
-            key={g}
+            key={language}
+            onPress={() => changeContentLanguage(language)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: contentLanguage === language }}
             style={[
-              styles.genreChip,
-              { borderColor: colors.border },
-              genre === g && { backgroundColor: colors.primary, borderColor: colors.primary },
+              styles.languageFilter,
+              {
+                borderColor: contentLanguage === language ? colors.primary : colors.border,
+                backgroundColor: contentLanguage === language ? colors.primary + "22" : colors.card,
+              },
             ]}
-            onPress={() => handleGenre(g)}
+            testID={`filter-language-${language}`}
           >
-            <Text style={[styles.genreChipText, { color: genre === g ? "#fff" : colors.mutedForeground }]}>
-              {g}
+            <Text style={{ color: contentLanguage === language ? colors.primary : colors.mutedForeground, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>
+              {t(language === "tr" ? "Türkçe içerik" : language === "en" ? "İngilizce içerik" : "Tüm diller")}
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
+
+      <WeeklyLeaderboard />
+
+      {/* Tür grid'i — kareler */}
+      <View style={styles.genreSection}>
+        <Text style={[styles.genreSectionTitle, { color: colors.foreground }]}>{t("Türlere Göz At")}</Text>
+        <View style={styles.genreGrid}>
+          {allGenreItems.map((item) => {
+            const isSelected = item.key === "all" ? genre === null && searched : genre === item.key;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[
+                  styles.genreSquare,
+                  {
+                    width: genreCardSize,
+                    height: genreCardSize,
+                    backgroundColor: isSelected ? item.bg : colors.card,
+                    borderColor: isSelected ? item.color : colors.border,
+                    borderWidth: isSelected ? 1.5 : 1,
+                  },
+                ]}
+                onPress={() => handleGenre(item.key === "all" ? null : item.key)}
+                activeOpacity={0.75}
+              >
+                <Feather
+                  name={item.icon as React.ComponentProps<typeof Feather>["name"]}
+                  size={22}
+                  color={isSelected ? item.color : colors.mutedForeground}
+                />
+                <Text
+                  style={[
+                    styles.genreSquareText,
+                    { color: isSelected ? item.color : colors.mutedForeground },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {item.key === "all" ? t(item.label) : translateGenre(locale, item.label)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
 
       {/* Sonuçlar */}
       {loading ? (
@@ -238,59 +329,45 @@ export default function DiscoverScreen() {
       ) : !searched ? (
         <View style={styles.center}>
           <Feather name="compass" size={44} color={colors.mutedForeground + "60"} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Hikayeleri Keşfet</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{t("Hikayeleri Keşfet")}</Text>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-            Bir tür seç veya arama yap
+            {t("Bir tür seç veya arama yap")}
           </Text>
         </View>
       ) : stories.length === 0 ? (
         <View style={styles.center}>
           <Feather name="search" size={40} color={colors.mutedForeground + "60"} />
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Sonuç Bulunamadı</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{t("Sonuç Bulunamadı")}</Text>
           {genre ? (
             <>
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                "{genre}" türünde henüz hikaye yok.
+                "{translateGenre(locale, genre)}" {t("türünde henüz hikaye yok.")}
               </Text>
-              <TouchableOpacity
-                style={[styles.clearBtnLarge, { borderColor: colors.primary }]}
-                onPress={clearFilter}
-              >
-                <Text style={[styles.clearBtnLargeText, { color: colors.primary }]}>
-                  Filtreyi Temizle
-                </Text>
+              <TouchableOpacity style={[styles.clearBtnLarge, { borderColor: colors.primary }]} onPress={clearFilter}>
+                <Text style={[styles.clearBtnLargeText, { color: colors.primary }]}>{t("Filtreyi Temizle")}</Text>
               </TouchableOpacity>
             </>
           ) : (
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              Farklı bir arama terimi dene.
+              {t("Farklı bir arama terimi dene.")}
             </Text>
           )}
         </View>
       ) : (
-        <FlatList
-          data={stories}
-          keyExtractor={(s) => s.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          renderItem={({ item }) => <StoryGridCard story={item} />}
-          contentContainerStyle={[styles.grid, { paddingBottom: insets.bottom + 100 }]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          ListHeaderComponent={
-            <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
-              {stories.length} hikaye bulundu
-            </Text>
-          }
-        />
+        <View style={styles.grid}>
+          <Text style={[styles.resultCount, { color: colors.mutedForeground }]}>
+            {stories.length} {t("hikaye bulundu")}
+          </Text>
+          <View style={styles.storiesGrid}>
+            {stories.map((item) => (
+              <StoryGridCard key={item.id} story={item} />
+            ))}
+          </View>
+        </View>
       )}
-    </View>
+
+      <View style={{ height: insets.bottom + 100 }} />
+    </ScrollView>
   );
 }
 
@@ -321,14 +398,21 @@ const styles = StyleSheet.create({
     height: 48,
     gap: 10,
   },
+  languageFilters: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, marginBottom: 16 },
+  languageFilter: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 7 },
   searchInput: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular" },
-  genreScroll: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  genreChip: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1,
+  genreSection: { paddingHorizontal: 16, marginBottom: 16 },
+  genreSectionTitle: { fontSize: 17, fontFamily: "Inter_700Bold", marginBottom: 12 },
+  genreGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  genreSquare: {
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    padding: 8,
   },
-  genreChipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32 },
+  genreSquareText: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  center: { alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 32, paddingVertical: 40 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
   clearBtnLarge: {
@@ -336,10 +420,10 @@ const styles = StyleSheet.create({
     borderRadius: 20, borderWidth: 1,
   },
   clearBtnLargeText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  grid: { paddingHorizontal: 16, paddingTop: 4 },
-  row: { gap: 12, marginBottom: 12 },
-  resultCount: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 8 },
-  gridCard: { width: CARD_W, borderRadius: 14, overflow: "hidden", borderWidth: 1 },
+  grid: { paddingHorizontal: 16 },
+  resultCount: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 10 },
+  storiesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  gridCard: { width: CARD_W, borderRadius: 14, overflow: "hidden", borderWidth: 1, marginBottom: 0 },
   gridCover: { width: "100%", height: 140 },
   gridGradient: { position: "absolute", bottom: 0, left: 0, right: 0, height: 60 },
   gridBody: { padding: 10, gap: 4 },

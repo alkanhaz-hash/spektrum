@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.alkanhaz.spektrum",
+      "sha256_cert_fingerprints": [
+        "B9:D8:78:14:24:3C:F0:D5:EF:A0:5C:10:50:B6:45:EF:46:A4:AB:32:70:D5:0E:98:88:29:B5:CE:01:AB:56:51"
+      ]
+    }
+  }
+]

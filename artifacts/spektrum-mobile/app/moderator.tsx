@@ -9,6 +9,8 @@ import {
   TextInput,
   Image,
   Alert,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -23,10 +25,21 @@ import {
   banUser,
   unbanUser,
   searchUsersForMod,
+  getAllUsersForMod,
   setUserRole,
+  getUserById,
+  getInlineCommentById,
+  deleteInlineComment,
+  unpublishStory,
+  unpublishChapter,
+  sendModeratorDirective,
+  getStory,
+  getChapter,
   Chapter,
   Report,
   UserSummary,
+  Story,
+  InlineComment,
 } from "@/lib/firestore-service";
 
 // ─── Yardımcı bileşenler ─────────────────────────────────────────────────────
@@ -134,20 +147,117 @@ const REPORT_LABELS: Record<string, string> = {
   story: "Hikaye", chapter: "Bölüm", comment: "Yorum", user: "Kullanıcı",
 };
 
-function ReportsTab() {
+type ReportDetail = {
+  reporter: (UserSummary & { bio?: string }) | null;
+  reported: (UserSummary & { bio?: string }) | null;
+  story: Story | null;
+  chapter: (Chapter & { storyTitle?: string }) | null;
+  comment: InlineComment | null;
+};
+
+function timeAgoReport(ts: { seconds: number } | undefined): string {
+  if (!ts) return "";
+  const diff = Math.floor(Date.now() / 1000) - ts.seconds;
+  if (diff < 60) return "az önce";
+  if (diff < 3600) return `${Math.floor(diff / 60)}dk önce`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}sa önce`;
+  return `${Math.floor(diff / 86400)}g önce`;
+}
+
+function UserRow({ u, label, colors }: { u: (UserSummary & { bio?: string }) | null; label: string; colors: ReturnType<typeof useColors> }) {
+  if (!u) return null;
+  return (
+    <View style={[dr.userRow, { backgroundColor: colors.background, borderColor: colors.border }]}>
+      <Text style={[dr.roleLabel, { color: colors.mutedForeground }]}>{label}</Text>
+      <View style={dr.userInner}>
+        {u.avatarUrl ? (
+          <Image source={{ uri: u.avatarUrl }} style={dr.avatar} />
+        ) : (
+          <View style={[dr.avatarFallback, { backgroundColor: colors.primary + "22" }]}>
+            <Text style={[dr.avatarInitial, { color: colors.primary }]}>{u.displayName.charAt(0)}</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <Text style={[dr.userName, { color: colors.foreground }]} numberOfLines={1}>{u.displayName}</Text>
+            <View style={[dr.rolePill, { backgroundColor: colors.primary + "15", borderColor: colors.primary + "33" }]}>
+              <Text style={[dr.rolePillText, { color: colors.primary }]}>{u.role}</Text>
+            </View>
+            {u.banned && (
+              <View style={[dr.rolePill, { backgroundColor: "#ef444415", borderColor: "#ef444433" }]}>
+                <Text style={[dr.rolePillText, { color: "#ef4444" }]}>Askıda</Text>
+              </View>
+            )}
+          </View>
+          {u.bio ? <Text style={[dr.bio, { color: colors.mutedForeground }]} numberOfLines={1}>{u.bio}</Text> : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const dr = StyleSheet.create({
+  userRow: { padding: 10, borderRadius: 12, borderWidth: 1, gap: 4 },
+  roleLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  userInner: { flexDirection: "row", alignItems: "center", gap: 10 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarFallback: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  avatarInitial: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  userName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  rolePill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20, borderWidth: 1 },
+  rolePillText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  bio: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+});
+
+function ReportsTab({ modUid, modName, modAvatar }: { modUid: string; modName: string; modAvatar: string }) {
   const colors = useColors();
   const [reports, setReports] = useState<Report[]>([]);
+  const [details, setDetails] = useState<Record<string, ReportDetail>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
 
+  // Ban modal
+  const [banTarget, setBanTarget] = useState<{ reportId: string; uid: string } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [banSaving, setBanSaving] = useState(false);
+
+  // Direktif modal
+  const [directiveTarget, setDirectiveTarget] = useState<{ reportId: string; recipientId: string; storyId?: string; storyTitle?: string } | null>(null);
+  const [directiveMsg, setDirectiveMsg] = useState("");
+  const [directiveSaving, setDirectiveSaving] = useState(false);
+
   useEffect(() => {
     getReports("pending")
-      .then(setReports)
+      .then(async (reps) => {
+        setReports(reps);
+        const detailMap: Record<string, ReportDetail> = {};
+        await Promise.all(reps.map(async (r) => {
+          const detail: ReportDetail = { reporter: null, reported: null, story: null, chapter: null, comment: null };
+          try { detail.reporter = await getUserById(r.reporterId) as (UserSummary & { bio?: string }) | null; } catch {}
+          try {
+            if (r.reportedType === "user") {
+              detail.reported = await getUserById(r.reportedId) as (UserSummary & { bio?: string }) | null;
+            } else if (r.reportedType === "story") {
+              detail.story = await getStory(r.reportedId);
+            } else if (r.reportedType === "chapter") {
+              const ch = await getChapter(r.reportedId);
+              if (ch) {
+                const st = await getStory(ch.storyId);
+                detail.chapter = { ...ch, storyTitle: st?.title };
+              }
+            } else if (r.reportedType === "comment") {
+              detail.comment = await getInlineCommentById(r.reportedId);
+            }
+          } catch {}
+          detailMap[r.id] = detail;
+        }));
+        setDetails(detailMap);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const handle = async (id: string, res: "resolved" | "dismissed") => {
+  const handleResolve = async (id: string, res: "resolved" | "dismissed") => {
     setProcessing(id);
     try {
       await resolveReport(id, res);
@@ -159,62 +269,385 @@ function ReportsTab() {
     }
   };
 
+  const handleUnpublishStory = async (reportId: string, storyId: string) => {
+    setProcessing(reportId);
+    try {
+      await unpublishStory(storyId);
+      await resolveReport(reportId, "resolved");
+      setReports(prev => prev.filter(r => r.id !== reportId));
+    } catch {
+      Alert.alert("Hata", "İşlem başarısız.");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleUnpublishChapter = async (reportId: string, chapterId: string) => {
+    setProcessing(reportId);
+    try {
+      await unpublishChapter(chapterId);
+      await resolveReport(reportId, "resolved");
+      setReports(prev => prev.filter(r => r.id !== reportId));
+    } catch {
+      Alert.alert("Hata", "İşlem başarısız.");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleDeleteComment = async (reportId: string, commentId: string) => {
+    setProcessing(reportId);
+    try {
+      await deleteInlineComment(commentId);
+      await resolveReport(reportId, "resolved");
+      setReports(prev => prev.filter(r => r.id !== reportId));
+    } catch {
+      Alert.alert("Hata", "İşlem başarısız.");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const confirmBan = async () => {
+    if (!banTarget) return;
+    setBanSaving(true);
+    try {
+      await banUser(banTarget.uid, banReason.trim() || "Topluluk kurallarını ihlal");
+      await resolveReport(banTarget.reportId, "resolved");
+      setReports(prev => prev.filter(r => r.id !== banTarget.reportId));
+      setBanTarget(null);
+      setBanReason("");
+    } catch {
+      Alert.alert("Hata", "İşlem başarısız.");
+    } finally {
+      setBanSaving(false);
+    }
+  };
+
+  const confirmDirective = async () => {
+    if (!directiveTarget || !directiveMsg.trim()) return;
+    setDirectiveSaving(true);
+    try {
+      await sendModeratorDirective({
+        modUid,
+        modName,
+        modAvatar,
+        recipientId: directiveTarget.recipientId,
+        storyId: directiveTarget.storyId,
+        storyTitle: directiveTarget.storyTitle,
+        message: directiveMsg.trim(),
+      });
+      await resolveReport(directiveTarget.reportId, "resolved");
+      setReports(prev => prev.filter(r => r.id !== directiveTarget.reportId));
+      setDirectiveTarget(null);
+      setDirectiveMsg("");
+    } catch {
+      Alert.alert("Hata", "İşlem başarısız.");
+    } finally {
+      setDirectiveSaving(false);
+    }
+  };
+
   if (loading) return <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />;
   if (reports.length === 0) return <SectionEmpty icon="🛡️" text={"Bekleyen şikayet yok!\nTüm şikayetler işlendi."} />;
 
   return (
-    <View style={{ gap: 12 }}>
-      {reports.map(r => (
-        <View key={r.id} style={[rp.card, { backgroundColor: "#f59e0b0a", borderColor: "#f59e0b33" }]}>
-          <View style={rp.header}>
-            <View style={[rp.badge, { backgroundColor: "#f59e0b22", borderColor: "#f59e0b55" }]}>
-              <Text style={rp.badgeText}>{REPORT_LABELS[r.reportedType] ?? r.reportedType}</Text>
+    <View style={{ gap: 14 }}>
+      {reports.map(r => {
+        const det = details[r.id];
+        const isProcessing = processing === r.id;
+        const date = r.createdAt ? timeAgoReport(r.createdAt as { seconds: number }) : "";
+
+        return (
+          <View key={r.id} style={[rp.card, { backgroundColor: "#f59e0b08", borderColor: "#f59e0b33" }]}>
+            {/* Başlık */}
+            <View style={rp.header}>
+              <View style={[rp.badge, { backgroundColor: "#f59e0b22", borderColor: "#f59e0b55" }]}>
+                <Text style={rp.badgeText}>{REPORT_LABELS[r.reportedType] ?? r.reportedType}</Text>
+              </View>
+              {date ? <Text style={[rp.date, { color: colors.mutedForeground }]}>{date}</Text> : null}
             </View>
-            <Text style={[rp.id, { color: colors.mutedForeground }]} numberOfLines={1}>
-              ID: {r.reportedId.slice(0, 10)}…
-            </Text>
+
+            {/* Şikayet sebebi */}
+            {r.reason ? (
+              <View style={[rp.reasonBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[rp.reasonText, { color: colors.foreground }]}>"{r.reason}"</Text>
+              </View>
+            ) : null}
+
+            {/* Şikayetçi */}
+            {det?.reporter && <UserRow u={det.reporter} label="Şikayetçi" colors={colors} />}
+
+            {/* Şikayet edilen: Kullanıcı */}
+            {r.reportedType === "user" && det?.reported && (
+              <UserRow u={det.reported} label="Şikayet Edilen" colors={colors} />
+            )}
+
+            {/* Şikayet edilen: Hikaye */}
+            {r.reportedType === "story" && det?.story && (
+              <View style={[rp.entityBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[rp.entityLabel, { color: colors.mutedForeground }]}>Şikayet Edilen Hikaye</Text>
+                <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+                  {det.story.coverUrl ? (
+                    <Image source={{ uri: det.story.coverUrl }} style={rp.cover} />
+                  ) : null}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[rp.entityTitle, { color: colors.foreground }]} numberOfLines={2}>{det.story.title}</Text>
+                    <Text style={[rp.entitySub, { color: colors.mutedForeground }]} numberOfLines={1}>✍️ {det.story.authorName}</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Şikayet edilen: Bölüm */}
+            {r.reportedType === "chapter" && det?.chapter && (
+              <View style={[rp.entityBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[rp.entityLabel, { color: colors.mutedForeground }]}>Şikayet Edilen Bölüm</Text>
+                <Text style={[rp.entityTitle, { color: colors.foreground }]} numberOfLines={2}>{det.chapter.title}</Text>
+                {det.chapter.storyTitle && (
+                  <Text style={[rp.entitySub, { color: colors.mutedForeground }]} numberOfLines={1}>📖 {det.chapter.storyTitle}</Text>
+                )}
+                {det.chapter.content && (
+                  <Text style={[rp.entityContent, { color: colors.mutedForeground }]} numberOfLines={3}>
+                    {det.chapter.content.slice(0, 200)}…
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Şikayet edilen: Yorum */}
+            {r.reportedType === "comment" && det?.comment && (
+              <View style={[rp.entityBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[rp.entityLabel, { color: colors.mutedForeground }]}>Şikayet Edilen Yorum</Text>
+                <Text style={[rp.entitySub, { color: colors.mutedForeground }]} numberOfLines={1}>✍️ {det.comment.authorName}</Text>
+                <Text style={[rp.entityContent, { color: colors.foreground }]} numberOfLines={4}>"{det.comment.text}"</Text>
+              </View>
+            )}
+
+            {/* Aksiyon butonları — türe göre */}
+            <View style={{ gap: 6, marginTop: 4 }}>
+
+              {/* Kullanıcı aksiyonları */}
+              {r.reportedType === "user" && det?.reported && (
+                <View style={rv.btns}>
+                  {!det.reported.banned ? (
+                    <TouchableOpacity
+                      style={[rv.btn, { borderColor: "#ef444466", backgroundColor: "#ef444411" }]}
+                      onPress={() => { setBanTarget({ reportId: r.id, uid: det.reported!.uid }); setBanReason(""); }}
+                      disabled={isProcessing}
+                    >
+                      <Feather name="slash" size={14} color="#ef4444" />
+                      <Text style={[rv.btnText, { color: "#ef4444" }]}>Askıya Al</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[rv.btn, { borderColor: "#22c55e66", backgroundColor: "#22c55e11" }]}
+                      onPress={async () => {
+                        setProcessing(r.id);
+                        try { await unbanUser(det.reported!.uid); await resolveReport(r.id, "resolved"); setReports(prev => prev.filter(x => x.id !== r.id)); }
+                        catch { Alert.alert("Hata", "İşlem başarısız."); }
+                        finally { setProcessing(null); }
+                      }}
+                      disabled={isProcessing}
+                    >
+                      <Feather name="shield-off" size={14} color="#22c55e" />
+                      <Text style={[rv.btnText, { color: "#22c55e" }]}>Yasağı Kaldır</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[rv.btn, { borderColor: colors.border }]}
+                    onPress={() => handleResolve(r.id, "dismissed")}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? <ActivityIndicator size="small" color={colors.mutedForeground} /> : (
+                      <><Feather name="x" size={14} color={colors.mutedForeground} /><Text style={[rv.btnText, { color: colors.mutedForeground }]}>Reddet</Text></>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Hikaye aksiyonları */}
+              {r.reportedType === "story" && (
+                <View style={rv.btns}>
+                  <TouchableOpacity
+                    style={[rv.btn, { borderColor: "#ef444466", backgroundColor: "#ef444411" }]}
+                    onPress={() => handleUnpublishStory(r.id, r.reportedId)}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? <ActivityIndicator size="small" color="#ef4444" /> : (
+                      <><Feather name="eye-off" size={14} color="#ef4444" /><Text style={[rv.btnText, { color: "#ef4444" }]}>Yayından Kaldır</Text></>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[rv.btn, { borderColor: colors.border }]}
+                    onPress={() => handleResolve(r.id, "dismissed")}
+                    disabled={isProcessing}
+                  >
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                    <Text style={[rv.btnText, { color: colors.mutedForeground }]}>Reddet</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Bölüm aksiyonları */}
+              {r.reportedType === "chapter" && (
+                <View style={{ gap: 6 }}>
+                  <View style={rv.btns}>
+                    <TouchableOpacity
+                      style={[rv.btn, { borderColor: "#ef444466", backgroundColor: "#ef444411" }]}
+                      onPress={() => handleUnpublishChapter(r.id, r.reportedId)}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? <ActivityIndicator size="small" color="#ef4444" /> : (
+                        <><Feather name="eye-off" size={14} color="#ef4444" /><Text style={[rv.btnText, { color: "#ef4444" }]}>Yayından Kaldır</Text></>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[rv.btn, { borderColor: colors.border }]}
+                      onPress={() => handleResolve(r.id, "dismissed")}
+                      disabled={isProcessing}
+                    >
+                      <Feather name="x" size={14} color={colors.mutedForeground} />
+                      <Text style={[rv.btnText, { color: colors.mutedForeground }]}>Reddet</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {det?.chapter && (
+                    <TouchableOpacity
+                      style={[rv.btn, { borderColor: "#f59e0b66", backgroundColor: "#f59e0b11" }]}
+                      onPress={() => setDirectiveTarget({
+                        reportId: r.id,
+                        recipientId: det.chapter!.storyId,
+                        storyId: det.chapter!.storyId,
+                        storyTitle: det.chapter!.storyTitle,
+                      })}
+                      disabled={isProcessing}
+                    >
+                      <Feather name="send" size={14} color="#f59e0b" />
+                      <Text style={[rv.btnText, { color: "#f59e0b" }]}>Yazara Direktif Gönder</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* Yorum aksiyonları */}
+              {r.reportedType === "comment" && (
+                <View style={rv.btns}>
+                  <TouchableOpacity
+                    style={[rv.btn, { borderColor: "#ef444466", backgroundColor: "#ef444411" }]}
+                    onPress={() => handleDeleteComment(r.id, r.reportedId)}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? <ActivityIndicator size="small" color="#ef4444" /> : (
+                      <><Feather name="trash-2" size={14} color="#ef4444" /><Text style={[rv.btnText, { color: "#ef4444" }]}>Yorumu Sil</Text></>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[rv.btn, { borderColor: colors.border }]}
+                    onPress={() => handleResolve(r.id, "dismissed")}
+                    disabled={isProcessing}
+                  >
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                    <Text style={[rv.btnText, { color: colors.mutedForeground }]}>Reddet</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
-          {r.reason && (
-            <Text style={[rp.reason, { color: colors.foreground, backgroundColor: colors.card, borderColor: colors.border }]}>
-              "{r.reason}"
-            </Text>
-          )}
-          <Text style={[rp.reporter, { color: colors.mutedForeground }]}>
-            Şikayetçi: {r.reporterId.slice(0, 10)}…
-          </Text>
-          <View style={rv.btns}>
-            <TouchableOpacity
-              style={[rv.btn, { borderColor: colors.border }]}
-              onPress={() => handle(r.id, "dismissed")}
-              disabled={processing === r.id}
-            >
-              <Feather name="x" size={14} color={colors.mutedForeground} />
-              <Text style={[rv.btnText, { color: colors.mutedForeground }]}>Reddet</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[rv.btn, { borderColor: "#22c55e66", backgroundColor: "#22c55e11" }]}
-              onPress={() => handle(r.id, "resolved")}
-              disabled={processing === r.id}
-            >
-              {processing === r.id
-                ? <ActivityIndicator size="small" color="#22c55e" />
-                : <><Feather name="check" size={14} color="#22c55e" /><Text style={[rv.btnText, { color: "#22c55e" }]}>Çözüldü</Text></>
-              }
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
+        );
+      })}
+
+      {/* Ban Modal */}
+      <Modal visible={banTarget !== null} transparent animationType="fade" onRequestClose={() => setBanTarget(null)}>
+        <Pressable style={md.overlay} onPress={() => setBanTarget(null)}>
+          <Pressable style={[md.sheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+            <Text style={[md.title, { color: colors.foreground }]}>Hesabı Askıya Al</Text>
+            <Text style={[md.sub, { color: colors.mutedForeground }]}>Askıya alma sebebini girin (isteğe bağlı).</Text>
+            <TextInput
+              value={banReason}
+              onChangeText={setBanReason}
+              placeholder="Sebep..."
+              placeholderTextColor={colors.mutedForeground}
+              style={[md.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={md.actions}>
+              <TouchableOpacity style={[md.btn, { borderColor: colors.border }]} onPress={() => setBanTarget(null)}>
+                <Text style={[md.btnText, { color: colors.mutedForeground }]}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[md.btn, { borderColor: "#ef444466", backgroundColor: "#ef444422" }]}
+                onPress={confirmBan}
+                disabled={banSaving}
+              >
+                {banSaving ? <ActivityIndicator size="small" color="#ef4444" /> : (
+                  <Text style={[md.btnText, { color: "#ef4444" }]}>Askıya Al</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Direktif Modal */}
+      <Modal visible={directiveTarget !== null} transparent animationType="fade" onRequestClose={() => setDirectiveTarget(null)}>
+        <Pressable style={md.overlay} onPress={() => setDirectiveTarget(null)}>
+          <Pressable style={[md.sheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+            <Text style={[md.title, { color: colors.foreground }]}>Yazara Direktif Gönder</Text>
+            <Text style={[md.sub, { color: colors.mutedForeground }]}>Yazar bildirim olarak bu mesajı alacak.</Text>
+            <TextInput
+              value={directiveMsg}
+              onChangeText={setDirectiveMsg}
+              placeholder="Direktif mesajınızı yazın..."
+              placeholderTextColor={colors.mutedForeground}
+              style={[md.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              multiline
+              numberOfLines={4}
+            />
+            <View style={md.actions}>
+              <TouchableOpacity style={[md.btn, { borderColor: colors.border }]} onPress={() => setDirectiveTarget(null)}>
+                <Text style={[md.btnText, { color: colors.mutedForeground }]}>İptal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[md.btn, { borderColor: "#f59e0b66", backgroundColor: "#f59e0b22" }]}
+                onPress={confirmDirective}
+                disabled={directiveSaving || !directiveMsg.trim()}
+              >
+                {directiveSaving ? <ActivityIndicator size="small" color="#f59e0b" /> : (
+                  <Text style={[md.btnText, { color: "#f59e0b" }]}>Gönder</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 const rp = StyleSheet.create({
-  card: { padding: 14, borderRadius: 14, borderWidth: 1, gap: 8 },
+  card: { padding: 14, borderRadius: 14, borderWidth: 1, gap: 10 },
   header: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
   badgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#f59e0b" },
-  id: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  reason: { fontSize: 13, fontFamily: "Inter_400Regular", fontStyle: "italic", padding: 10, borderRadius: 10, borderWidth: 1, lineHeight: 18 },
-  reporter: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  date: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  reasonBox: { padding: 10, borderRadius: 10, borderWidth: 1 },
+  reasonText: { fontSize: 13, fontFamily: "Inter_400Regular", fontStyle: "italic", lineHeight: 18 },
+  entityBox: { padding: 10, borderRadius: 12, borderWidth: 1, gap: 4 },
+  entityLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  entityTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  entitySub: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  entityContent: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 4 },
+  cover: { width: 44, height: 60, borderRadius: 8 },
+});
+const md = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "#00000088", justifyContent: "center", alignItems: "center", padding: 24 },
+  sheet: { width: "100%", borderRadius: 18, borderWidth: 1, padding: 20, gap: 12 },
+  title: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  sub: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 13, fontFamily: "Inter_400Regular", minHeight: 80, textAlignVertical: "top" },
+  actions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  btn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  btnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });
 
 // ─── Kullanıcı Askıya Al Sekmesi ──────────────────────────────────────────────
@@ -391,24 +824,31 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   const colors = useColors();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<UserSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(50);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = term.trim();
-    if (!t) { setResults([]); return; }
-    setLoading(true);
+    setLoading(true); setError(""); setResults([]); setVisibleCount(50);
     let cancelled = false;
-    const handle = setTimeout(async () => {
+    void (async () => {
       try {
-        const users = await searchUsersForMod(t);
+        const users = await getAllUsersForMod();
         if (!cancelled) setResults(users);
+      } catch {
+        if (!cancelled) setError("Kullanıcılar yüklenemedi. Bağlantını ve yönetici izinlerini kontrol edip yeniden dene.");
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 350);
-    return () => { cancelled = true; clearTimeout(handle); };
-  }, [term]);
+    })();
+    return () => { cancelled = true; };
+  }, [currentUid, reload]);
+
+  const needle = term.trim().toLocaleLowerCase("tr");
+  const filtered = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
+    || u.uid.toLocaleLowerCase("tr").includes(needle));
 
   const handleRole = async (u: UserSummary, newRole: "user" | "moderator" | "admin") => {
     if (u.uid === currentUid) { Alert.alert("Hata", "Kendi rolünü değiştiremezsin."); return; }
@@ -426,24 +866,30 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={[bn.hint, { color: colors.mutedForeground }]}>
-        Kullanıcıya moderatör veya admin rolü ata.
+        Kayıtlı kullanıcıları görüntüle, profillerini aç ve rollerini yönet.
       </Text>
+      <TouchableOpacity disabled={loading} onPress={() => setReload(n => n + 1)} accessibilityRole="button">
+        <Text style={{ color: colors.primary }}>Yenile</Text>
+      </TouchableOpacity>
       <View style={[bn.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="search" size={16} color={colors.mutedForeground} />
         <TextInput
           value={term}
-          onChangeText={setTerm}
-          placeholder="Kullanıcı adı ara..."
+          onChangeText={value => { setTerm(value); setVisibleCount(50); }}
+          placeholder="Ad veya kullanıcı kimliği ara..."
+          accessibilityLabel="Kullanıcı ara"
           placeholderTextColor={colors.mutedForeground}
           style={[bn.searchInput, { color: colors.foreground }]}
           autoCapitalize="none"
         />
       </View>
       {loading && <ActivityIndicator color={colors.primary} />}
-      {!loading && results.length === 0 && term.trim() !== "" && (
-        <Text style={[bn.noResult, { color: colors.mutedForeground }]}>Kullanıcı bulunamadı.</Text>
+      {error ? <Text accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</Text> : null}
+      {!loading && !error && <Text style={{ color: colors.mutedForeground }}>{filtered.length} / {results.length} kullanıcı</Text>}
+      {!loading && !error && filtered.length === 0 && (
+        <Text style={[bn.noResult, { color: colors.mutedForeground }]}>{needle ? "Aramana uygun kullanıcı bulunamadı." : "Henüz kayıtlı kullanıcı yok."}</Text>
       )}
-      {!loading && results.map(u => (
+      {!loading && !error && filtered.slice(0, visibleCount).map(u => (
         <View key={u.uid} style={[bn.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={bn.userRow}>
             {u.avatarUrl ? (
@@ -455,10 +901,14 @@ function UsersTab({ currentUid }: { currentUid: string }) {
             )}
             <View style={{ flex: 1 }}>
               <Text style={[bn.userName, { color: colors.foreground }]}>{u.displayName}</Text>
+              <Text selectable style={{ color: colors.mutedForeground, fontSize: 11 }}>{u.uid}</Text>
               <Text style={[bn.roleBadgeText, { color: colors.mutedForeground, marginTop: 2 }]}>{ROLE_LABELS[u.role] ?? u.role}</Text>
             </View>
             {saving === u.uid && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.push({ pathname: "/user/[id]", params: { id: u.uid } })}>
+            <Text style={{ color: colors.primary, marginTop: 8 }}>Profili aç</Text>
+          </TouchableOpacity>
           {u.uid !== currentUid && (
             <View style={{ flexDirection: "row", gap: 6, marginTop: 8 }}>
               {(["user", "moderator", "admin"] as const).map(role => (
@@ -483,6 +933,9 @@ function UsersTab({ currentUid }: { currentUid: string }) {
           )}
         </View>
       ))}
+      {!loading && !error && visibleCount < filtered.length && <TouchableOpacity onPress={() => setVisibleCount(n => n + 50)} accessibilityRole="button">
+        <Text style={{ color: colors.primary, textAlign: "center", padding: 12 }}>Daha fazla göster ({filtered.length - visibleCount})</Text>
+      </TouchableOpacity>}
     </View>
   );
 }
@@ -565,7 +1018,13 @@ export default function ModeratorScreen() {
         showsVerticalScrollIndicator={false}
       >
         {tab === "review" && <ReviewTab />}
-        {tab === "reports" && <ReportsTab />}
+        {tab === "reports" && user && profile && (
+          <ReportsTab
+            modUid={user.uid}
+            modName={profile.displayName ?? "Moderatör"}
+            modAvatar={profile.avatarUrl ?? ""}
+          />
+        )}
         {tab === "ban" && <BanTab />}
         {tab === "users" && isAdmin && user && <UsersTab currentUid={user.uid} />}
       </ScrollView>
@@ -576,13 +1035,20 @@ export default function ModeratorScreen() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  headerTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+  },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
   rolePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
-  rolePillText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  rolePillText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   tabsBar: { borderBottomWidth: 1, flexGrow: 0 },
-  tabBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 12, paddingHorizontal: 10, marginBottom: -1 },
+  tabBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 12 },
   tabText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  scroll: { paddingHorizontal: 16, paddingTop: 16, gap: 12 },
+  scroll: { padding: 16, gap: 4 },
 });

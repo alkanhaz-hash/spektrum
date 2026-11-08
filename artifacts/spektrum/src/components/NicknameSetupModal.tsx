@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AtSign, Sparkles, User, Calendar, ChevronDown, Check, X, Loader2 } from "lucide-react";
 import { updateUserProfile, isNicknameTaken } from "@/lib/auth-service";
-import { updateDoc, doc } from "firebase/firestore";
+import { updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -99,6 +99,10 @@ export function NicknameSetupModal({ uid, onComplete }: Props) {
         nicknameSet: true,
         birthDate,
         gender,
+        termsAcceptedAt: serverTimestamp(),
+        termsVersion: "2025-06",
+        kvkkNoticeAcknowledgedAt: serverTimestamp(),
+        kvkkNoticeVersion: "2025-06",
       });
       onComplete(trimmed);
     } catch {
@@ -233,7 +237,7 @@ export function NicknameSetupModal({ uid, onComplete }: Props) {
                 >
                   KVKK Aydınlatma Metni
                 </Link>
-                'ni okudum, kişisel verilerimin işlenmesini onaylıyorum.
+                'ni okudum ve bilgilendirildim.
               </Checkbox>
             </div>
           </div>

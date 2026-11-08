@@ -11,6 +11,9 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc, deleteField, serverTimestamp, collection, query, where, limit, getDocs } from "firebase/firestore";
 import { auth, db } from "./firebase";
@@ -69,7 +72,10 @@ export interface UserProfile {
   pinterest?: string;
   snapchat?: string;
   banned?: boolean;
+  accountDeletionPending?: boolean;
   banReason?: string;
+  accountFrozen?: boolean;
+  accountFrozenAt?: unknown;
   birthDate?: string;
   gender?: string;
   /** false → yeni Google kullanıcısı, takma ad henüz seçilmedi. undefined/true → tamam. */
@@ -88,8 +94,12 @@ export async function registerUser(
   password: string,
   displayName: string,
   birthDate: string,
-  gender: string
+  gender: string,
+  consent: { termsAccepted: boolean; kvkkAcknowledged: boolean }
 ): Promise<User> {
+  if (!consent.termsAccepted || !consent.kvkkAcknowledged) {
+    throw new Error("Kullanıcı Sözleşmesi ve KVKK Aydınlatma Metni onayı gereklidir.");
+  }
   // Sunucu tarafı yaş doğrulaması
   validateAge(birthDate);
   // Sunucu tarafı nickname benzersizlik kontrolü
@@ -117,6 +127,10 @@ export async function registerUser(
     nicknameSet: true,
     birthDate,
     gender,
+    termsAcceptedAt: serverTimestamp(),
+    termsVersion: "2025-06",
+    kvkkNoticeAcknowledgedAt: serverTimestamp(),
+    kvkkNoticeVersion: "2025-06",
   });
   // E-posta doğrulama zorunlu — hata olursa kayıt başarısız sayılır
   await sendEmailVerification(credential.user, {
@@ -168,6 +182,11 @@ export async function loginUser(email: string, password: string): Promise<User> 
       readCount: 0,
       createdAt: serverTimestamp(),
       role: "user",
+    });
+  } else if (snap.data().accountFrozen === true) {
+    await updateDoc(userRef, {
+      accountFrozen: false,
+      accountFrozenAt: deleteField(),
     });
   }
   return credential.user;
@@ -286,4 +305,45 @@ export async function updateUserProfile(
 
 export function onAuthChange(callback: (user: User | null) => void) {
   return onAuthStateChanged(auth, callback);
+}
+
+export async function deleteAccount(password?: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Oturum bulunamadı.");
+  const hasPasswordProvider = user.providerData.some(provider => provider.providerId === "password");
+  const hasGoogleProvider = user.providerData.some(provider => provider.providerId === "google.com");
+  if (hasPasswordProvider) {
+    if (!password) throw new Error("Hesabını doğrulamak için şifreni gir.");
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+  } else if (hasGoogleProvider) {
+    await reauthenticateWithPopup(user, new GoogleAuthProvider());
+  } else {
+    throw new Error("Bu giriş yöntemiyle hesap doğrulanamıyor. Lütfen destek ekibiyle iletişime geç.");
+  }
+  const idToken = await user.getIdToken(true);
+  const response = await fetch("/api/account", {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? "Hesap silme servisine ulaşılamadı. Lütfen tekrar dene.");
+  }
+  await signOut(auth);
+}
+
+export async function freezeAccount(password: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Oturum bulunamadı.");
+  if (!user.providerData.some(provider => provider.providerId === "password")) {
+    throw new Error("Hesap dondurma şu anda e-posta ve şifreyle açılan hesaplarda kullanılabilir.");
+  }
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+  await updateDoc(doc(db, "users", user.uid), {
+    accountFrozen: true,
+    accountFrozenAt: serverTimestamp(),
+  });
+  await signOut(auth);
 }

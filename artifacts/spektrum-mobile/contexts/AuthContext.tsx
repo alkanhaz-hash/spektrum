@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User } from "firebase/auth";
 import { onAuthChange, getUserProfile, UserProfile } from "@/lib/auth-service";
+import { firebaseReady } from "@/lib/firebase";
+import { clearImportRecovery } from "@/lib/book-import-recovery";
 
 interface AuthContextType {
   user: User | null;
@@ -23,26 +25,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = async () => {
     if (!user) return;
-    const p = await getUserProfile(user.uid);
-    setProfile(p);
+    try {
+      const p = await getUserProfile(user.uid);
+      setProfile(p);
+    } catch {
+      setProfile(null);
+    }
   };
 
   useEffect(() => {
-    const unsub = onAuthChange(async (u) => {
-      setUser(u);
-      if (u) {
-        try {
-          const p = await getUserProfile(u.uid);
-          setProfile(p);
-        } catch {
+    if (!firebaseReady) {
+      setLoading(false);
+      return;
+    }
+    try {
+      let previousUid: string | null = null;
+      const unsub = onAuthChange(async (u) => {
+        const oldUid = previousUid;
+        previousUid = u?.uid ?? null;
+        if (oldUid && oldUid !== previousUid) {
+          void clearImportRecovery(oldUid).catch(() => console.warn("Aktarımın cihaz kurtarma kaydı temizlenemedi."));
+        }
+        setUser(u);
+        if (u) {
+          try {
+            const p = await getUserProfile(u.uid);
+            setProfile(p);
+          } catch {
+            setProfile(null);
+          }
+        } else {
           setProfile(null);
         }
-      } else {
-        setProfile(null);
-      }
+        setLoading(false);
+      });
+      return unsub;
+    } catch {
       setLoading(false);
-    });
-    return unsub;
+      return;
+    }
   }, []);
 
   return (

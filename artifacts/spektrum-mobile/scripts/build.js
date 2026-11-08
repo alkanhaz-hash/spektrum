@@ -506,6 +506,11 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
 }
 
 async function main() {
+  if (!process.env.EXPO_TOKEN) {
+    console.log("EXPO_TOKEN not set — skipping mobile build (deployed via EAS).");
+    process.exit(0);
+  }
+
   console.log("Building static Expo Go deployment...");
 
   setupSignalHandlers();

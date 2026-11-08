@@ -5,6 +5,183 @@
  * SPEKTRUM API - AI content moderation and platform utilities
  * OpenAPI spec version: 0.1.0
  */
+export interface ChapterAudio {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  playbackUrl: string;
+}
+
+export interface ChapterAudioState {
+  audio: ChapterAudio | null;
+}
+
+export interface PushTestInput {
+  /** @pattern ^[a-f0-9]{32}$ */
+  installationId: string;
+}
+
+export interface PushPreferences {
+  messages: boolean;
+  newChapters: boolean;
+  comments: boolean;
+  qa: boolean;
+}
+
+export interface PushRevocation {
+  /** @pattern ^[a-f0-9]{32}$ */
+  installationId: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  revokeSecret: string;
+  /**
+     * @minimum 1
+     * @maximum 9007199254740991
+     */
+  revision: number;
+}
+
+export type PushRegistrationPlatform = typeof PushRegistrationPlatform[keyof typeof PushRegistrationPlatform];
+
+
+export const PushRegistrationPlatform = {
+  android: 'android',
+} as const;
+
+export interface PushRegistration {
+  /** @pattern ^[a-f0-9]{32}$ */
+  installationId: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  revokeSecret: string;
+  /**
+     * @minimum 1
+     * @maximum 9007199254740991
+     */
+  revision: number;
+  /**
+     * @minLength 20
+     * @maxLength 4096
+     * @pattern ^[A-Za-z0-9_:.-]+$
+     */
+  token: string;
+  platform: PushRegistrationPlatform;
+  preferences: PushPreferences;
+}
+
+export interface PushDeviceState {
+  registered: boolean;
+  enabled: boolean;
+  preferences: PushPreferences;
+}
+
+export interface PushAcknowledgement {
+  accepted: boolean;
+}
+
+export interface ReadingObservation {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     * @pattern ^[A-Za-z0-9_-]+$
+     */
+  storyId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     * @pattern ^[A-Za-z0-9_-]+$
+     */
+  chapterId: string;
+  /**
+     * @minLength 20
+     * @maxLength 80
+     * @pattern ^[A-Za-z0-9_-]+$
+     */
+  visitId: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  progress: number;
+  /**
+     * @minimum 0
+     * @maximum 86400
+     */
+  activeSeconds: number;
+}
+
+export interface ReadingAcknowledgement {
+  accepted: boolean;
+}
+
+export interface ReadingChapterStats {
+  chapterId: string;
+  title: string;
+  order: number;
+  sessions: number;
+  reached25: number;
+  reached50: number;
+  reached75: number;
+  completed: number;
+  completionRate: number;
+  stale: number;
+  recentUnfinished: number;
+  continued: number;
+  meanActiveSeconds: number;
+  exit0to24: number;
+  exit25to49: number;
+  exit50to74: number;
+  exit75to100: number;
+}
+
+export interface StoryReadingReport {
+  storyId: string;
+  title: string;
+  days: number;
+  measuredFrom: string;
+  generatedAt: string;
+  sessionCount: number;
+  visitCount: number;
+  completedCount: number;
+  staleCount: number;
+  activeSeconds: number;
+  truncated: boolean;
+  chapters: ReadingChapterStats[];
+}
+
+export interface WeeklyVoteInput {
+  /** @pattern ^[A-Za-z0-9_-]{1,128}$ */
+  storyId: string;
+}
+
+export interface VotingWeek {
+  weekId: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export type WeeklyVoteStatus = VotingWeek & ({
+  /** @nullable */
+  storyId: string | null;
+});
+
+export type WeeklyLeaderboardEntriesItem = {
+  storyId: string;
+  title: string;
+  authorName: string;
+  coverUrl: string;
+  /** @minimum 1 */
+  votes: number;
+  /**
+     * @minimum 1
+     * @maximum 3
+     */
+  rank: number;
+};
+
+export type WeeklyLeaderboard = VotingWeek & {
+  /** @maxItems 3 */
+  entries: WeeklyLeaderboardEntriesItem[];
+};
+
 export interface HealthStatus {
   status: string;
 }
@@ -57,4 +234,29 @@ export interface TrendingStory {
   genre: string;
   trendingRank: number;
 }
+
+export type StreamChapterAudioParams = {
+ticket: string;
+};
+
+export type GetPushDeviceParams = {
+/**
+ * @pattern ^[a-f0-9]{32}$
+ */
+installationId: string;
+};
+
+export type GetStoryReadingReportParams = {
+storyId: string;
+days?: GetStoryReadingReportDays;
+};
+
+export type GetStoryReadingReportDays = typeof GetStoryReadingReportDays[keyof typeof GetStoryReadingReportDays];
+
+
+export const GetStoryReadingReportDays = {
+  NUMBER_7: 7,
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+} as const;
 

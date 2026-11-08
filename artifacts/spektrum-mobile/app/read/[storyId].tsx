@@ -17,13 +17,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
+import { useReadingAnalytics } from "@/hooks/useReadingAnalytics";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import ChapterAudioSection from "@/components/ChapterAudioSection";
 import {
   getChapter,
   getChapters,
   getInlineComments,
   addInlineComment,
   likeInlineComment,
+  incrementStoryRead,
   Chapter,
   InlineComment,
 } from "@/lib/firestore-service";
@@ -57,6 +61,7 @@ function CommentSheet({
   onLikeToggled,
 }: CommentSheetProps) {
   const colors = useColors();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const [text, setText] = useState("");
@@ -136,7 +141,7 @@ function CommentSheet({
         {/* Başlık */}
         <View style={[cs.sheetHeader, { borderBottomColor: colors.border }]}>
           <View style={cs.sheetHeaderLeft}>
-            <Text style={[cs.sheetTitle, { color: colors.primary }]}>Satır Arası Yorumlar</Text>
+              <Text style={[cs.sheetTitle, { color: colors.primary }]}>{t("Satır Arası Yorumlar")}</Text>
             <Text style={[cs.sheetSub, { color: colors.mutedForeground }]} numberOfLines={1}>
               "{paragraphPreview}"
             </Text>
@@ -155,7 +160,7 @@ function CommentSheet({
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <Text style={[cs.emptyText, { color: colors.mutedForeground }]}>
-              İlk yorumu sen yap!
+              {t("İlk yorumu sen yap!")}
             </Text>
           }
           renderItem={({ item: c }) => {
@@ -227,7 +232,7 @@ function CommentSheet({
             style={[cs.loginPrompt, { borderTopColor: colors.border }]}
           >
             <Text style={[cs.loginPromptText, { color: colors.primary }]}>
-              Yorum yapmak için giriş yap →
+              {t("Yorum yapmak için")} {t("giriş yap")} →
             </Text>
           </TouchableOpacity>
         )}
@@ -240,6 +245,7 @@ function CommentSheet({
 
 export default function ReaderScreen() {
   const colors = useColors();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { storyId, chapterId } = useLocalSearchParams<{ storyId: string; chapterId: string }>();
@@ -258,6 +264,11 @@ export default function ReaderScreen() {
 
   const sid = Array.isArray(storyId) ? storyId[0] : storyId;
   const cid = Array.isArray(chapterId) ? chapterId[0] : chapterId;
+  const paragraphs = (chapter?.content ?? "").split(/\n\n+/).map(p => p.trim()).filter(p => p.length > 0);
+  const readingAnalytics = useReadingAnalytics(
+    sid, cid, !!chapter && chapter.id === cid && chapter.status === "published" && !loading,
+    selectedPara !== null,
+  );
 
   useEffect(() => {
     if (!sid || !cid) return;
@@ -267,6 +278,7 @@ export default function ReaderScreen() {
         setChapter(ch);
         setAllChapters(all);
         setComments(cms);
+        if (sid) incrementStoryRead(sid).catch(() => {});
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -317,18 +329,13 @@ export default function ReaderScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Feather name="alert-circle" size={40} color={colors.mutedForeground} />
-        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>Bölüm bulunamadı.</Text>
+        <Text style={[styles.errorText, { color: colors.mutedForeground }]}>{t("Bölüm bulunamadı.")}</Text>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>Geri Dön</Text>
+          <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>{t("Geri Dön")}</Text>
         </TouchableOpacity>
       </View>
     );
   }
-
-  const paragraphs = chapter.content
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
 
   function commentCountForParagraph(index: number, anchor: string): number {
     return comments.filter((c) =>
@@ -384,30 +391,46 @@ export default function ReaderScreen() {
         </View>
       )}
 
-      {/* Content */}
-      <ScrollView
+      {/* Content — FlatList (performanslı, uzun bölümler için) */}
+      <FlatList
+        key={cid}
+        {...readingAnalytics}
+        data={paragraphs}
+        keyExtractor={(_, i) => i.toString()}
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 120 }]}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => setShowControls(false)}
         onMomentumScrollEnd={() => setShowControls(true)}
-      >
-        <Text style={[styles.chapterHeading, { color: colors.foreground }]}>{chapter.title}</Text>
-
-        {/* Yorum ipucu — ilk kez görüyorsa */}
-        <View style={[styles.tipRow, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "25" }]}>
-          <Feather name="message-circle" size={13} color={colors.primary} />
-          <Text style={[styles.tipText, { color: colors.primary }]}>
-            Bir paragrafa dokun → satır arası yorum bırak
-          </Text>
-        </View>
-
-        {paragraphs.map((p, i) => {
+        removeClippedSubviews
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        ListHeaderComponent={
+          <>
+            <Text style={[styles.chapterHeading, { color: colors.foreground }]}>{chapter.title}</Text>
+            <Text style={{ color: colors.mutedForeground, fontSize: 11, marginBottom: 12 }}>{t("Okuma ilerleyişi, hesap bilgisi olmadan yazara toplu oturum istatistiği olarak sunulur.")}</Text>
+            <View style={{ marginBottom: 12 }}>
+              <ChapterAudioSection key={chapter.id} chapterId={chapter.id} />
+            </View>
+            <View style={[styles.tipRow, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "25" }]}>
+              <Feather name="message-circle" size={13} color={colors.primary} />
+              <Text style={[styles.tipText, { color: colors.primary }]}>
+                {t("Bir paragrafa dokun → satır arası yorum bırak")}
+              </Text>
+            </View>
+            {paragraphs.length === 0 && (
+              <Text style={[styles.emptyContent, { color: colors.mutedForeground }]}>
+                {t("Bölümde içerik bulunmuyor.")}
+              </Text>
+            )}
+          </>
+        }
+        renderItem={({ item: p, index: i }) => {
           const anchor = p.slice(0, 60);
           const count = commentCountForParagraph(i, anchor);
           return (
             <TouchableOpacity
-              key={i}
               onPress={() => setSelectedPara({ index: i, anchor, preview: p.slice(0, 60) })}
               activeOpacity={0.75}
               style={styles.paraWrap}
@@ -415,11 +438,7 @@ export default function ReaderScreen() {
               <Text
                 style={[
                   styles.paragraph,
-                  {
-                    color: colors.foreground,
-                    fontSize,
-                    lineHeight: fontSize * 1.85,
-                  },
+                  { color: colors.foreground, fontSize, lineHeight: fontSize * 1.85 },
                 ]}
               >
                 {p}
@@ -432,50 +451,44 @@ export default function ReaderScreen() {
               )}
             </TouchableOpacity>
           );
-        })}
-
-        {paragraphs.length === 0 && (
-          <Text style={[styles.emptyContent, { color: colors.mutedForeground }]}>
-            Bu bölümde içerik bulunmuyor.
-          </Text>
-        )}
-
-        {/* Toplam yorum sayısı */}
-        {comments.length > 0 && (
-          <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-            <Feather name="message-circle" size={14} color={colors.mutedForeground} />
-            <Text style={[styles.totalText, { color: colors.mutedForeground }]}>
-              Bu bölümde {comments.length} satır arası yorum var
-            </Text>
-          </View>
-        )}
-
-        {/* Bölüm navigasyonu */}
-        <View style={styles.navRow}>
-          <TouchableOpacity
-            style={[styles.navBtn, { borderColor: colors.border, opacity: prevChapter ? 1 : 0.3 }]}
-            onPress={() => prevChapter && navigate(prevChapter)}
-            disabled={!prevChapter}
-          >
-            <Feather name="chevron-left" size={18} color={colors.foreground} />
-            <Text style={[styles.navBtnText, { color: colors.foreground }]}>Önceki</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.navBtn,
-              styles.navBtnNext,
-              { backgroundColor: nextChapter ? colors.primary : colors.muted, opacity: nextChapter ? 1 : 0.5 },
-            ]}
-            onPress={() => nextChapter && navigate(nextChapter)}
-            disabled={!nextChapter}
-          >
-            <Text style={[styles.navBtnText, { color: nextChapter ? "#fff" : colors.mutedForeground }]}>
-              Sonraki
-            </Text>
-            <Feather name="chevron-right" size={18} color={nextChapter ? "#fff" : colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        }}
+        ListFooterComponent={
+          <>
+            {comments.length > 0 && (
+              <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
+                <Feather name="message-circle" size={14} color={colors.mutedForeground} />
+                <Text style={[styles.totalText, { color: colors.mutedForeground }]}>
+                  {t("Bu bölümde")} {comments.length} {t("satır arası yorum var")}
+                </Text>
+              </View>
+            )}
+            <View style={styles.navRow}>
+              <TouchableOpacity
+                style={[styles.navBtn, { borderColor: colors.border, opacity: prevChapter ? 1 : 0.3 }]}
+                onPress={() => prevChapter && navigate(prevChapter)}
+                disabled={!prevChapter}
+              >
+                <Feather name="chevron-left" size={18} color={colors.foreground} />
+                <Text style={[styles.navBtnText, { color: colors.foreground }]}>{t("Önceki")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.navBtn,
+                  styles.navBtnNext,
+                  { backgroundColor: nextChapter ? colors.primary : colors.muted, opacity: nextChapter ? 1 : 0.5 },
+                ]}
+                onPress={() => nextChapter && navigate(nextChapter)}
+                disabled={!nextChapter}
+              >
+                <Text style={[styles.navBtnText, { color: nextChapter ? "#fff" : colors.mutedForeground }]}>
+                  Sonraki
+                </Text>
+                <Feather name="chevron-right" size={18} color={nextChapter ? "#fff" : colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+          </>
+        }
+      />
 
       {/* Yorum modal */}
       {selectedPara && chapter && (

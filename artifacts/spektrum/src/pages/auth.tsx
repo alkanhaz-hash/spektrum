@@ -10,6 +10,7 @@ import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { isNicknameTaken } from "@/lib/auth-service";
+import { useLocale } from "@/contexts/LocaleContext";
 import { SiGoogle } from "react-icons/si";
 import { Mail, CheckCircle, ArrowLeft, Check, X, Loader2 } from "lucide-react";
 
@@ -27,6 +28,7 @@ function googleErrorMsg(code: string, fallback: string): string {
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
+  const { t } = useLocale();
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -131,7 +133,10 @@ export default function AuthPage() {
     }
     setLoading(true);
     try {
-      await registerUser(regEmail, regPassword, regName, regBirthDate, regGender);
+      await registerUser(regEmail, regPassword, regName, regBirthDate, regGender, {
+        termsAccepted,
+        kvkkAcknowledged: kvkkAccepted,
+      });
       setView("verify-email");
     } catch (err: any) {
       const msg = err.code === "auth/email-already-in-use"
@@ -247,13 +252,13 @@ export default function AuthPage() {
               <button onClick={() => setView("auth")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors mb-2">
                 <ArrowLeft className="w-4 h-4" /> Geri
               </button>
-              <CardTitle className="text-2xl font-serif">Şifreni Sıfırla</CardTitle>
-              <CardDescription>E-postana şifre sıfırlama linki göndereceğiz.</CardDescription>
+              <CardTitle className="text-2xl font-serif">{t("Şifreni Sıfırla")}</CardTitle>
+              <CardDescription>{t("E-postana şifre sıfırlama linki göndereceğiz.")}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleReset} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="reset-email">E-posta</Label>
+                  <Label htmlFor="reset-email">{t("E-posta")}</Label>
                   <Input
                     id="reset-email"
                     type="email"
@@ -265,7 +270,7 @@ export default function AuthPage() {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Gönderiliyor..." : "Sıfırlama Linki Gönder"}
+                  {loading ? t("Gönderiliyor...") : t("Sıfırlama Linki Gönder")}
                 </Button>
               </form>
             </CardContent>
@@ -277,36 +282,36 @@ export default function AuthPage() {
           <Card className="w-full max-w-md relative z-10 border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl max-h-[92vh] flex flex-col">
             <CardHeader className="text-center space-y-2 flex-shrink-0">
               <CardTitle className="text-3xl font-serif tracking-tight">SPEKTRUM</CardTitle>
-              <CardDescription>Sözcüklerin neon ışığında parladığı yer.</CardDescription>
+              <CardDescription>{t("Sözcüklerin neon ışığında parladığı yer.")}</CardDescription>
             </CardHeader>
             <CardContent className="overflow-y-auto flex-1">
               <Tabs defaultValue="login" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="login">Giriş Yap</TabsTrigger>
-                  <TabsTrigger value="register">Kayıt Ol</TabsTrigger>
+                  <TabsTrigger value="login">{t("Giriş Yap")}</TabsTrigger>
+                  <TabsTrigger value="register">{t("Kayıt Ol")}</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="login-email">E-posta</Label>
+                      <Label htmlFor="login-email">{t("E-posta")}</Label>
                       <Input id="login-email" type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required placeholder="ornek@mail.com" className="bg-background/50" />
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="login-password">Şifre</Label>
+                        <Label htmlFor="login-password">{t("Şifre")}</Label>
                         <button
                           type="button"
                           onClick={() => { setResetEmail(loginEmail); setView("forgot"); }}
                           className="text-xs text-primary hover:underline"
                         >
-                          Şifremi Unuttum
+                          {t("Şifremi Unuttum")}
                         </button>
                       </div>
                       <Input id="login-password" type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required className="bg-background/50" />
                     </div>
                     <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
+                      {loading ? t("Giriş yapılıyor...") : t("Giriş Yap")}
                     </Button>
                   </form>
                 </TabsContent>
@@ -314,7 +319,7 @@ export default function AuthPage() {
                 <TabsContent value="register">
                   <form onSubmit={handleRegister} className="space-y-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="reg-name">Takma Ad <span className="text-muted-foreground font-normal">(Nickname)</span></Label>
+                      <Label htmlFor="reg-name">{t("Takma Ad")} <span className="text-muted-foreground font-normal">(Nickname)</span></Label>
                       <div className="relative">
                         <Input
                           id="reg-name"
@@ -333,16 +338,16 @@ export default function AuthPage() {
                           {nicknameStatus === "taken" && <X className="w-4 h-4 text-red-500" />}
                         </div>
                       </div>
-                      {nicknameStatus === "taken" && <p className="text-xs text-red-400">Bu takma ad alınmış. Farklı bir isim dene.</p>}
-                      {nicknameStatus === "available" && <p className="text-xs text-emerald-500">Bu takma ad kullanılabilir!</p>}
-                      {nicknameStatus === "idle" && <p className="text-xs text-muted-foreground">Diğer kullanıcılar seni bu isimle arayacak ve profilinde görünecek.</p>}
+                      {nicknameStatus === "taken" && <p className="text-xs text-red-400">{t("Bu takma ad alınmış. Farklı bir isim dene.")}</p>}
+                      {nicknameStatus === "available" && <p className="text-xs text-emerald-500">{t("Bu takma ad kullanılabilir!")}</p>}
+                      {nicknameStatus === "idle" && <p className="text-xs text-muted-foreground">{t("Diğer kullanıcılar seni bu isimle arayacak ve profilinde görünecek.")}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-email">E-posta</Label>
+                      <Label htmlFor="reg-email">{t("E-posta")}</Label>
                       <Input id="reg-email" type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} required placeholder="ornek@mail.com" className="bg-background/50" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-password">Şifre</Label>
+                      <Label htmlFor="reg-password">{t("Şifre")}</Label>
                       <Input id="reg-password" type="password" value={regPassword} onChange={e => setRegPassword(e.target.value)} required minLength={6} className="bg-background/50" />
                       {regPassword.length > 0 && (
                         <div className="space-y-1">
@@ -358,7 +363,7 @@ export default function AuthPage() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-birth">Doğum Tarihi</Label>
+                      <Label htmlFor="reg-birth">{t("Doğum Tarihi")}</Label>
                       <Input
                         id="reg-birth"
                         type="date"
@@ -369,12 +374,12 @@ export default function AuthPage() {
                         className="bg-background/50"
                       />
                       {isTooYoung
-                        ? <p className="text-xs text-red-400">Kayıt olabilmek için en az 13 yaşında olmalısın.</p>
-                        : <p className="text-xs text-muted-foreground">En az 13 yaşında olmalısın.</p>
+                        ? <p className="text-xs text-red-400">{t("Kayıt olabilmek için en az 13 yaşında olmalısın.")}</p>
+                        : <p className="text-xs text-muted-foreground">{t("En az 13 yaşında olmalısın.")}</p>
                       }
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="reg-gender">Cinsiyet</Label>
+                      <Label htmlFor="reg-gender">{t("Cinsiyet")}</Label>
                       <select
                         id="reg-gender"
                         value={regGender}
@@ -382,10 +387,10 @@ export default function AuthPage() {
                         required
                         className="w-full bg-background/50 border border-input rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
-                        <option value="">Seç...</option>
-                        <option value="kadin">Kadın</option>
-                        <option value="erkek">Erkek</option>
-                        <option value="belirtmiyorum">Belirtmek istemiyorum</option>
+                        <option value="">{t("Seç...")}</option>
+                        <option value="kadin">{t("Kadın")}</option>
+                        <option value="erkek">{t("Erkek")}</option>
+                        <option value="belirtmiyorum">{t("Belirtmek istemiyorum")}</option>
                       </select>
                     </div>
                     {/* Onay kutuları */}
@@ -403,7 +408,7 @@ export default function AuthPage() {
                           </div>
                         </div>
                         <span className="text-xs text-muted-foreground leading-relaxed">
-                          <Link href="/terms" className="text-primary hover:underline font-medium" target="_blank">Kullanıcı Sözleşmesi</Link>'ni okudum ve onaylıyorum.
+                          <Link href="/terms" className="text-primary hover:underline font-medium" target="_blank">{t("Kullanıcı Sözleşmesi")}</Link>'ni okudum ve onaylıyorum.
                         </span>
                       </label>
 
@@ -420,13 +425,13 @@ export default function AuthPage() {
                           </div>
                         </div>
                         <span className="text-xs text-muted-foreground leading-relaxed">
-                          <Link href="/kvkk" className="text-primary hover:underline font-medium" target="_blank">KVKK Aydınlatma Metni</Link>'ni okudum, kişisel verilerimin işlenmesini onaylıyorum.
+                          <Link href="/kvkk" className="text-primary hover:underline font-medium" target="_blank">{t("KVKK Aydınlatma Metni")}</Link>'ni okudum ve bilgilendirildim.
                         </span>
                       </label>
                     </div>
 
                     <Button type="submit" className="w-full" disabled={loading || !termsAccepted || !kvkkAccepted}>
-                      {loading ? "Kayıt olunuyor..." : "Kayıt Ol"}
+                      {loading ? t("Kayıt olunuyor...") : t("Kayıt Ol")}
                     </Button>
                   </form>
                 </TabsContent>
@@ -438,12 +443,12 @@ export default function AuthPage() {
                     <span className="w-full border-t border-border/50" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Veya</span>
+                    <span className="bg-card px-2 text-muted-foreground">{t("Veya")}</span>
                   </div>
                 </div>
                 <Button variant="outline" type="button" disabled={loading} onClick={handleGoogle} className="w-full bg-background/50 hover:bg-background">
                   <SiGoogle className="mr-2 h-4 w-4" />
-                  Google ile devam et
+                  {t("Google ile devam et")}
                 </Button>
               </div>
             </CardContent>

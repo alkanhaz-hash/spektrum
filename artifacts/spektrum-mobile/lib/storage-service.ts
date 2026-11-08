@@ -25,10 +25,10 @@ export async function uploadStoryCover(uid: string, storyId: string, localUri: s
   return getDownloadURL(storageRef);
 }
 
-export async function uploadMessageMedia(conversationId: string, localUri: string): Promise<string> {
+export async function uploadMessageMedia(conversationId: string, uid: string, localUri: string): Promise<string> {
   const response = await fetch(localUri);
   const blob = await response.blob();
-  const storageRef = ref(storage, `messages/${conversationId}/${Date.now()}.jpg`);
+  const storageRef = ref(storage, `messages/${conversationId}/${uid}/${Date.now()}.jpg`);
   await uploadBytes(storageRef, blob, { contentType: "image/jpeg" });
   return getDownloadURL(storageRef);
 }

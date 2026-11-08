@@ -1,19 +1,8 @@
 import { Router } from "express";
 import { adminAuth, adminDb } from "../lib/firebase-admin";
+import { verifyCallerUid } from "../lib/firebase-auth";
 
 const router = Router();
-
-// ─── Yardımcı: çağıranın UID'sini token'dan doğrula ──────────────────────────
-
-async function verifyCallerUid(authHeader: string | undefined): Promise<string | null> {
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  try {
-    const decoded = await adminAuth().verifyIdToken(authHeader.slice(7));
-    return decoded.uid;
-  } catch {
-    return null;
-  }
-}
 
 // ─── Yardımcı: Firestore'dan rol oku ─────────────────────────────────────────
 
@@ -95,40 +84,52 @@ router.get("/users/search", async (req, res) => {
       res.json([]);
       return;
     }
+    if (q.length > 254) {
+      res.status(400).json({ error: "Arama metni çok uzun." });
+      return;
+    }
 
-    type RawUser = { uid: string; displayName?: string; avatarUrl?: string; role?: string; [k: string]: unknown };
+    type RawUser = { uid: string; displayName?: string; avatarUrl?: string; role?: string; email?: string };
 
-    // Firestore'da displayName araması (istemci taraflı filtre)
-    const snap = await adminDb().collection("users").limit(300).get();
-    const byName: RawUser[] = snap.docs
-      .map(d => {
-        const data = d.data() as Omit<RawUser, "uid">;
-        const row: RawUser = { uid: d.id, ...data };
-        return row;
-      })
-      .filter(u => {
-        const name = (u.displayName ?? "").toLowerCase();
-        return name.includes(q) || u.uid.toLowerCase().includes(q);
-      });
-
-    // E-posta ile Firebase Auth araması
-    let byEmail: RawUser[] = [];
     if (q.includes("@")) {
+      // Privacy: never put Auth email in public Firestore. Resolve exact address
+      // through Firebase Auth only after the caller's admin role has been checked.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(q)) {
+        res.json([]);
+        return;
+      }
       try {
         const authUser = await adminAuth().getUserByEmail(q);
         const fsDoc = await adminDb().doc(`users/${authUser.uid}`).get();
-        if (fsDoc.exists) {
-          const exists = byName.some(u => u.uid === authUser.uid);
-          if (!exists) {
-            byEmail = [{ uid: authUser.uid, ...(fsDoc.data() as Omit<RawUser, "uid">) }];
-          }
+        if (!fsDoc.exists) {
+          res.json([]);
+          return;
         }
-      } catch {
-        // Kullanıcı bulunamadı — normal, yoksay
+        const data = fsDoc.data() ?? {};
+        res.json([{
+          uid: authUser.uid,
+          displayName: typeof data["displayName"] === "string" ? data["displayName"] : "",
+          avatarUrl: typeof data["avatarUrl"] === "string" ? data["avatarUrl"] : "",
+          role: typeof data["role"] === "string" ? data["role"] : "user",
+          email: authUser.email ?? "",
+        }]);
+      } catch (err) {
+        if ((err as { code?: string })?.code === "auth/user-not-found") {
+          res.json([]);
+          return;
+        }
+        throw err;
       }
+      return;
     }
 
-    const combined = [...byEmail, ...byName].slice(0, 20).map(u => ({
+    // Name/UID search is metadata-only; omit email in every result.
+    const snap = await adminDb().collection("users").limit(300).get();
+    const matches = snap.docs
+      .map(d => ({ ...d.data(), uid: d.id } as RawUser))
+      .filter(u => (u.displayName ?? "").toLowerCase().includes(q) || u.uid.toLowerCase().includes(q))
+      .slice(0, 20);
+    const combined = matches.map(u => ({
       uid: u.uid,
       displayName: u.displayName ?? "",
       avatarUrl: u.avatarUrl ?? "",

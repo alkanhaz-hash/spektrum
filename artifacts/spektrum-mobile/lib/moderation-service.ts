@@ -63,14 +63,14 @@ export async function checkImageSafety(asset: {
   }
 }
 
-export async function moderateText(text: string): Promise<ModerationResult> {
+export async function moderateText(text: string, language: "tr" | "en" = "tr"): Promise<ModerationResult> {
   const apiBase = getApiBase();
   const url = `${apiBase}/api/moderation/text`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, language: "tr" }),
+      body: JSON.stringify({ text, language }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json() as Promise<ModerationResult>;
@@ -80,7 +80,9 @@ export async function moderateText(text: string): Promise<ModerationResult> {
       action: "pending_review",
       categories: [],
       score: 0,
-      reason: "Moderasyon servisine ulaşılamadı; içerik incelemeye alındı.",
+      reason: language === "en"
+        ? "The moderation service could not be reached; the content was sent for review."
+        : "Moderasyon servisine ulaşılamadı; içerik incelemeye alındı.",
     };
   }
 }

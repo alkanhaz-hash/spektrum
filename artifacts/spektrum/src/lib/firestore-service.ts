@@ -18,8 +18,12 @@ import {
   arrayRemove,
   Timestamp,
   getCountFromServer,
+  runTransaction,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
+import { getImportFingerprint, importSourceId, validateImportPreview, type BookImportPreview } from "./book-import";
+import { saveImportedBook } from "./book-import-service";
+import { hasStoryLike, setStoryLike } from "@workspace/story-reactions";
 import type { UserProfile } from "./auth-service";
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
@@ -33,14 +37,17 @@ export interface Story {
   summary: string;
   coverUrl: string;
   genre: string;
+  contentLanguage?: "tr" | "en";
   tags: string[];
   chapterCount: number;
   readCount: number;
   likeCount: number;
   commentCount: number;
   status: "published" | "draft" | "completed";
+  importState?: "prepared" | "pending" | "complete";
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  importChapterCount?: number;
 }
 
 export interface Chapter {
@@ -53,6 +60,8 @@ export interface Chapter {
   readCount: number;
   status: "published" | "pending_review" | "draft" | "rejected";
   moderationCategories?: string[];
+  isPaid?: boolean;
+  price?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -176,6 +185,7 @@ export interface TalentPortfolio {
 export async function createStory(data: Omit<Story, "id" | "createdAt" | "updatedAt" | "readCount" | "likeCount" | "commentCount" | "chapterCount">) {
   const ref = await addDoc(collection(db, "stories"), {
     ...data,
+    contentLanguage: data.contentLanguage ?? "tr",
     readCount: 0,
     likeCount: 0,
     commentCount: 0,
@@ -188,6 +198,126 @@ export async function createStory(data: Omit<Story, "id" | "createdAt" | "update
   return ref.id;
 }
 
+/**
+ * Two atomic phases avoid requiring a rules change: chapter-create rules read
+ * the pre-existing parent story. A prepared shell has zero chapters; the second
+ * transaction writes ALL chapters, both counters and completion together.
+ * Source-derived IDs survive reloads, lost acknowledgements and concurrent tabs.
+ * A completed import is never overwritten, including later edits/publication.
+ */
+export async function importBookDraft(input: {
+  sourceText: string;
+  preview: BookImportPreview;
+  ownershipConfirmed: boolean;
+}): Promise<{ storyId: string; alreadyImported: boolean }> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Kitap aktarmak için giriş yap.");
+  if (!input.ownershipConfirmed) throw new Error("Metnin telif hakkına sahip olduğunu açıkça onaylamalısın.");
+  // Snapshot all inputs before the first await.
+  const preview: BookImportPreview = {
+    ...input.preview,
+    title: input.preview.title.trim(),
+    summary: input.preview.summary.trim(),
+    chapters: input.preview.chapters.map(ch => ({ title: ch.title.trim(), content: ch.content.trim() })),
+  };
+  validateImportPreview(preview);
+  if (!GENRES.includes(preview.genre)) throw new Error("Geçerli bir hikaye türü seç.");
+  const storyId = await importSourceId(user.uid, input.sourceText);
+  const legacyFingerprint = await getImportFingerprint(user.uid, preview);
+  const legacyId = `import_${legacyFingerprint}`;
+  const storyRef = doc(db, "stories", storyId);
+  const userRef = doc(db, "users", user.uid);
+  const checkSession = () => {
+    if (auth.currentUser?.uid !== user.uid) throw new Error("Oturum değişti. Yeniden giriş yap ve aktarımı tekrar dene.");
+  };
+  const checkProfile = (data: Record<string, unknown> | undefined) => {
+    if (!data || data.banned || data.accountDeletionPending || data.accountFrozen) {
+      throw new Error("Hesabın kitap aktarımına uygun değil. Hesap durumunu kontrol et.");
+    }
+  };
+  const prepared = await runTransaction(db, async transaction => {
+    checkSession();
+    const existing = await transaction.get(storyRef);
+    const legacy = await transaction.get(doc(db, "stories", legacyId));
+    const profile = await transaction.get(userRef);
+    checkProfile(profile.data());
+    if (existing.exists()) {
+      if (existing.data().authorId !== user.uid || !existing.data().importState) {
+        throw new Error("Aktarım kimliği mevcut bir kayıtla çakışıyor.");
+      }
+      return existing.data().importState === "complete";
+    }
+    if (legacy.exists() && legacy.data().authorId === user.uid && legacy.data().importFingerprint === legacyFingerprint) {
+      return legacy.data().importState === "complete" ? "legacy-complete" : "legacy-pending";
+    }
+    const author = profile.data()!;
+    transaction.set(storyRef, {
+      authorId: user.uid,
+      authorName: author.displayName ?? "",
+      authorAvatar: author.avatarUrl ?? "",
+      title: preview.title,
+      summary: preview.summary,
+      genre: preview.genre,
+      contentLanguage: "tr",
+      coverUrl: "",
+      tags: [],
+      status: "draft",
+      chapterCount: 0,
+      readCount: 0,
+      likeCount: 0,
+      commentCount: 0,
+      importState: "prepared",
+      ownershipConfirmedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return false;
+  });
+  if (prepared === "legacy-complete") return { storyId: legacyId, alreadyImported: true };
+  if (prepared === "legacy-pending") {
+    const id = await saveImportedBook({ preview, source: "paste", ownershipConfirmed: true });
+    return { storyId: id, alreadyImported: false };
+  }
+  if (prepared) return { storyId, alreadyImported: true };
+  const alreadyImported = await runTransaction(db, async transaction => {
+    checkSession();
+    const existing = await transaction.get(storyRef);
+    const profile = await transaction.get(userRef);
+    checkProfile(profile.data());
+    if (!existing.exists() || existing.data().authorId !== user.uid) throw new Error("Aktarım taslağı bulunamadı. Aynı metinle yeniden dene.");
+    if (existing.data().importState === "complete") return true;
+    // Do not overwrite a prepared shell someone has started editing normally.
+    if (existing.data().importState !== "prepared" || existing.data().chapterCount !== 0 || existing.data().status !== "draft") {
+      throw new Error("Bu taslak değiştirilmiş. Mevcut hikayeyi editörde kontrol et.");
+    }
+    preview.chapters.forEach((chapter, index) => {
+      transaction.set(doc(db, "chapters", `${storyId}_${index + 1}`), {
+        storyId,
+        title: chapter.title,
+        content: chapter.content,
+        order: index + 1,
+        wordCount: chapter.content.split(/\s+/u).filter(Boolean).length,
+        readCount: 0,
+        status: "draft",
+        isPaid: false,
+        price: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+    transaction.update(storyRef, {
+      title: preview.title,
+      summary: preview.summary,
+      genre: preview.genre,
+      chapterCount: preview.chapters.length,
+      importState: "complete",
+      updatedAt: serverTimestamp(),
+    });
+    transaction.update(userRef, { storyCount: increment(1) });
+    return false;
+  });
+  return { storyId, alreadyImported };
+}
 export async function getStory(id: string): Promise<Story | null> {
   const snap = await getDoc(doc(db, "stories", id));
   if (!snap.exists()) return null;
@@ -219,7 +349,7 @@ export async function getPublishedStories(pageSize = 20): Promise<Story[]> {
 export async function searchStories(term: string): Promise<Story[]> {
   const t = term.trim().toLocaleLowerCase("tr");
   if (!t) return [];
-  const q = query(collection(db, "stories"), limit(500));
+  const q = query(collection(db, "stories"), where("status", "in", ["published", "completed"]), limit(500));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
@@ -261,39 +391,17 @@ export async function updateStory(id: string, data: Partial<Story>) {
   await updateDoc(doc(db, "stories", id), { ...data, updatedAt: serverTimestamp() });
 }
 
-export async function likeStory(storyId: string, userId: string) {
-  // BUG FIX: Dedup kontrolü — aynı kullanıcı birden fazla beğeni ekleyemesin
-  const existingQ = query(
-    collection(db, "storyLikes"),
-    where("storyId", "==", storyId),
-    where("userId", "==", userId)
-  );
-  const existing = await getDocs(existingQ);
-  if (!existing.empty) return;
-  await updateDoc(doc(db, "stories", storyId), { likeCount: increment(1) });
-  await addDoc(collection(db, "storyLikes"), { storyId, userId, createdAt: serverTimestamp() });
-}
-
-export async function unlikeStory(storyId: string, userId: string) {
-  const existingQ = query(
-    collection(db, "storyLikes"),
-    where("storyId", "==", storyId),
-    where("userId", "==", userId)
-  );
-  const existing = await getDocs(existingQ);
-  if (existing.empty) return;
-  await deleteDoc(existing.docs[0].ref);
-  await updateDoc(doc(db, "stories", storyId), { likeCount: increment(-1) });
-}
-
+// Shared atomic reaction service supports both historic web records and mobile arrays.
 export async function hasUserLikedStory(storyId: string, userId: string): Promise<boolean> {
-  const q = query(
-    collection(db, "storyLikes"),
-    where("storyId", "==", storyId),
-    where("userId", "==", userId)
-  );
-  const snap = await getDocs(q);
-  return !snap.empty;
+  return hasStoryLike(db, storyId, userId);
+}
+
+export async function likeStory(storyId: string, userId: string): Promise<boolean> {
+  return setStoryLike(db, storyId, userId, true);
+}
+
+export async function unlikeStory(storyId: string, userId: string): Promise<boolean> {
+  return setStoryLike(db, storyId, userId, false);
 }
 
 // ─── CHAPTERS ────────────────────────────────────────────────────────────────
@@ -341,7 +449,7 @@ export async function updateChapterStatus(id: string, status: Chapter["status"],
   });
 }
 
-export async function updateChapter(id: string, data: { title: string; content: string; status: Chapter["status"]; wordCount?: number; moderationCategories?: string[] }) {
+export async function updateChapter(id: string, data: { title: string; content: string; status: Chapter["status"]; wordCount?: number; moderationCategories?: string[]; isPaid?: boolean; price?: number }) {
   await updateDoc(doc(db, "chapters", id), {
     ...data,
     updatedAt: serverTimestamp(),
@@ -389,6 +497,8 @@ export interface Report {
   reportedId: string;
   reportedType: "comment" | "story" | "chapter" | "user";
   reporterId: string;
+  /** chapter/comment raporlarında üst hikayenin ID'si */
+  contextId?: string;
   reason?: string;
   status: "pending" | "resolved" | "dismissed";
   createdAt: Timestamp | null;
@@ -398,6 +508,8 @@ export async function reportContent(data: {
   reportedId: string;
   reportedType: "comment" | "story" | "chapter" | "user";
   reporterId: string;
+  /** chapter/comment için storyId, story/user için undefined */
+  contextId?: string;
   reason?: string;
 }): Promise<void> {
   await addDoc(collection(db, "reports"), {
@@ -511,12 +623,16 @@ export async function getTalentPortfoliosByStory(storyId: string): Promise<Talen
 
 // ─── DISCOVER FEED ────────────────────────────────────────────────────────────
 
-export async function getDiscoverFeed(): Promise<Story[]> {
-  const q = query(collection(db, "stories"), limit(200));
+export async function getDiscoverFeed(contentLanguage?: "tr" | "en" | "all"): Promise<Story[]> {
+  const q = contentLanguage === "en"
+    ? query(collection(db, "stories"), where("contentLanguage", "==", "en"), limit(300))
+    : query(collection(db, "stories"), limit(300));
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Story))
-    .filter(s => (s.chapterCount ?? 0) > 0)
+    .filter(s => (s.status === "published" || s.status === "completed")
+      && (s.chapterCount ?? 0) > 0
+      && (contentLanguage === "en" || contentLanguage === "all" || (s.contentLanguage ?? "tr") === "tr"))
     .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
 }
 
@@ -525,6 +641,7 @@ export interface TrendingStory {
   title: string;
   authorName: string;
   genre: string;
+  contentLanguage?: "tr" | "en";
   coverUrl: string | null;
   readCount: number;
   commentCount: number;
@@ -554,14 +671,14 @@ export async function getTrendingStories(limitCount = 10): Promise<TrendingStory
     return fSnap.docs.map(d => {
       const s = { id: d.id, ...d.data() } as Story;
       const score = (s.likeCount ?? 0) * 3 + (s.commentCount ?? 0) * 2 + (s.readCount ?? 0) * 0.1;
-      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
+      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, contentLanguage: s.contentLanguage ?? "tr", coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
     });
   }
 
   return stories
     .map(s => {
       const score = (s.likeCount ?? 0) * 3 + (s.commentCount ?? 0) * 2 + (s.readCount ?? 0) * 0.1;
-      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
+      return { storyId: s.id, title: s.title, authorName: s.authorName, genre: s.genre, contentLanguage: s.contentLanguage ?? "tr", coverUrl: s.coverUrl ?? null, readCount: s.readCount ?? 0, commentCount: s.commentCount ?? 0, likeCount: s.likeCount ?? 0, engagementScore: Math.round(score * 10) / 10 };
     })
     .sort((a, b) => b.engagementScore - a.engagementScore)
     .slice(0, limitCount);
@@ -569,81 +686,11 @@ export async function getTrendingStories(limitCount = 10): Promise<TrendingStory
 
 // ─── ANONYMOUS QUESTIONS ──────────────────────────────────────────────────────
 
-export interface AnonymousQuestion {
-  id: string;
-  targetUid: string;
-  senderUid?: string;
-  question: string;
-  answer?: string;
-  isAnswered: boolean;
-  createdAt: Timestamp;
-  answeredAt?: Timestamp;
-}
-
-export async function sendAnonymousQuestion(targetUid: string, question: string, senderUid?: string): Promise<string> {
-  const ref = await addDoc(collection(db, "anonymousQuestions"), {
-    targetUid,
-    question,
-    isAnswered: false,
-    createdAt: serverTimestamp(),
-    ...(senderUid ? { senderUid } : {}),
-  });
-  return ref.id;
-}
-
-export async function getAnsweredQuestions(targetUid: string): Promise<AnonymousQuestion[]> {
-  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", true));
-  const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
-    .sort((a, b) => (b.answeredAt?.seconds ?? 0) - (a.answeredAt?.seconds ?? 0));
-}
-
-export async function getUnansweredQuestions(targetUid: string): Promise<AnonymousQuestion[]> {
-  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", false));
-  const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
-    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
-}
-
-export function listenAnsweredQuestions(
-  targetUid: string,
-  cb: (questions: AnonymousQuestion[]) => void,
-): () => void {
-  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", true));
-  return onSnapshot(q, snap => {
-    const list = snap.docs
-      .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
-      .sort((a, b) => (b.answeredAt?.seconds ?? 0) - (a.answeredAt?.seconds ?? 0));
-    cb(list);
-  });
-}
-
-export function listenUnansweredQuestions(
-  targetUid: string,
-  cb: (questions: AnonymousQuestion[]) => void,
-): () => void {
-  const q = query(collection(db, "anonymousQuestions"), where("targetUid", "==", targetUid), where("isAnswered", "==", false));
-  return onSnapshot(q, snap => {
-    const list = snap.docs
-      .map(d => ({ id: d.id, ...d.data() } as AnonymousQuestion))
-      .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
-    cb(list);
-  });
-}
-
-export async function answerQuestion(questionId: string, answer: string): Promise<void> {
-  await updateDoc(doc(db, "anonymousQuestions", questionId), {
-    answer,
-    isAnswered: true,
-    answeredAt: serverTimestamp(),
-  });
-}
-
-export async function deleteQuestion(questionId: string): Promise<void> {
-  await deleteDoc(doc(db, "anonymousQuestions", questionId));
-}
+export {
+  sendAnonymousQuestion, getAnsweredQuestions, getUnansweredQuestions,
+  listenAnsweredQuestions, listenUnansweredQuestions, answerQuestion, deleteQuestion,
+} from "./anonymous-qa";
+export type { AnonymousQuestion } from "@workspace/anonymous-qa";
 
 // ─── USER PROFILE UPDATE ──────────────────────────────────────────────────────
 
@@ -662,7 +709,7 @@ export async function incrementStoryReadCount(storyId: string): Promise<void> {
 export const GENRES = [
   "Fantastik", "Romantik", "Gizem", "Korku", "Bilim Kurgu",
   "Macera", "Dram", "Psikolojik", "Tarihi", "Gençlik",
-  "Gerilim", "Komedi", "Şiir", "Deneme"
+  "Gerilim", "Komedi", "Şiir", "Deneme", "Spor"
 ];
 
 // ─── ADMIN: KULLANICI YÖNETİMİ ────────────────────────────────────────────────
@@ -743,10 +790,12 @@ export interface SpektrumNotification {
   senderId: string;
   senderName: string;
   senderAvatar: string;
-  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected" | "narration_approved" | "narration_rejected";
+  type: "follow" | "like" | "comment" | "qa_answer" | "chapter_approved" | "chapter_rejected" | "narration_approved" | "narration_rejected" | "moderator_directive";
   storyId?: string;
   storyTitle?: string;
   questionId?: string;
+  /** Moderatörün yazara gönderdiği düzeltme direktifi */
+  directiveMessage?: string;
   read: boolean;
   createdAt: Timestamp;
 }
@@ -932,6 +981,24 @@ export async function earnJetons(
   });
 }
 
+// ─── MODERATÖR YARDIMCILARI ───────────────────────────────────────────────────
+
+export async function getUserById(uid: string): Promise<UserProfile | null> {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return null;
+  return { uid: snap.id, ...snap.data() } as UserProfile;
+}
+
+export async function getInlineCommentById(id: string): Promise<InlineComment | null> {
+  const snap = await getDoc(doc(db, "inlineComments", id));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as InlineComment;
+}
+
+export async function deleteInlineComment(id: string): Promise<void> {
+  await deleteDoc(doc(db, "inlineComments", id));
+}
+
 // ─── BAN ──────────────────────────────────────────────────────────────────────
 
 export async function banUser(uid: string, reason: string): Promise<void> {
@@ -942,6 +1009,16 @@ export async function unbanUser(uid: string): Promise<void> {
   await updateDoc(doc(db, "users", uid), { banned: false, banReason: "" });
 }
 
+export async function getAllUsersForMod(): Promise<UserProfile[]> {
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map(d => ({
+    ...d.data(), uid: d.id,
+    displayName: d.data().displayName || "İsimsiz kullanıcı",
+    avatarUrl: d.data().avatarUrl ?? "",
+    role: d.data().role ?? "user",
+  } as UserProfile)).sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
+}
+
 export async function searchUsersForMod(term: string): Promise<UserProfile[]> {
   if (!term.trim()) return [];
   const lower = term.trim().toLowerCase();
@@ -949,4 +1026,72 @@ export async function searchUsersForMod(term: string): Promise<UserProfile[]> {
   return snap.docs
     .map(d => ({ uid: d.id, ...d.data() } as UserProfile))
     .filter(u => (u.displayName ?? "").toLowerCase().includes(lower));
+}
+
+export interface AdminUserSearchResult {
+  uid: string;
+  displayName: string;
+  avatarUrl: string;
+  role: "user" | "moderator" | "admin";
+  email: string;
+}
+
+/** Email only leaves Firebase Auth for an exact-email lookup, over the admin-only API. */
+export async function findAdminUserByEmail(term: string): Promise<AdminUserSearchResult[]> {
+  const email = term.trim().toLocaleLowerCase("en-US");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
+    throw new Error("E-posta araması için adresin tamamını yaz.");
+  }
+  const user = auth.currentUser;
+  if (!user) throw new Error("Bu arama için yönetici olarak giriş yapmalısın.");
+  const idToken = await user.getIdToken();
+  const response = await fetch(`/api/admin/users/search?q=${encodeURIComponent(email)}`, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("E-posta ile kullanıcı araması yalnızca yetkili adminlere açıktır.");
+    }
+    throw new Error("E-posta araması şu anda tamamlanamadı. Yeniden dene.");
+  }
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) throw new Error("Arama sunucusundan geçersiz yanıt alındı.");
+  return payload.flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const result = item as Partial<AdminUserSearchResult>;
+    if (typeof result.uid !== "string" || typeof result.displayName !== "string" ||
+        typeof result.email !== "string" || result.email.toLocaleLowerCase("en-US") !== email) return [];
+    return [{
+      uid: result.uid,
+      displayName: result.displayName,
+      avatarUrl: typeof result.avatarUrl === "string" ? result.avatarUrl : "",
+      role: result.role === "moderator" || result.role === "admin" ? result.role : "user",
+      email: result.email,
+    }];
+  });
+}
+
+export interface PlatformStats {
+  userCount: number;
+  storyCount: number;
+  chapterCount: number;
+  pendingCount: number;
+  reportCount: number;
+}
+
+export async function getPlatformStats(): Promise<PlatformStats> {
+  const [users, stories, chapters, pending, reports] = await Promise.all([
+    getCountFromServer(collection(db, "users")),
+    getCountFromServer(collection(db, "stories")),
+    getCountFromServer(query(collection(db, "chapters"), where("status", "==", "published"))),
+    getCountFromServer(query(collection(db, "chapters"), where("status", "==", "pending_review"))),
+    getCountFromServer(query(collection(db, "reports"), where("status", "==", "pending"))),
+  ]);
+  return {
+    userCount: users.data().count,
+    storyCount: stories.data().count,
+    chapterCount: chapters.data().count,
+    pendingCount: pending.data().count,
+    reportCount: reports.data().count,
+  };
 }

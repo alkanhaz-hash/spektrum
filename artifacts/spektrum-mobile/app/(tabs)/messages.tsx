@@ -60,7 +60,7 @@ const lp = StyleSheet.create({
   btnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
 
-const AVATAR_COLORS = ["#7c3aed", "#06b6d4", "#ec4899", "#f59e0b", "#22c55e"];
+const AVATAR_COLORS = ["#A07FE6", "#E6A545", "#ec4899", "#f59e0b", "#22c55e"];
 
 export default function MessagesScreen() {
   const colors = useColors();

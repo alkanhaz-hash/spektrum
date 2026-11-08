@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   FlatList,
+  Share,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +18,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
+import { getPublicProfileUrl } from "@/lib/share-links";
 import { getUserProfile, UserProfile } from "@/lib/auth-service";
 import {
   getStoriesByAuthor,
@@ -30,6 +33,8 @@ import {
   blockUser,
   unblockUser,
   isUserBlocked,
+  getBookmarkedStories,
+  reportContent,
   Story,
 } from "@/lib/firestore-service";
 
@@ -152,6 +157,7 @@ const flm = StyleSheet.create({
 // ─── ANA EKRAN ────────────────────────────────────────────────────────────────
 
 export default function UserProfileScreen() {
+  const { t } = useLocale();
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -159,6 +165,8 @@ export default function UserProfileScreen() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
+  const [bookmarks, setBookmarks] = useState<Story[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
@@ -191,6 +199,11 @@ export default function UserProfileScreen() {
           setFollowing(f);
           setBlocked(bl);
         }
+        setBookmarksLoading(true);
+        getBookmarkedStories(id)
+          .then(setBookmarks)
+          .catch(() => {})
+          .finally(() => setBookmarksLoading(false));
       } catch {
         /* sessiz */
       } finally {
@@ -281,6 +294,26 @@ export default function UserProfileScreen() {
     }
   };
 
+  const handleShareProfile = async () => {
+    if (!profile || !id) return;
+    const profileId = Array.isArray(id) ? id[0] : id;
+    const url = getPublicProfileUrl(profileId);
+    if (!url) {
+      Alert.alert("Paylaşım bağlantısı hazır değil", "Web alan adı bu derlemede yapılandırılmamış.");
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: `${profile.displayName} | SPEKTRUM`,
+        message: `${profile.displayName}’in SPEKTRUM profilini keşfet: ${url}`,
+        url,
+      });
+    } catch {
+      Alert.alert("Paylaşım açılamadı", "Profil bağlantısı paylaşılırken bir hata oluştu.");
+    }
+  };
+
   if (loading) {
     return (
       <View style={[s.center, { backgroundColor: colors.background }]}>
@@ -319,8 +352,18 @@ export default function UserProfileScreen() {
           <TouchableOpacity
             style={[s.backCircle, { backgroundColor: colors.background + "cc", borderColor: colors.border }]}
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Geri"
           >
             <Feather name="arrow-left" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.backCircle, { backgroundColor: colors.background + "cc", borderColor: colors.border }]}
+            onPress={handleShareProfile}
+            accessibilityRole="button"
+            accessibilityLabel="Profil bağlantısını paylaş"
+          >
+            <Feather name="share-2" size={18} color={colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -383,7 +426,7 @@ export default function UserProfileScreen() {
               {badges.map((b) => (
                 <View key={b.id} style={[s.badge, { backgroundColor: colors.primary + "18", borderColor: colors.primary + "40" }]}>
                   <Text style={s.badgeEmoji}>{b.emoji}</Text>
-                  <Text style={[s.badgeLabel, { color: colors.primary }]}>{b.label}</Text>
+                  <Text style={[s.badgeLabel, { color: colors.primary }]}>{t(b.label)}</Text>
                 </View>
               ))}
             </View>
@@ -469,10 +512,84 @@ export default function UserProfileScreen() {
                 )}
               </TouchableOpacity>
             )}
+
+            {user && user.uid !== id && (
+              <TouchableOpacity
+                style={[s.reportBtn, { borderColor: "#ef444455", backgroundColor: "#ef444411" }]}
+                onPress={() => {
+                  Alert.alert(
+                    "Kullanıcıyı Şikayet Et",
+                    `${profile?.displayName ?? "Bu kullanıcı"} hakkında şikayet göndermek istiyor musun?`,
+                    [
+                      { text: "İptal", style: "cancel" },
+                      {
+                        text: "Şikayet Et",
+                        style: "destructive",
+                        onPress: async () => {
+                          try {
+                            await reportContent({
+                              reportedId: id!,
+                              reportedType: "user",
+                              reporterId: user.uid,
+                            });
+                            Alert.alert("Şikayet Gönderildi", "İncelemeye alındı.");
+                          } catch {
+                            Alert.alert("Hata", "Şikayet gönderilemedi.");
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Feather name="flag" size={18} color="#ef4444" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
+        {/* Favorileri */}
+        <View style={s.storiesSection}>
+          <Text style={[s.sectionTitle, { color: colors.foreground }]}>Favorileri</Text>
+          {bookmarksLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
+          ) : bookmarks.length === 0 ? (
+            <View style={s.emptyStories}>
+              <Feather name="bookmark" size={32} color={colors.mutedForeground + "60"} />
+              <Text style={[s.emptyText, { color: colors.mutedForeground }]}>Favori hikaye yok</Text>
+            </View>
+          ) : (
+            bookmarks.map((st) => (
+              <TouchableOpacity
+                key={st.id}
+                style={[s.storyItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => router.push({ pathname: "/story/[id]", params: { id: st.id } })}
+                activeOpacity={0.8}
+              >
+                {st.coverUrl ? (
+                  <Image source={{ uri: st.coverUrl }} style={s.storyThumb} resizeMode="cover" />
+                ) : (
+                  <LinearGradient colors={["#1a0a2e", "#0a1a2e"]} style={s.storyThumb}>
+                    <Feather name="book" size={18} color="#4a4a6a" />
+                  </LinearGradient>
+                )}
+                <View style={s.storyItemInfo}>
+                  <Text style={[s.storyItemTitle, { color: colors.foreground }]} numberOfLines={2}>{st.title}</Text>
+                  <Text style={[s.storyItemMeta, { color: colors.mutedForeground }]}>
+                    {st.authorName} · {st.genre}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
         {/* Hikayeleri */}
+        <TouchableOpacity style={{ margin: 20, padding: 16, borderRadius: 16, backgroundColor: colors.primary }}
+          onPress={() => router.push({ pathname: "/anonymous-questions", params: { uid: id } })}>
+          <Text style={{ color: colors.primaryForeground, fontWeight: "700", textAlign: "center" }}>Anonim soru sor / Cevapları gör</Text>
+        </TouchableOpacity>
         <View style={s.storiesSection}>
           <Text style={[s.sectionTitle, { color: colors.foreground }]}>Hikayeleri</Text>
           {stories.length === 0 ? (
@@ -516,7 +633,7 @@ const s = StyleSheet.create({
   notFoundText: { fontSize: 16, fontFamily: "Inter_400Regular" },
   backBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
   backBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  backRow: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, paddingHorizontal: 16 },
+  backRow: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   backCircle: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   coverContainer: { position: "relative" },
   cover: { height: 200 },
@@ -549,6 +666,7 @@ const s = StyleSheet.create({
   msgBtn: { flex: 1, paddingVertical: 11, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },
   msgBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   blockBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  reportBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   storiesSection: { paddingHorizontal: 16, paddingTop: 24, gap: 10 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
   emptyStories: { alignItems: "center", paddingVertical: 32, gap: 10 },

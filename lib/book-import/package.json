@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/book-import",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./commit": "./src/commit.ts",
+    "./firestore": "./src/firestore.ts",
+    "./recovery": "./src/recovery.ts"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
+    "fflate": "^0.8.2",
+    "firebase": "^12.14.0"
+  }
+}

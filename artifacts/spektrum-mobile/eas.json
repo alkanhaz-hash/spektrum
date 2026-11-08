@@ -6,16 +6,29 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://spektrumapp.com.tr"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://spektrumapp.com.tr"
+      },
       "android": {
         "buildType": "app-bundle"
       },
       "ios": {
         "resourceClass": "m-medium"
+      }
+    },
+    "play-existing": {
+      "extends": "production",
+      "env": {
+        "SPEKTRUM_ANDROID_TARGET": "existing-play",
+        "SPEKTRUM_ANDROID_VERSION_CODE": "21"
       }
     }
   },

@@ -20,10 +20,25 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ChapterAudioState,
+  GetPushDeviceParams,
+  GetStoryReadingReportParams,
   HealthStatus,
   ModerationResult,
+  PushAcknowledgement,
+  PushDeviceState,
+  PushRegistration,
+  PushRevocation,
+  PushTestInput,
+  ReadingAcknowledgement,
+  ReadingObservation,
+  StoryReadingReport,
+  StreamChapterAudioParams,
   TextModerationInput,
-  TrendingStory
+  TrendingStory,
+  WeeklyLeaderboard,
+  WeeklyVoteInput,
+  WeeklyVoteStatus
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -35,6 +50,938 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+
+
+export const getGetChapterAudioUrl = (chapterId: string,) => {
+
+
+
+
+  return `/api/chapter-audio/${chapterId}`
+}
+
+export const getChapterAudio = async (chapterId: string, options?: RequestInit): Promise<ChapterAudioState> => {
+
+  return customFetch<ChapterAudioState>(getGetChapterAudioUrl(chapterId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChapterAudioQueryKey = (chapterId: string,) => {
+    return [
+    `/api/chapter-audio/${chapterId}`
+    ] as const;
+    }
+
+
+export const getGetChapterAudioQueryOptions = <TData = Awaited<ReturnType<typeof getChapterAudio>>, TError = ErrorType<void>>(chapterId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChapterAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChapterAudioQueryKey(chapterId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChapterAudio>>> = ({ signal }) => getChapterAudio(chapterId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(chapterId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChapterAudio>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChapterAudioQueryResult = NonNullable<Awaited<ReturnType<typeof getChapterAudio>>>
+export type GetChapterAudioQueryError = ErrorType<void>
+
+
+
+export function useGetChapterAudio<TData = Awaited<ReturnType<typeof getChapterAudio>>, TError = ErrorType<void>>(
+ chapterId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChapterAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChapterAudioQueryOptions(chapterId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUploadChapterAudioUrl = (chapterId: string,) => {
+
+
+
+
+  return `/api/chapter-audio/${chapterId}`
+}
+
+export const uploadChapterAudio = async (chapterId: string,
+    uploadChapterAudioBody: Blob, options?: RequestInit): Promise<ChapterAudioState> => {
+
+  return customFetch<ChapterAudioState>(getUploadChapterAudioUrl(chapterId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'audio/mpeg', ...options?.headers },
+    body: JSON.stringify(
+      uploadChapterAudioBody,)
+  }
+);}
+
+
+
+
+export const getUploadChapterAudioMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadChapterAudio>>, TError,{chapterId: string;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadChapterAudio>>, TError,{chapterId: string;data: BodyType<Blob>}, TContext> => {
+
+const mutationKey = ['uploadChapterAudio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadChapterAudio>>, {chapterId: string;data: BodyType<Blob>}> = (props) => {
+          const {chapterId,data} = props ?? {};
+
+          return  uploadChapterAudio(chapterId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadChapterAudioMutationResult = NonNullable<Awaited<ReturnType<typeof uploadChapterAudio>>>
+    export type UploadChapterAudioMutationBody = BodyType<Blob>
+    export type UploadChapterAudioMutationError = ErrorType<void>
+
+    export const useUploadChapterAudio = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadChapterAudio>>, TError,{chapterId: string;data: BodyType<Blob>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadChapterAudio>>,
+        TError,
+        {chapterId: string;data: BodyType<Blob>},
+        TContext
+      > => {
+      return useMutation(getUploadChapterAudioMutationOptions(options));
+    }
+
+export const getRemoveChapterAudioUrl = (chapterId: string,) => {
+
+
+
+
+  return `/api/chapter-audio/${chapterId}`
+}
+
+export const removeChapterAudio = async (chapterId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRemoveChapterAudioUrl(chapterId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveChapterAudioMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeChapterAudio>>, TError,{chapterId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeChapterAudio>>, TError,{chapterId: string}, TContext> => {
+
+const mutationKey = ['removeChapterAudio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeChapterAudio>>, {chapterId: string}> = (props) => {
+          const {chapterId} = props ?? {};
+
+          return  removeChapterAudio(chapterId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveChapterAudioMutationResult = NonNullable<Awaited<ReturnType<typeof removeChapterAudio>>>
+
+    export type RemoveChapterAudioMutationError = ErrorType<void>
+
+    export const useRemoveChapterAudio = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeChapterAudio>>, TError,{chapterId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeChapterAudio>>,
+        TError,
+        {chapterId: string},
+        TContext
+      > => {
+      return useMutation(getRemoveChapterAudioMutationOptions(options));
+    }
+
+export const getStreamChapterAudioUrl = (params: StreamChapterAudioParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/chapter-audio-stream?${stringifiedParams}` : `/api/chapter-audio-stream`
+}
+
+export const streamChapterAudio = async (params: StreamChapterAudioParams, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getStreamChapterAudioUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamChapterAudioQueryKey = (params?: StreamChapterAudioParams,) => {
+    return [
+    `/api/chapter-audio-stream`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getStreamChapterAudioQueryOptions = <TData = Awaited<ReturnType<typeof streamChapterAudio>>, TError = ErrorType<void>>(params: StreamChapterAudioParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamChapterAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamChapterAudioQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamChapterAudio>>> = ({ signal }) => streamChapterAudio(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamChapterAudio>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StreamChapterAudioQueryResult = NonNullable<Awaited<ReturnType<typeof streamChapterAudio>>>
+export type StreamChapterAudioQueryError = ErrorType<void>
+
+
+
+export function useStreamChapterAudio<TData = Awaited<ReturnType<typeof streamChapterAudio>>, TError = ErrorType<void>>(
+ params: StreamChapterAudioParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamChapterAudio>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStreamChapterAudioQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPushDeviceUrl = (params: GetPushDeviceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/push/device?${stringifiedParams}` : `/api/push/device`
+}
+
+export const getPushDevice = async (params: GetPushDeviceParams, options?: RequestInit): Promise<PushDeviceState> => {
+
+  return customFetch<PushDeviceState>(getGetPushDeviceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPushDeviceQueryKey = (params?: GetPushDeviceParams,) => {
+    return [
+    `/api/push/device`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPushDeviceQueryOptions = <TData = Awaited<ReturnType<typeof getPushDevice>>, TError = ErrorType<void>>(params: GetPushDeviceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPushDevice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPushDeviceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPushDevice>>> = ({ signal }) => getPushDevice(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPushDevice>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPushDeviceQueryResult = NonNullable<Awaited<ReturnType<typeof getPushDevice>>>
+export type GetPushDeviceQueryError = ErrorType<void>
+
+
+
+export function useGetPushDevice<TData = Awaited<ReturnType<typeof getPushDevice>>, TError = ErrorType<void>>(
+ params: GetPushDeviceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPushDevice>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPushDeviceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRegisterPushDeviceUrl = () => {
+
+
+
+
+  return `/api/push/device`
+}
+
+export const registerPushDevice = async (pushRegistration: PushRegistration, options?: RequestInit): Promise<PushDeviceState> => {
+
+  return customFetch<PushDeviceState>(getRegisterPushDeviceUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pushRegistration,)
+  }
+);}
+
+
+
+
+export const getRegisterPushDeviceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushRegistration>}, TContext> => {
+
+const mutationKey = ['registerPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerPushDevice>>, {data: BodyType<PushRegistration>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof registerPushDevice>>>
+    export type RegisterPushDeviceMutationBody = BodyType<PushRegistration>
+    export type RegisterPushDeviceMutationError = ErrorType<void>
+
+    export const useRegisterPushDevice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerPushDevice>>,
+        TError,
+        {data: BodyType<PushRegistration>},
+        TContext
+      > => {
+      return useMutation(getRegisterPushDeviceMutationOptions(options));
+    }
+
+export const getDisablePushDeviceUrl = () => {
+
+
+
+
+  return `/api/push/disable`
+}
+
+export const disablePushDevice = async (pushRevocation: PushRevocation, options?: RequestInit): Promise<PushAcknowledgement> => {
+
+  return customFetch<PushAcknowledgement>(getDisablePushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pushRevocation,)
+  }
+);}
+
+
+
+
+export const getDisablePushDeviceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disablePushDevice>>, TError,{data: BodyType<PushRevocation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disablePushDevice>>, TError,{data: BodyType<PushRevocation>}, TContext> => {
+
+const mutationKey = ['disablePushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disablePushDevice>>, {data: BodyType<PushRevocation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  disablePushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisablePushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof disablePushDevice>>>
+    export type DisablePushDeviceMutationBody = BodyType<PushRevocation>
+    export type DisablePushDeviceMutationError = ErrorType<void>
+
+    export const useDisablePushDevice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disablePushDevice>>, TError,{data: BodyType<PushRevocation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disablePushDevice>>,
+        TError,
+        {data: BodyType<PushRevocation>},
+        TContext
+      > => {
+      return useMutation(getDisablePushDeviceMutationOptions(options));
+    }
+
+export const getTestPushDeviceUrl = () => {
+
+
+
+
+  return `/api/push/test`
+}
+
+export const testPushDevice = async (pushTestInput: PushTestInput, options?: RequestInit): Promise<PushAcknowledgement> => {
+
+  return customFetch<PushAcknowledgement>(getTestPushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      pushTestInput,)
+  }
+);}
+
+
+
+
+export const getTestPushDeviceMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testPushDevice>>, TError,{data: BodyType<PushTestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testPushDevice>>, TError,{data: BodyType<PushTestInput>}, TContext> => {
+
+const mutationKey = ['testPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testPushDevice>>, {data: BodyType<PushTestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  testPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof testPushDevice>>>
+    export type TestPushDeviceMutationBody = BodyType<PushTestInput>
+    export type TestPushDeviceMutationError = ErrorType<void>
+
+    export const useTestPushDevice = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testPushDevice>>, TError,{data: BodyType<PushTestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testPushDevice>>,
+        TError,
+        {data: BodyType<PushTestInput>},
+        TContext
+      > => {
+      return useMutation(getTestPushDeviceMutationOptions(options));
+    }
+
+export const getRecordReadingObservationUrl = () => {
+
+
+
+
+  return `/api/reading-analytics/observations`
+}
+
+/**
+ * @summary Anonymous chapter-session progress, never a verified reader count
+ */
+export const recordReadingObservation = async (readingObservation: ReadingObservation, options?: RequestInit): Promise<ReadingAcknowledgement> => {
+
+  return customFetch<ReadingAcknowledgement>(getRecordReadingObservationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      readingObservation,)
+  }
+);}
+
+
+
+
+export const getRecordReadingObservationMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordReadingObservation>>, TError,{data: BodyType<ReadingObservation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordReadingObservation>>, TError,{data: BodyType<ReadingObservation>}, TContext> => {
+
+const mutationKey = ['recordReadingObservation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordReadingObservation>>, {data: BodyType<ReadingObservation>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordReadingObservation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordReadingObservationMutationResult = NonNullable<Awaited<ReturnType<typeof recordReadingObservation>>>
+    export type RecordReadingObservationMutationBody = BodyType<ReadingObservation>
+    export type RecordReadingObservationMutationError = ErrorType<void>
+
+    /**
+ * @summary Anonymous chapter-session progress, never a verified reader count
+ */
+export const useRecordReadingObservation = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordReadingObservation>>, TError,{data: BodyType<ReadingObservation>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordReadingObservation>>,
+        TError,
+        {data: BodyType<ReadingObservation>},
+        TContext
+      > => {
+      return useMutation(getRecordReadingObservationMutationOptions(options));
+    }
+
+export const getGetStoryReadingReportUrl = (params: GetStoryReadingReportParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reading-analytics/report?${stringifiedParams}` : `/api/reading-analytics/report`
+}
+
+/**
+ * @summary Owner-only aggregate chapter reading and inactivity report
+ */
+export const getStoryReadingReport = async (params: GetStoryReadingReportParams, options?: RequestInit): Promise<StoryReadingReport> => {
+
+  return customFetch<StoryReadingReport>(getGetStoryReadingReportUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStoryReadingReportQueryKey = (params?: GetStoryReadingReportParams,) => {
+    return [
+    `/api/reading-analytics/report`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStoryReadingReportQueryOptions = <TData = Awaited<ReturnType<typeof getStoryReadingReport>>, TError = ErrorType<void>>(params: GetStoryReadingReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStoryReadingReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStoryReadingReportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStoryReadingReport>>> = ({ signal }) => getStoryReadingReport(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStoryReadingReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStoryReadingReportQueryResult = NonNullable<Awaited<ReturnType<typeof getStoryReadingReport>>>
+export type GetStoryReadingReportQueryError = ErrorType<void>
+
+
+/**
+ * @summary Owner-only aggregate chapter reading and inactivity report
+ */
+
+export function useGetStoryReadingReport<TData = Awaited<ReturnType<typeof getStoryReadingReport>>, TError = ErrorType<void>>(
+ params: GetStoryReadingReportParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStoryReadingReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStoryReadingReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWeeklyLeaderboardUrl = () => {
+
+
+
+
+  return `/api/weekly-votes`
+}
+
+/**
+ * @summary Current Istanbul Monday-to-Monday top three published stories
+ */
+export const getWeeklyLeaderboard = async ( options?: RequestInit): Promise<WeeklyLeaderboard> => {
+
+  return customFetch<WeeklyLeaderboard>(getGetWeeklyLeaderboardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWeeklyLeaderboardQueryKey = () => {
+    return [
+    `/api/weekly-votes`
+    ] as const;
+    }
+
+
+export const getGetWeeklyLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getWeeklyLeaderboard>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWeeklyLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWeeklyLeaderboardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWeeklyLeaderboard>>> = ({ signal }) => getWeeklyLeaderboard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWeeklyLeaderboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWeeklyLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof getWeeklyLeaderboard>>>
+export type GetWeeklyLeaderboardQueryError = ErrorType<void>
+
+
+/**
+ * @summary Current Istanbul Monday-to-Monday top three published stories
+ */
+
+export function useGetWeeklyLeaderboard<TData = Awaited<ReturnType<typeof getWeeklyLeaderboard>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWeeklyLeaderboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWeeklyLeaderboardQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCastWeeklyVoteUrl = () => {
+
+
+
+
+  return `/api/weekly-votes`
+}
+
+/**
+ * @summary Cast one immutable weekly vote; retrying the same choice is idempotent
+ */
+export const castWeeklyVote = async (weeklyVoteInput: WeeklyVoteInput, options?: RequestInit): Promise<WeeklyVoteStatus> => {
+
+  return customFetch<WeeklyVoteStatus>(getCastWeeklyVoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      weeklyVoteInput,)
+  }
+);}
+
+
+
+
+export const getCastWeeklyVoteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof castWeeklyVote>>, TError,{data: BodyType<WeeklyVoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof castWeeklyVote>>, TError,{data: BodyType<WeeklyVoteInput>}, TContext> => {
+
+const mutationKey = ['castWeeklyVote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof castWeeklyVote>>, {data: BodyType<WeeklyVoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  castWeeklyVote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CastWeeklyVoteMutationResult = NonNullable<Awaited<ReturnType<typeof castWeeklyVote>>>
+    export type CastWeeklyVoteMutationBody = BodyType<WeeklyVoteInput>
+    export type CastWeeklyVoteMutationError = ErrorType<void>
+
+    /**
+ * @summary Cast one immutable weekly vote; retrying the same choice is idempotent
+ */
+export const useCastWeeklyVote = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof castWeeklyVote>>, TError,{data: BodyType<WeeklyVoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof castWeeklyVote>>,
+        TError,
+        {data: BodyType<WeeklyVoteInput>},
+        TContext
+      > => {
+      return useMutation(getCastWeeklyVoteMutationOptions(options));
+    }
+
+export const getGetMyWeeklyVoteUrl = () => {
+
+
+
+
+  return `/api/weekly-votes/me`
+}
+
+/**
+ * @summary Current authenticated user's private weekly choice
+ */
+export const getMyWeeklyVote = async ( options?: RequestInit): Promise<WeeklyVoteStatus> => {
+
+  return customFetch<WeeklyVoteStatus>(getGetMyWeeklyVoteUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyWeeklyVoteQueryKey = () => {
+    return [
+    `/api/weekly-votes/me`
+    ] as const;
+    }
+
+
+export const getGetMyWeeklyVoteQueryOptions = <TData = Awaited<ReturnType<typeof getMyWeeklyVote>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyWeeklyVote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyWeeklyVoteQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyWeeklyVote>>> = ({ signal }) => getMyWeeklyVote({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyWeeklyVote>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyWeeklyVoteQueryResult = NonNullable<Awaited<ReturnType<typeof getMyWeeklyVote>>>
+export type GetMyWeeklyVoteQueryError = ErrorType<void>
+
+
+/**
+ * @summary Current authenticated user's private weekly choice
+ */
+
+export function useGetMyWeeklyVote<TData = Awaited<ReturnType<typeof getMyWeeklyVote>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyWeeklyVote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyWeeklyVoteQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 
 
 

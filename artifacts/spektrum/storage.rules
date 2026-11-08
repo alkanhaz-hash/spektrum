@@ -26,6 +26,11 @@ service firebase.storage {
              && request.resource.size < 100 * 1024 * 1024;
     }
 
+    function accountIsActive() {
+      return isSignedIn()
+             && request.auth.token.get('accountDeletionPending', false) != true;
+    }
+
     // conversationId formatı: "<uid1>_<uid2>" (sıralı) — katılımcı kontrolü
     // doğrudan yoldan yapılır (Storage kuralları Firestore'a erişemez).
     function isConversationParticipant(conversationId) {
@@ -35,37 +40,58 @@ service firebase.storage {
     // Kullanıcı profil kapağı — yalnızca sahibi
     match /covers/users/{uid}/{file=**} {
       allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+      allow write: if accountIsActive() && request.auth.uid == uid && isImage();
     }
 
     // Hikaye kapakları — yalnızca yükleyen sahibi (yol sahibe göre izole)
     match /story-covers/{uid}/{file=**} {
       allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+      allow write: if accountIsActive() && request.auth.uid == uid && isImage();
     }
 
     // Avatarlar — yalnızca sahibi
     match /avatars/{uid}/{file=**} {
       allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == uid && isImage();
+      allow write: if accountIsActive() && request.auth.uid == uid && isImage();
+    }
+
+    // 24 saatlik durum görselleri — yalnızca sahibi yükler, herkes görüntüler
+    match /statuses/{uid}/{file=**} {
+      allow read: if true;
+      allow write: if accountIsActive() && request.auth.uid == uid && isImage();
     }
 
     // DM medyası (resim/GIF) — yalnızca konuşmanın katılımcıları
-    match /messages/{conversationId}/{file=**} {
+    match /messages/{conversationId}/{uid}/{file=**} {
       allow read: if isConversationParticipant(conversationId);
-      allow write: if isConversationParticipant(conversationId) && isImage();
+      allow write: if accountIsActive()
+                   && isConversationParticipant(conversationId)
+                   && request.auth.uid == uid
+                   && isImage();
+    }
+
+    // Eski mesaj medyası yolu: geriye dönük okuma açık, yeni yazma kapalı.
+    match /messages/{conversationId}/{file} {
+      allow read: if isConversationParticipant(conversationId);
+      allow write: if false;
     }
 
     // Yetenek portfolyo görselleri — yalnızca sahibi
     match /talent/{userId}/{file=**} {
       allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == userId && isImage();
+      allow write: if accountIsActive() && request.auth.uid == userId && isImage();
     }
 
     // Seslendirme dosyaları — kimliği doğrulanmış kullanıcılar
     match /narrations/{storyId}/{file=**} {
       allow read: if true;
-      allow write: if isSignedIn() && isAudio();
+      allow write: if accountIsActive() && isAudio();
+    }
+
+    // Bölüm sesleri yalnızca API tarafından sahiplik/bölüm izni kontrolüyle sunulur.
+    // Firebase download tokenı veya istemciden doğrudan yükleme/okuma yoktur.
+    match /chapter-audio/{file=**} {
+      allow read, write: if false;
     }
 
     // Diğer her şey reddedilir

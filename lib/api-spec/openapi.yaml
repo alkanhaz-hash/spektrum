@@ -13,6 +13,277 @@ tags:
   - name: moderation
     description: AI-powered content moderation
 paths:
+  /chapter-audio/{chapterId}:
+    parameters:
+      - in: path
+        name: chapterId
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getChapterAudio
+      tags: [chapter-audio]
+      responses:
+        "200":
+          description: Accessible chapter audio; null when none is attached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChapterAudioState" }
+        "403": { description: Chapter access denied }
+    put:
+      operationId: uploadChapterAudio
+      tags: [chapter-audio]
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Audio-Name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          audio/mpeg:
+            schema: { type: string, format: binary }
+          audio/mp4:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: Audio attached atomically; prior version replaced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChapterAudioState" }
+        "409": { description: A newer audio version already exists }
+        "413": { description: File exceeds 100 MB }
+        "415": { description: Invalid audio format }
+    delete:
+      operationId: removeChapterAudio
+      tags: [chapter-audio]
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Audio removed }
+        "409": { description: A newer audio version already exists }
+  /chapter-audio-stream:
+    get:
+      operationId: streamChapterAudio
+      tags: [chapter-audio]
+      parameters:
+        - in: query
+          name: ticket
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Authorized audio stream with byte-range support }
+        "206": { description: Partial audio stream }
+        "403": { description: Access revoked or ticket expired }
+  /push/device:
+    get:
+      operationId: getPushDevice
+      tags: [push]
+      parameters:
+        - in: query
+          name: installationId
+          required: true
+          schema: { type: string, pattern: "^[a-f0-9]{32}$" }
+      responses:
+        "200":
+          description: This account's device settings, without its token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushDeviceState" }
+        "400": { description: Invalid installation }
+        "401": { description: Sign in required }
+        "403": { description: Account unavailable }
+        "429": { description: Request limit }
+        "503": { description: Background delivery not activated }
+    put:
+      operationId: registerPushDevice
+      tags: [push]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushRegistration" }
+      responses:
+        "200":
+          description: Registration saved, not a delivery confirmation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushDeviceState" }
+        "400": { description: Invalid device }
+        "401": { description: Sign in required }
+        "403": { description: Account unavailable }
+        "409": { description: Installation ownership conflict }
+        "429": { description: Device or request limit }
+        "503": { description: Background delivery not activated }
+  /push/disable:
+    post:
+      operationId: disablePushDevice
+      tags: [push]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushRevocation" }
+      responses:
+        "200":
+          description: Idempotent revocation using the installation's disable-only secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushAcknowledgement" }
+        "400": { description: Invalid revocation }
+        "429": { description: Request limit }
+        "503": { description: Service unavailable }
+  /push/test:
+    post:
+      operationId: testPushDevice
+      tags: [push]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushTestInput"
+      responses:
+        "200":
+          description: FCM accepted the test, not proof of delivery
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushAcknowledgement" }
+        "400": { description: Invalid installation }
+        "401": { description: Sign in required }
+        "403": { description: Account unavailable }
+        "404": { description: No enabled device belonging to caller }
+        "429": { description: Wait before another test }
+        "503": { description: FCM unavailable or not configured }
+  /reading-analytics/observations:
+    post:
+      operationId: recordReadingObservation
+      tags: [reading]
+      summary: Anonymous chapter-session progress, never a verified reader count
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReadingObservation"
+      responses:
+        "200":
+          description: Observation accepted or author's own reading excluded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadingAcknowledgement"
+        "400":
+          description: Invalid observation
+        "429":
+          description: Too many observations
+  /reading-analytics/report:
+    get:
+      operationId: getStoryReadingReport
+      tags: [reading]
+      summary: Owner-only aggregate chapter reading and inactivity report
+      parameters:
+        - in: query
+          name: storyId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: days
+          schema: { type: integer, enum: [7, 30, 90], default: 30 }
+      responses:
+        "200":
+          description: Sessions started during the selected rolling period
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryReadingReport"
+        "401":
+          description: Sign in required
+        "404":
+          description: Story unavailable to this account
+  /weekly-votes:
+    get:
+      operationId: getWeeklyLeaderboard
+      tags: [voting]
+      summary: Current Istanbul Monday-to-Monday top three published stories
+      responses:
+        "200":
+          description: Live weekly standings; ties ordered by story ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyLeaderboard"
+        "503":
+          description: Voting service unavailable
+        "429":
+          description: Too many requests; retry after one minute
+    post:
+      operationId: castWeeklyVote
+      tags: [voting]
+      summary: Cast one immutable weekly vote; retrying the same choice is idempotent
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeeklyVoteInput"
+      responses:
+        "200":
+          description: Vote recorded, or identical vote already recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyVoteStatus"
+        "400":
+          description: Invalid story identifier or extra fields
+        "401":
+          description: Missing, invalid or revoked authentication
+        "403":
+          description: Unverified, anonymous, inactive, own-story or non-public choice
+        "409":
+          description: A different story was already chosen this week
+        "429":
+          description: Too many requests; retry after one minute
+        "503":
+          description: Voting service unavailable
+  /weekly-votes/me:
+    get:
+      operationId: getMyWeeklyVote
+      tags: [voting]
+      summary: Current authenticated user's private weekly choice
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current weekly choice, or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyVoteStatus"
+        "401":
+          description: Missing or invalid authentication
+        "403":
+          description: Ineligible account
+        "429":
+          description: Too many requests; retry after one minute
+        "503":
+          description: Voting service unavailable
   /healthz:
     get:
       operationId: healthCheck
@@ -63,6 +334,177 @@ paths:
 
 components:
   schemas:
+    ChapterAudio:
+      type: object
+      required: [id, fileName, sizeBytes, playbackUrl]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        sizeBytes: { type: integer }
+        playbackUrl: { type: string }
+    ChapterAudioState:
+      type: object
+      required: [audio]
+      properties:
+        audio:
+          oneOf:
+            - $ref: "#/components/schemas/ChapterAudio"
+            - type: "null"
+    PushTestInput:
+      type: object
+      additionalProperties: false
+      required: [installationId]
+      properties:
+        installationId: { type: string, pattern: "^[a-f0-9]{32}$" }
+    PushPreferences:
+      type: object
+      additionalProperties: false
+      required: [messages, newChapters, comments, qa]
+      properties:
+        messages: { type: boolean }
+        newChapters: { type: boolean }
+        comments: { type: boolean }
+        qa: { type: boolean }
+    PushRevocation:
+      type: object
+      additionalProperties: false
+      required: [installationId, revokeSecret, revision]
+      properties:
+        installationId: { type: string, pattern: "^[a-f0-9]{32}$" }
+        revokeSecret: { type: string, pattern: "^[a-f0-9]{64}$" }
+        revision: { type: integer, minimum: 1, maximum: 9007199254740991 }
+    PushRegistration:
+      type: object
+      additionalProperties: false
+      required: [installationId, revokeSecret, revision, token, platform, preferences]
+      properties:
+        installationId: { type: string, pattern: "^[a-f0-9]{32}$" }
+        revokeSecret: { type: string, pattern: "^[a-f0-9]{64}$" }
+        revision: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        token: { type: string, minLength: 20, maxLength: 4096, pattern: "^[A-Za-z0-9_:.-]+$" }
+        platform: { type: string, enum: [android] }
+        preferences: { $ref: "#/components/schemas/PushPreferences" }
+    PushDeviceState:
+      type: object
+      required: [registered, enabled, preferences]
+      properties:
+        registered: { type: boolean }
+        enabled: { type: boolean }
+        preferences: { $ref: "#/components/schemas/PushPreferences" }
+    PushAcknowledgement:
+      type: object
+      required: [accepted]
+      properties:
+        accepted: { type: boolean }
+    ReadingObservation:
+      type: object
+      additionalProperties: false
+      required: [storyId, chapterId, visitId, progress, activeSeconds]
+      properties:
+        storyId: { type: string, minLength: 1, maxLength: 160, pattern: "^[A-Za-z0-9_-]+$" }
+        chapterId: { type: string, minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9_-]+$" }
+        visitId: { type: string, minLength: 20, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" }
+        progress: { type: number, minimum: 0, maximum: 100 }
+        activeSeconds: { type: integer, minimum: 0, maximum: 86400 }
+    ReadingAcknowledgement:
+      type: object
+      required: [accepted]
+      properties:
+        accepted: { type: boolean }
+    ReadingChapterStats:
+      type: object
+      required: [chapterId, title, order, sessions, reached25, reached50, reached75, completed, completionRate, stale, recentUnfinished, continued, meanActiveSeconds, exit0to24, exit25to49, exit50to74, exit75to100]
+      properties:
+        chapterId: { type: string }
+        title: { type: string }
+        order: { type: number }
+        sessions: { type: integer }
+        reached25: { type: integer }
+        reached50: { type: integer }
+        reached75: { type: integer }
+        completed: { type: integer }
+        completionRate: { type: number }
+        stale: { type: integer }
+        recentUnfinished: { type: integer }
+        continued: { type: integer }
+        meanActiveSeconds: { type: integer }
+        exit0to24: { type: integer }
+        exit25to49: { type: integer }
+        exit50to74: { type: integer }
+        exit75to100: { type: integer }
+    StoryReadingReport:
+      type: object
+      required: [storyId, title, days, measuredFrom, generatedAt, sessionCount, visitCount, completedCount, staleCount, activeSeconds, truncated, chapters]
+      properties:
+        storyId: { type: string }
+        title: { type: string }
+        days: { type: integer }
+        measuredFrom: { type: string }
+        generatedAt: { type: string }
+        sessionCount: { type: integer }
+        visitCount: { type: integer }
+        completedCount: { type: integer }
+        staleCount: { type: integer }
+        activeSeconds: { type: integer }
+        truncated: { type: boolean }
+        chapters:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReadingChapterStats"
+    WeeklyVoteInput:
+      type: object
+      additionalProperties: false
+      required: [storyId]
+      properties:
+        storyId:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{1,128}$"
+    VotingWeek:
+      type: object
+      required: [weekId, startsAt, endsAt]
+      properties:
+        weekId:
+          type: string
+        startsAt:
+          type: string
+        endsAt:
+          type: string
+    WeeklyVoteStatus:
+      allOf:
+        - $ref: "#/components/schemas/VotingWeek"
+        - type: object
+          required: [storyId]
+          properties:
+            storyId:
+              type: [string, "null"]
+    WeeklyLeaderboard:
+      allOf:
+        - $ref: "#/components/schemas/VotingWeek"
+        - type: object
+          required: [entries]
+          properties:
+            entries:
+              type: array
+              maxItems: 3
+              items:
+                type: object
+                required: [storyId, title, authorName, coverUrl, votes, rank]
+                properties:
+                  storyId:
+                    type: string
+                  title:
+                    type: string
+                  authorName:
+                    type: string
+                  coverUrl:
+                    type: string
+                  votes:
+                    type: integer
+                    minimum: 1
+                  rank:
+                    type: integer
+                    minimum: 1
+                    maximum: 3
     HealthStatus:
       type: object
       properties:

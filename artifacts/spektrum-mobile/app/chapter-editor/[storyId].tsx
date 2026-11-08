@@ -18,6 +18,7 @@ import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getChapter,
+  getStory,
   getAllChapters,
   createChapter,
   updateChapter,
@@ -25,6 +26,7 @@ import {
   Chapter,
 } from "@/lib/firestore-service";
 import { moderateText } from "@/lib/moderation-service";
+import ChapterAudioSection from "@/components/ChapterAudioSection";
 
 type ModerationStatus = "idle" | "checking" | "approved" | "pending_review" | "rejected";
 
@@ -41,14 +43,23 @@ export default function ChapterEditorScreen() {
   const [moderationStatus, setModerationStatus] = useState<ModerationStatus>("idle");
   const [moderationReason, setModerationReason] = useState<string | null>(null);
   const [nextOrder, setNextOrder] = useState(1);
+  const [isPaid, setIsPaid] = useState(false);
+  const [storyLanguage, setStoryLanguage] = useState<"tr" | "en">("tr");
+  const [loadedChapterId, setLoadedChapterId] = useState<string | null>(null);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const publishedRef = useRef(false);
+  const savedTextRef = useRef({ title: "", content: "" });
   const [autoSaveLabel, setAutoSaveLabel] = useState<"saved" | "saving" | null>(null);
 
   const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+  const chapterPrice = Math.max(1, Math.ceil(wordCount / 500));
 
   const load = useCallback(async () => {
+    try {
+      const story = await getStory(storyId);
+      setStoryLanguage(story?.contentLanguage ?? "tr");
+    } catch { /* moderation remains Turkish by default */ }
     if (!chapterId) {
       try {
         const chs = await getAllChapters(storyId);
@@ -60,8 +71,11 @@ export default function ChapterEditorScreen() {
     try {
       const ch = await getChapter(chapterId);
       if (ch) {
+        savedTextRef.current = { title: ch.title, content: ch.content };
         setTitle(ch.title);
         setContent(ch.content);
+        setIsPaid(ch.isPaid ?? false);
+        setLoadedChapterId(ch.id);
       }
     } catch { /* sessiz */ }
     setLoading(false);
@@ -70,20 +84,21 @@ export default function ChapterEditorScreen() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!title || !content || !chapterId) return;
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    if (!title || !content || !chapterId || (title === savedTextRef.current.title && content === savedTextRef.current.content)) return;
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     autoSaveTimer.current = setTimeout(async () => {
       if (publishedRef.current) return;
       setAutoSaveLabel("saving");
       try {
         await updateChapter(chapterId, { title, content, status: "draft" });
+        savedTextRef.current = { title, content };
         setAutoSaveLabel("saved");
         setTimeout(() => setAutoSaveLabel(null), 2500);
       } catch {
         setAutoSaveLabel(null);
       }
     }, 3000);
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+    return () => { if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; } };
   }, [title, content, chapterId]);
 
   const saveDraft = async () => {
@@ -100,14 +115,18 @@ export default function ChapterEditorScreen() {
           content: content.trim(),
           order: nextOrder,
           status: "draft",
+          isPaid,
+          ...(isPaid ? { price: chapterPrice } : {}),
         });
         router.replace({ pathname: "/chapter-editor/[storyId]", params: { storyId, chapterId: newId } });
       } else {
-        await updateChapter(chapterId, { title: title.trim(), content: content.trim(), status: "draft" });
+        const updateData: any = { title: title.trim(), content: content.trim(), status: "draft", isPaid };
+        if (isPaid) updateData.price = chapterPrice;
+        await updateChapter(chapterId, updateData);
         Alert.alert("Taslak kaydedildi");
       }
-    } catch {
-      Alert.alert("Hata", "Kaydedilemedi.");
+    } catch (err: any) {
+      Alert.alert("Hata", `Kaydedilemedi: ${err?.message ?? "Bilinmeyen hata"}`);
     } finally {
       setSaving(false);
     }
@@ -130,7 +149,7 @@ export default function ChapterEditorScreen() {
     setModerationReason(null);
 
     try {
-      const result = await moderateText(content.trim());
+      const result = await moderateText(content.trim(), storyLanguage);
 
       const chapterStatus: Chapter["status"] =
         result.action === "approved"
@@ -152,6 +171,8 @@ export default function ChapterEditorScreen() {
           content: content.trim(),
           order: nextOrder,
           status: chapterStatus,
+          isPaid,
+          ...(isPaid ? { price: chapterPrice } : {}),
         });
         if (
           (result.categories.length || result.reason) &&
@@ -166,13 +187,16 @@ export default function ChapterEditorScreen() {
           });
         }
       } else {
-        await updateChapter(chapterId, {
+        const updateData2: any = {
           title: title.trim(),
           content: content.trim(),
           status: chapterStatus,
+          isPaid,
           ...(result.categories.length ? { moderationCategories: result.categories } : {}),
           ...(result.reason && chapterStatus === "rejected" ? { rejectionReason: result.reason } : {}),
-        });
+        };
+        if (isPaid) updateData2.price = chapterPrice;
+        await updateChapter(chapterId, updateData2);
       }
 
       if (chapterStatus === "rejected") {
@@ -320,12 +344,50 @@ export default function ChapterEditorScreen() {
                        moderationStatus === "pending_review" ? "Moderatör incelemesine gönderildi" :
                        "Bölüm yayınlanamadı"}
                     </Text>
-                    {moderationReason ? (
+                    {moderationStatus === "pending_review" ? (
+                      <Text style={[styles.moderationReason, { color: colors.mutedForeground }]}>
+                        İçeriğin ekibimiz tarafından inceleniyor. Genellikle 24 saat içinde sonuçlanır. Onaylandığında profil sayfanda bildirim alırsın.
+                      </Text>
+                    ) : moderationReason ? (
                       <Text style={[styles.moderationReason, { color: colors.mutedForeground }]}>{moderationReason}</Text>
                     ) : null}
                   </View>
                 </>
               )}
+            </View>
+          )}
+          {/* Ücretli / Ücretsiz seçimi */}
+          <View style={[styles.paidSection, { borderColor: colors.border }]}>
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Bölüm Erişim Türü</Text>
+            <View style={styles.paidToggleRow}>
+              <TouchableOpacity
+                style={[styles.paidToggleBtn, { borderColor: !isPaid ? colors.primary : colors.border, backgroundColor: !isPaid ? colors.primary + "18" : "transparent" }]}
+                onPress={() => setIsPaid(false)}
+              >
+                <Feather name="unlock" size={15} color={!isPaid ? colors.primary : colors.mutedForeground} />
+                <Text style={[styles.paidToggleBtnText, { color: !isPaid ? colors.primary : colors.mutedForeground, fontFamily: !isPaid ? "Inter_600SemiBold" : "Inter_400Regular" }]}>Ücretsiz</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.paidToggleBtn, { borderColor: isPaid ? "#f59e0b" : colors.border, backgroundColor: isPaid ? "#f59e0b18" : "transparent" }]}
+                onPress={() => setIsPaid(true)}
+              >
+                <Feather name="lock" size={15} color={isPaid ? "#f59e0b" : colors.mutedForeground} />
+                <Text style={[styles.paidToggleBtnText, { color: isPaid ? "#f59e0b" : colors.mutedForeground, fontFamily: isPaid ? "Inter_600SemiBold" : "Inter_400Regular" }]}>Ücretli</Text>
+              </TouchableOpacity>
+            </View>
+            {isPaid && (
+              <View style={[styles.priceInfo, { backgroundColor: "#f59e0b12", borderColor: "#f59e0b40" }]}>
+                <Feather name="zap" size={14} color="#f59e0b" />
+                <Text style={[styles.priceInfoText, { color: "#f59e0b" }]}>
+                  Bu bölüm için <Text style={{ fontFamily: "Inter_700Bold" }}>{chapterPrice} jeton</Text> gerekir{" "}
+                  <Text style={{ color: colors.mutedForeground }}>(her 500 kelime = 1 jeton)</Text>
+                </Text>
+              </View>
+            )}
+          </View>
+          {(!chapterId || loadedChapterId) && (
+            <View style={{ marginTop: 12 }}>
+              <ChapterAudioSection chapterId={loadedChapterId ?? undefined} canManage={!!loadedChapterId} />
             </View>
           )}
         </ScrollView>
@@ -443,4 +505,10 @@ const styles = StyleSheet.create({
   },
   banTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
   banReason: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 19 },
+  paidSection: { borderRadius: 12, borderWidth: 1, padding: 14, marginTop: 12, gap: 10 },
+  paidToggleRow: { flexDirection: "row" as const, gap: 10 },
+  paidToggleBtn: { flex: 1, flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "center" as const, gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  paidToggleBtnText: { fontSize: 14 },
+  priceInfo: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, padding: 10, borderRadius: 10, borderWidth: 1 },
+  priceInfoText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 16 },
 });

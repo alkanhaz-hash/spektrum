@@ -6,6 +6,10 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithCredential,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   User,
 } from "firebase/auth";
 import {
@@ -39,6 +43,8 @@ export interface UserProfile {
   status?: string;
   banned?: boolean;
   banReason?: string;
+  accountFrozen?: boolean;
+  accountFrozenAt?: unknown;
   nicknameSet?: boolean;
   jetonBalance?: number;
 }
@@ -56,8 +62,12 @@ export async function registerUser(
   password: string,
   displayName: string,
   birthDate: string,
-  gender: string
+  gender: string,
+  consent: { termsAccepted: boolean; kvkkAcknowledged: boolean }
 ): Promise<User> {
+  if (!consent.termsAccepted || !consent.kvkkAcknowledged) {
+    throw new Error("Kullanıcı Sözleşmesi ve KVKK Aydınlatma Metni onayı gereklidir.");
+  }
   const minDate = new Date();
   minDate.setFullYear(minDate.getFullYear() - 13);
   if (new Date(birthDate) > minDate) {
@@ -89,6 +99,10 @@ export async function registerUser(
     nicknameSet: true,
     birthDate,
     gender,
+    termsAcceptedAt: serverTimestamp(),
+    termsVersion: "2025-06",
+    kvkkNoticeAcknowledgedAt: serverTimestamp(),
+    kvkkNoticeVersion: "2025-06",
   });
   return credential.user;
 }
@@ -126,12 +140,18 @@ export async function loginUser(email: string, password: string): Promise<User> 
     if (!("genre" in data)) patch.genre = "";
     if ("email" in data) patch.email = deleteField();
     if ("emailVerified" in data) patch.emailVerified = deleteField();
+    if (data.accountFrozen === true) {
+      patch.accountFrozen = false;
+      patch.accountFrozenAt = deleteField();
+    }
     if (Object.keys(patch).length > 0) await updateDoc(userRef, patch);
   }
   return credential.user;
 }
 
 export async function logoutUser(): Promise<void> {
+  const { suspendPushForLogout } = await import("./push-notifications");
+  await suspendPushForLogout();
   await signOut(auth);
 }
 
@@ -152,6 +172,83 @@ export async function updateUserProfile(
   await updateDoc(doc(db, "users", uid), { ...data });
 }
 
-export function onAuthChange(callback: (user: User | null) => void) {
+export function onAuthChange(callback: (user: User | null) => void): () => void {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
+}
+
+export async function loginWithGoogleCredential(idToken: string): Promise<User> {
+  const credential = GoogleAuthProvider.credential(idToken);
+  const result = await signInWithCredential(auth, credential);
+  const userRef = doc(db, "users", result.user.uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      uid: result.user.uid,
+      displayName: result.user.displayName || result.user.email?.split("@")[0] || "Kullanıcı",
+      bio: "",
+      avatarUrl: result.user.photoURL || "",
+      coverUrl: "",
+      genre: "",
+      followerCount: 0,
+      followingCount: 0,
+      storyCount: 0,
+      readCount: 0,
+      createdAt: serverTimestamp(),
+      role: "user",
+      nicknameSet: false,
+    });
+  } else {
+    const data = snap.data();
+    const patch: Record<string, unknown> = {};
+    if (!("role" in data)) patch.role = "user";
+    if (!("followerCount" in data)) patch.followerCount = 0;
+    if (!("followingCount" in data)) patch.followingCount = 0;
+    if (!("storyCount" in data)) patch.storyCount = 0;
+    if (!("readCount" in data)) patch.readCount = 0;
+    if (!("bio" in data)) patch.bio = "";
+    if (!("avatarUrl" in data)) patch.avatarUrl = result.user.photoURL || "";
+    if (!("coverUrl" in data)) patch.coverUrl = "";
+    if (Object.keys(patch).length > 0) await updateDoc(userRef, patch);
+  }
+  return result.user;
+}
+
+export async function deleteAccount(password: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Oturum bulunamadı.");
+  if (!user.providerData.some((provider: { providerId: string }) => provider.providerId === "password")) {
+    throw new Error("Bu hesap e-posta ve şifreyle açılmamış. Hesap silme işlemini web sitesindeki Hesabı Sil sayfasından başlat.");
+  }
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+  const idToken = await user.getIdToken(true);
+  const apiBase = process.env.EXPO_PUBLIC_API_BASE ?? "";
+  const response = await fetch(`${apiBase}/api/account`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? "Hesap silme servisine ulaşılamadı. Lütfen tekrar dene.");
+  }
+  await signOut(auth);
+}
+
+export async function freezeAccount(password: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) throw new Error("Oturum bulunamadı.");
+  if (!user.providerData.some((provider: { providerId: string }) => provider.providerId === "password")) {
+    throw new Error("Hesap dondurma şu anda e-posta ve şifreyle açılan hesaplarda kullanılabilir.");
+  }
+  const credential = EmailAuthProvider.credential(user.email, password);
+  await reauthenticateWithCredential(user, credential);
+  await updateDoc(doc(db, "users", user.uid), {
+    accountFrozen: true,
+    accountFrozenAt: serverTimestamp(),
+  });
+  await signOut(auth);
 }

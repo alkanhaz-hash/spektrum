@@ -92,7 +92,7 @@ export default function MessagesPage() {
         toast({ title: "Medya uygun değil", description: "Görselde uygunsuz (cinsel/müstehcen) içerik tespit edildi.", variant: "destructive" });
         return;
       }
-      const url = await uploadMessageMedia(conversationId, file);
+      const url = await uploadMessageMedia(conversationId, user.uid, file);
       await sendMessage({ conversationId, senderId: user.uid, senderName: profile.displayName, senderAvatar: profile.avatarUrl, text: "", mediaUrl: url, mediaType });
     } catch { toast({ title: "Hata", description: "Medya gönderilemedi.", variant: "destructive" }); }
     finally { setSending(false); e.target.value = ""; }

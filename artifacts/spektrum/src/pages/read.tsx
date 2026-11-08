@@ -12,6 +12,9 @@ import {
   Story, Chapter, InlineComment
 } from "@/lib/firestore-service";
 import { useToast } from "@/hooks/use-toast";
+import { useReadingAnalytics } from "@/hooks/use-reading-analytics";
+import { useLocale } from "@/contexts/LocaleContext";
+import ChapterAudioSection from "@/components/ChapterAudioSection";
 
 interface CommentThreadProps {
   paragraphIndex: number;
@@ -29,6 +32,7 @@ interface CommentThreadProps {
 function CommentThread({ paragraphIndex, paragraphAnchor, storyId: _storyId, chapterId: _chapterId, comments, onClose, onAddComment, onLike, onReport, userId }: CommentThreadProps) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useLocale();
 
   // Anchor metin eşleşmesi öncelikli; eski yorumlar index ile eşleşir
   const threadComments = comments.filter(c =>
@@ -51,7 +55,7 @@ function CommentThread({ paragraphIndex, paragraphAnchor, storyId: _storyId, cha
       className="absolute left-0 right-0 mt-2 z-20 bg-card border border-border rounded-xl shadow-2xl shadow-primary/10 p-4"
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-primary">Satır Arası Yorumlar</span>
+        <span className="text-sm font-semibold text-primary">{t("Satır Arası Yorumlar")}</span>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" data-testid="button-close-thread">
           <X className="w-4 h-4" />
         </button>
@@ -59,7 +63,7 @@ function CommentThread({ paragraphIndex, paragraphAnchor, storyId: _storyId, cha
 
       <div className="space-y-3 max-h-60 overflow-y-auto mb-3">
         {threadComments.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-2">İlk yorumu sen yap!</p>
+          <p className="text-xs text-muted-foreground text-center py-2">{t("İlk yorumu sen yap!")}</p>
         )}
         {threadComments.map(c => (
           <div key={c.id} className="flex gap-2">
@@ -112,12 +116,13 @@ function CommentThread({ paragraphIndex, paragraphAnchor, storyId: _storyId, cha
           </button>
         </div>
       )}
-      {!userId && <p className="text-xs text-muted-foreground text-center">Yorum yapmak için <Link href="/auth" className="text-primary hover:underline">giriş yap</Link>.</p>}
+      {!userId && <p className="text-xs text-muted-foreground text-center">{t("Yorum yapmak için")} <Link href="/auth" className="text-primary hover:underline">{t("giriş yap")}</Link>.</p>}
     </motion.div>
   );
 }
 
 export default function ReadPage() {
+  const { t } = useLocale();
   const { storyId, chapterId } = useParams<{ storyId: string; chapterId: string }>();
   const [, setLocation] = useLocation();
   const { user, profile } = useAuth();
@@ -129,6 +134,11 @@ export default function ReadPage() {
   const [loading, setLoading] = useState(true);
   const [openThread, setOpenThread] = useState<number | null>(null);
   const [showToc, setShowToc] = useState(false);
+  const readingContentRef = useReadingAnalytics(
+    storyId, chapterId,
+    !loading && !!chapter && chapter.id === chapterId && chapter.status === "published" && !!story && story.authorId !== user?.uid,
+    openThread !== null || showToc,
+  );
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   // Font boyutu localStorage'de korunuyor — bölümler arası kaybolmaz
@@ -224,15 +234,15 @@ export default function ReadPage() {
         }).catch(() => {});
       }
     } catch {
-      toast({ title: "Yorum gönderilemedi", description: "Lütfen tekrar dene.", variant: "destructive" });
+      toast({ title: t("Yorum gönderilemedi"), description: t("Lütfen tekrar dene."), variant: "destructive" });
     }
   };
 
   const handleReport = async (commentId: string) => {
-    if (!user) { toast({ title: "Giriş gerekli" }); return; }
+    if (!user) { toast({ title: t("Giriş gerekli") }); return; }
     try {
-      await reportContent({ reportedId: commentId, reportedType: "comment", reporterId: user.uid });
-      toast({ title: "Yorum bildirildi", description: "Moderatörler inceleyecek." });
+      await reportContent({ reportedId: commentId, reportedType: "comment", reporterId: user.uid, contextId: storyId ?? undefined });
+      toast({ title: t("Yorum bildirildi"), description: t("Moderatörler inceleyecek.") });
     } catch {
       toast({ title: "Bildirilemedi", variant: "destructive" });
     }
@@ -259,14 +269,14 @@ export default function ReadPage() {
         }
       }
     } catch {
-      toast({ title: "İşlem başarısız", variant: "destructive" });
+      toast({ title: t("İşlem başarısız"), variant: "destructive" });
     } finally {
       setFollowLoading(false);
     }
   };
 
   const handleLike = async (commentId: string, liked: boolean) => {
-    if (!user) { toast({ title: "Giriş gerekli", description: "Beğenmek için giriş yapmalısın." }); return; }
+    if (!user) { toast({ title: t("Giriş gerekli"), description: t("Beğenmek için giriş yapmalısın.") }); return; }
     await likeInlineComment(commentId, user.uid, liked);
     setComments(prev => prev.map(c => c.id === commentId
       ? { ...c, likeCount: c.likeCount + (liked ? 1 : -1), likedBy: liked ? [...(c.likedBy || []), user.uid] : (c.likedBy || []).filter(id => id !== user.uid) }
@@ -290,7 +300,7 @@ export default function ReadPage() {
   }
 
   if (!chapter) {
-    return <AppLayout><div className="text-center py-20 text-muted-foreground">Bölüm bulunamadı.</div></AppLayout>;
+    return <AppLayout><div className="text-center py-20 text-muted-foreground">{t("Bölüm bulunamadı.")}</div></AppLayout>;
   }
 
   return (
@@ -337,7 +347,7 @@ export default function ReadPage() {
           )}
 
           <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground flex-wrap">
-            <span>Bölüm {chapter.order}</span>
+            <span>{t("Bölüm")} {chapter.order}</span>
             <span>{chapter.wordCount.toLocaleString("tr-TR")} kelime</span>
             <div className="flex items-center gap-2 ml-auto">
               {/* İçindekiler */}
@@ -345,9 +355,9 @@ export default function ReadPage() {
                 <button
                   onClick={() => setShowToc(v => !v)}
                   className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border border-border hover:border-primary/50 transition-colors"
-                  title="İçindekiler"
+                  title={t("İçindekiler")}
                 >
-                  <List className="w-3.5 h-3.5" /> İçindekiler
+                  <List className="w-3.5 h-3.5" /> {t("İçindekiler")}
                 </button>
                 <AnimatePresence>
                   {showToc && (
@@ -378,14 +388,14 @@ export default function ReadPage() {
                   onClick={async () => {
                     if (!chapterId) return;
                     try {
-                      await reportContent({ reportedId: chapterId, reportedType: "chapter", reporterId: user.uid });
-                      toast({ title: "Bölüm şikayet edildi", description: "Moderatörler inceleyecek." });
+                      await reportContent({ reportedId: chapterId, reportedType: "chapter", reporterId: user.uid, contextId: storyId ?? undefined });
+                      toast({ title: t("Bölüm şikayet edildi"), description: t("Moderatörler inceleyecek.") });
                     } catch {
-                      toast({ title: "Şikayet gönderilemedi", variant: "destructive" });
+                      toast({ title: t("Şikayet gönderilemedi"), variant: "destructive" });
                     }
                   }}
                   className="text-muted-foreground/50 hover:text-red-400 transition-colors p-1"
-                  title="Bölümü şikayet et"
+                  title={t("Bölümü şikayet et")}
                 >
                   <Flag className="w-3.5 h-3.5" />
                 </button>
@@ -394,8 +404,13 @@ export default function ReadPage() {
           </div>
         </div>
 
+        <div className="mb-6">
+          <ChapterAudioSection key={chapter.id} chapterId={chapter.id} />
+        </div>
+
         {/* Content with inline comments */}
-        <div className="space-y-1" onClick={() => setShowToc(false)}>
+        <p className="text-xs text-muted-foreground mb-4">{t("Okuma ilerleyişi, hesap bilgisi olmadan yazara toplu oturum istatistiği olarak sunulur.")}</p>
+        <div ref={readingContentRef} className="space-y-1" onClick={() => setShowToc(false)}>
           {paragraphs.map((para, idx) => {
             const anchor = getParagraphAnchor(para);
             return (
@@ -445,20 +460,20 @@ export default function ReadPage() {
           {prevChapter ? (
             <Link href={`/read/${storyId}/${prevChapter.id}`}>
               <button className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors" data-testid="button-prev-chapter">
-                <ChevronLeft className="w-4 h-4" /> Önceki Bölüm
+                <ChevronLeft className="w-4 h-4" /> {t("Önceki Bölüm")}
               </button>
             </Link>
           ) : <div />}
           {nextChapter ? (
             <Link href={`/read/${storyId}/${nextChapter.id}`}>
               <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-sm transition-all hover:shadow-[0_0_16px_hsl(var(--primary)/0.4)]" data-testid="button-next-chapter">
-                Sonraki Bölüm <ChevronRight className="w-4 h-4" />
+                {t("Sonraki Bölüm")} <ChevronRight className="w-4 h-4" />
               </button>
             </Link>
           ) : (
             <div className="flex items-center gap-3 flex-wrap justify-end">
               <Link href={`/story/${storyId}`}>
-                <button className="px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors">Hikayeye Dön</button>
+                <button className="px-4 py-2 rounded-xl border border-border hover:border-primary/50 text-sm transition-colors">{t("Hikayeye Dön")}</button>
               </Link>
             </div>
           )}
@@ -467,8 +482,8 @@ export default function ReadPage() {
         {/* Son bölüm tebrik mesajı */}
         {!nextChapter && (
           <div className="mt-8 p-5 rounded-2xl border border-primary/20 bg-primary/5 text-center space-y-2">
-            <p className="text-lg font-serif font-semibold">🎉 Hikayenin sonuna ulaştın!</p>
-            <p className="text-sm text-muted-foreground">Bu hikayeyi beğendiysen yazarı takip etmeyi unutma.</p>
+            <p className="text-lg font-serif font-semibold">🎉 {t("Hikayenin sonuna ulaştın!")}</p>
+            <p className="text-sm text-muted-foreground">{t("Bu hikayeyi beğendiysen yazarı takip etmeyi unutma.")}</p>
           </div>
         )}
       </div>

@@ -34,13 +34,13 @@ export async function uploadStoryCover(uid: string, storyId: string, file: File)
   return getDownloadURL(storageRef);
 }
 
-export async function uploadMessageMedia(conversationId: string, file: File): Promise<string> {
+export async function uploadMessageMedia(conversationId: string, uid: string, file: File): Promise<string> {
   const isGif = file.type === "image/gif";
   const ext = isGif ? "gif" : "webp";
   const uploadBlob: Blob = isGif ? file : await convertToWebP(file);
   // BUG FIX: uploadBlob'un gerçek MIME tipini kullan (WebP dönüşümü sonrası file.type geçersiz olur)
   const contentType = isGif ? "image/gif" : "image/webp";
-  const storageRef = ref(storage, `messages/${conversationId}/${Date.now()}.${ext}`);
+  const storageRef = ref(storage, `messages/${conversationId}/${uid}/${Date.now()}.${ext}`);
   await uploadBytes(storageRef, uploadBlob, { contentType });
   return getDownloadURL(storageRef);
 }

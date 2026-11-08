@@ -48,16 +48,29 @@ service cloud.firestore {
       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == true;
     }
 
+    function accountIsActive() {
+      return isSignedIn()
+          && request.auth.token.get('accountDeletionPending', false) != true
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('accountDeletionPending', false) != true;
+    }
+
+    function canCreateInitialProfile(uid) {
+      return isOwner(uid)
+          && request.auth.token.get('accountDeletionPending', false) != true
+          && !exists(/databases/$(database)/documents/users/$(uid));
+    }
+
     // ─── USERS ──────────────────────────────────────────────────────────────
     // Profiller herkese açık okunur. Kullanıcı yalnızca kendi profilini yazar
     // ve KENDİ ROLÜNÜ / BAN DURUMUNU DEĞİŞTİREMEZ (yetki yükseltme engellenir).
     match /users/{uid} {
       allow read: if true;
-      allow create: if isOwner(uid) && request.resource.data.role == 'user';
+      allow create: if canCreateInitialProfile(uid) && request.resource.data.role == 'user';
       // Kullanıcı kendi profilini günceller ama rolünü ve ban durumunu DEĞİŞTİREMEZ.
       // Moderatörler yalnızca banned/banReason alanlarını yazabilir.
       // Rol değişikliği YALNIZCA backend Admin SDK endpoint'i üzerinden yapılabilir.
-      allow update: if (isOwner(uid)
+      allow update: if accountIsActive() && ((isOwner(uid)
                         && request.resource.data.get('role', 'user') == resource.data.get('role', 'user')
                         && request.resource.data.get('banned', false) == resource.data.get('banned', false)
                         && request.resource.data.get('banReason', '') == resource.data.get('banReason', '')
@@ -78,17 +91,18 @@ service cloud.firestore {
                     || (isSignedIn()
                         && changedKeys().hasOnly(['followerCount', 'followingCount'])
                         && counterDeltaOk('followerCount')
-                        && counterDeltaOk('followingCount'));
-      allow delete: if isModerator();
+                         && counterDeltaOk('followingCount')));
+      allow delete: if accountIsActive() && (isOwner(uid) || isModerator());
     }
 
     // ─── STORIES ────────────────────────────────────────────────────────────
     // Sahibi tam yazabilir; diğer kullanıcılar yalnızca sayaç alanlarını
     // (beğeni/yorum/okunma) güncelleyebilir — içerik değiştiremez.
+    // readCount: anonim kullanıcılar da sayfa ziyaretinde artırabilir.
     match /stories/{storyId} {
       allow read: if true;
-      allow create: if isSignedIn() && !isBanned() && request.resource.data.authorId == request.auth.uid;
-      allow update: if (isSignedIn()
+      allow create: if accountIsActive() && !isBanned() && request.resource.data.authorId == request.auth.uid;
+      allow update: if (accountIsActive() && ((isSignedIn()
                         && resource.data.authorId == request.auth.uid
                         && request.resource.data.authorId == resource.data.authorId)
                     || isModerator()
@@ -96,8 +110,16 @@ service cloud.firestore {
                         && changedKeys().hasOnly(['likeCount', 'commentCount', 'readCount'])
                         && counterDeltaOk('likeCount')
                         && counterDeltaOk('commentCount')
-                        && counterDeltaOk('readCount'));
-      allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
+                        && counterDeltaOk('readCount'))
+                    // Anonim dahil herkes readCount'u yalnızca +1 artırabilir
+                    || (isSignedIn()
+                        && changedKeys().hasOnly(['readCount'])
+                        && request.resource.data.readCount == resource.data.readCount + 1)))
+                    // Anonim ziyaretçinin tek izinli yazması readCount +1'dir.
+                    || (!isSignedIn()
+                        && changedKeys().hasOnly(['readCount'])
+                        && request.resource.data.readCount == resource.data.readCount + 1);
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator());
     }
 
     // ─── CHAPTERS ───────────────────────────────────────────────────────────
@@ -111,25 +133,25 @@ service cloud.firestore {
       allow read: if resource.data.status == 'published'
                   || isModerator()
                   || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid);
-      allow create: if isSignedIn()
+      allow create: if accountIsActive()
                     && !isBanned()
                     && storyAuthor(request.resource.data.storyId) == request.auth.uid
                     && request.resource.data.status in ['draft', 'pending_review'];
-      allow update: if isModerator()
+      allow update: if accountIsActive() && (isModerator()
                     || (isSignedIn()
                         && storyAuthor(resource.data.storyId) == request.auth.uid
                         && request.resource.data.storyId == resource.data.storyId
                         && request.resource.data.status in ['draft', 'pending_review'])
-                    || (isSignedIn() && changedKeys().hasOnly(['readCount']) && counterDeltaOk('readCount'));
-      allow delete: if isModerator()
-                    || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid);
+                    || (isSignedIn() && changedKeys().hasOnly(['readCount']) && counterDeltaOk('readCount')));
+      allow delete: if accountIsActive() && (isModerator()
+                    || (isSignedIn() && storyAuthor(resource.data.storyId) == request.auth.uid));
     }
 
     // ─── STORY LIKES ────────────────────────────────────────────────────────
     match /storyLikes/{likeId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isModerator();
+      allow create: if accountIsActive() && request.resource.data.userId == request.auth.uid;
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.userId == request.auth.uid) || isModerator());
     }
 
     // ─── INLINE COMMENTS ────────────────────────────────────────────────────
@@ -137,24 +159,24 @@ service cloud.firestore {
     // UID'sini ekleyip çıkarabilir — başkası adına beğeni/geri alma engellenir.
     match /inlineComments/{commentId} {
       allow read: if true;
-      allow create: if isSignedIn() && !isBanned() && request.resource.data.authorId == request.auth.uid;
-      allow update: if (isSignedIn() && resource.data.authorId == request.auth.uid)
+      allow create: if accountIsActive() && !isBanned() && request.resource.data.authorId == request.auth.uid;
+      allow update: if accountIsActive() && ((isSignedIn() && resource.data.authorId == request.auth.uid)
                     || isModerator()
                     || (isSignedIn()
                         && changedKeys().hasOnly(['likeCount', 'likedBy'])
                         && counterDeltaOk('likeCount')
                         && resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet())
                              .union(request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()))
-                           == [request.auth.uid].toSet());
-      allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
+                           == [request.auth.uid].toSet()));
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator());
     }
 
     // ─── FOLLOWS ────────────────────────────────────────────────────────────
     // Takip eden kendi kaydını oluşturur/siler. ID formatı: {followerId}_{followedId}
     match /follows/{followId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.followerId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.followerId == request.auth.uid;
+      allow create: if accountIsActive() && request.resource.data.followerId == request.auth.uid;
+      allow delete: if accountIsActive() && resource.data.followerId == request.auth.uid;
     }
 
     // ─── CONVERSATIONS ──────────────────────────────────────────────────────
@@ -165,11 +187,11 @@ service cloud.firestore {
     // getDoc izin hatasını önler (getOrCreateConversation akışı).
     match /conversations/{conversationId} {
       allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.participants);
-      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
-      allow update: if isSignedIn()
+      allow create: if accountIsActive() && request.auth.uid in request.resource.data.participants;
+      allow update: if accountIsActive()
                     && request.auth.uid in resource.data.participants
                     && changedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount']);
-      allow delete: if isModerator();
+      allow delete: if accountIsActive() && isModerator();
     }
 
     // ─── MESSAGES ───────────────────────────────────────────────────────────
@@ -177,72 +199,153 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read: if isSignedIn()
                   && request.auth.uid in get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participants;
-      allow create: if isSignedIn()
+      allow create: if accountIsActive()
                     && !isBanned()
                     && request.resource.data.senderId == request.auth.uid
                     && request.auth.uid in get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participants;
       // Gönderen kendi mesajını düzenleyebilir ama gönderen kimliğini/adını ve
       // konuşmayı DEĞİŞTİREMEZ (başka konuşmaya taşıma / kimlik sahteciliği engellenir).
-      allow update: if (isSignedIn()
+      allow update: if accountIsActive() && ((isSignedIn()
                         && resource.data.senderId == request.auth.uid
                         && request.resource.data.senderId == resource.data.senderId
                         && request.resource.data.senderName == resource.data.senderName
                         && request.resource.data.conversationId == resource.data.conversationId)
-                    || isModerator();
-      allow delete: if (isSignedIn() && resource.data.senderId == request.auth.uid) || isModerator();
+                    || isModerator());
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.senderId == request.auth.uid) || isModerator());
     }
 
     // ─── TALENT PORTFOLIOS ──────────────────────────────────────────────────
     match /talentPortfolios/{portfolioId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid)
+      allow create: if accountIsActive() && request.resource.data.userId == request.auth.uid;
+      allow update: if accountIsActive() && ((isSignedIn() && resource.data.userId == request.auth.uid)
                     || isModerator()
-                    || (isSignedIn() && changedKeys().hasOnly(['likeCount']) && counterDeltaOk('likeCount'));
-      allow delete: if (isSignedIn() && resource.data.userId == request.auth.uid) || isModerator();
+                    || (isSignedIn() && changedKeys().hasOnly(['likeCount']) && counterDeltaOk('likeCount')));
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.userId == request.auth.uid) || isModerator());
     }
 
     // ─── NARRATION REQUESTS ─────────────────────────────────────────────────
     // Anlatıcı talep oluşturur; yalnızca hikaye sahibi onaylar/reddeder.
     match /narrationRequests/{requestId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.narratorId == request.auth.uid;
-      allow update: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
-      allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator();
+      allow create: if accountIsActive() && request.resource.data.narratorId == request.auth.uid;
+      allow update: if accountIsActive() && ((isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator());
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.authorId == request.auth.uid) || isModerator());
     }
 
     // ─── NARRATIONS ─────────────────────────────────────────────────────────
     match /narrations/{narrationId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.narratorId == request.auth.uid;
-      allow delete: if (isSignedIn() && resource.data.narratorId == request.auth.uid) || isModerator();
+      allow create: if accountIsActive() && request.resource.data.narratorId == request.auth.uid;
+      allow delete: if accountIsActive() && ((isSignedIn() && resource.data.narratorId == request.auth.uid) || isModerator());
     }
 
     // ─── ANONYMOUS QUESTIONS ────────────────────────────────────────────────
-    // Soru gönderen kimliği saklanmaz (anonim). Cevaplanmış sorular herkese
-    // açık; cevaplanmamışları yalnızca hedef kullanıcı görür ve cevaplar.
+    // Kimlik ayrı belgede tutulur. Eski senderUid içeren kayıtlar, sunucudaki
+    // taşıma aracıyla dönüştürülmeden okunamaz. Kurallar alan gizleyemez.
+    function qaSenderAllowed() {
+      return isSignedIn()
+          && request.auth.token.get('accountDeletionPending', false) != true
+          && ((request.auth.token.firebase.sign_in_provider == 'anonymous'
+              && !exists(/databases/$(database)/documents/users/$(request.auth.uid)))
+              || (accountIsActive() && !isBanned()));
+    }
+
+    function qaRateAllowed(questionId) {
+      let ratePath = /databases/$(database)/documents/anonymousQuestionLimits/$(request.auth.uid);
+      return getAfter(ratePath).data.lastQuestionId == questionId
+          && getAfter(ratePath).data.lastSentAt == request.time
+          && (!exists(ratePath)
+              || get(ratePath).data.lastSentAt <= request.time - duration.value(30, 's'));
+    }
+
+    // A fresh collection prevents permissively-created legacy documents from
+    // gaining public access merely by carrying a forged privacyVersion field.
     match /anonymousQuestions/{questionId} {
-      allow read: if resource.data.isAnswered == true || isOwner(resource.data.targetUid);
-      allow create: if isSignedIn() && request.resource.data.isAnswered == false;
-      allow update: if isOwner(resource.data.targetUid);
-      allow delete: if isOwner(resource.data.targetUid) || isModerator();
+      allow read, write: if false;
+    }
+    match /anonymousQuestionsV2/{questionId} {
+      allow read: if resource.data.get('privacyVersion', 0) == 2
+          && (resource.data.isAnswered == true || isOwner(resource.data.targetUid));
+      allow create: if qaSenderAllowed()
+          && request.resource.data.keys().hasOnly(['targetUid', 'question', 'isAnswered', 'privacyVersion', 'createdAt'])
+          && request.resource.data.privacyVersion == 2
+          && request.resource.data.isAnswered == false
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.targetUid is string
+          && request.resource.data.targetUid != request.auth.uid
+          && exists(/databases/$(database)/documents/users/$(request.resource.data.targetUid))
+          && get(/databases/$(database)/documents/users/$(request.resource.data.targetUid)).data.get('banned', false) != true
+          && get(/databases/$(database)/documents/users/$(request.resource.data.targetUid)).data.get('accountDeletionPending', false) != true
+          && request.resource.data.question is string
+          && request.resource.data.question.size() > 0
+          && request.resource.data.question.size() <= 280
+          && getAfter(/databases/$(database)/documents/anonymousQuestionIdentities/$(questionId)).data.senderUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/anonymousQuestionIdentities/$(questionId)).data.targetUid == request.resource.data.targetUid
+          && qaRateAllowed(questionId);
+      allow update: if accountIsActive() && !isBanned() && isOwner(resource.data.targetUid)
+          && resource.data.get('privacyVersion', 0) == 2
+          && changedKeys().hasOnly(['answer', 'isAnswered', 'answeredAt'])
+          && request.resource.data.isAnswered == true
+          && request.resource.data.answer is string
+          && request.resource.data.answer.size() > 0
+          && request.resource.data.answer.size() <= 1000
+          && request.resource.data.answeredAt == request.time;
+      allow delete: if accountIsActive() && (isOwner(resource.data.targetUid) || isModerator())
+          && !existsAfter(/databases/$(database)/documents/anonymousQuestionIdentities/$(questionId));
+    }
+
+    match /anonymousQuestionIdentities/{questionId} {
+      // No client (including recipient/moderator) may read sender identity.
+      // Authorized internal processing uses Admin SDK, never a public response.
+      allow read, update: if false;
+      allow create: if qaSenderAllowed()
+          && request.resource.data.keys().hasOnly(['senderUid', 'targetUid', 'createdAt'])
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && !exists(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId))
+          && getAfter(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId)).data.targetUid == request.resource.data.targetUid
+          && getAfter(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId)).data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId)).data.privacyVersion == 2;
+      allow delete: if accountIsActive()
+          && (isOwner(get(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId)).data.targetUid) || isModerator())
+          && !existsAfter(/databases/$(database)/documents/anonymousQuestionsV2/$(questionId));
+    }
+
+    match /anonymousQuestionLimits/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if qaSenderAllowed() && isOwner(uid)
+          && request.resource.data.keys().hasOnly(['lastSentAt', 'lastQuestionId'])
+          && request.resource.data.lastSentAt == request.time
+          && request.resource.data.lastQuestionId is string
+          && !exists(/databases/$(database)/documents/anonymousQuestionsV2/$(request.resource.data.lastQuestionId))
+          && getAfter(/databases/$(database)/documents/anonymousQuestionIdentities/$(request.resource.data.lastQuestionId)).data.senderUid == uid
+          && getAfter(/databases/$(database)/documents/anonymousQuestionsV2/$(request.resource.data.lastQuestionId)).data.createdAt == request.time
+          && (!exists(/databases/$(database)/documents/anonymousQuestionLimits/$(uid))
+              || resource.data.lastSentAt <= request.time - duration.value(30, 's'));
+      allow delete: if false;
     }
 
     // ─── BOOKMARKS ──────────────────────────────────────────────────────────
     match /bookmarks/{bookmarkId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if accountIsActive() && request.resource.data.userId == request.auth.uid;
+      allow delete: if accountIsActive() && resource.data.userId == request.auth.uid;
     }
 
     // ─── NOTIFICATIONS ──────────────────────────────────────────────────────
+    match /pushDevices/{id} { allow read, write: if false; }
+    match /pushQueue/{id} { allow read, write: if false; }
+    match /pushDeliveries/{id} { allow read, write: if false; }
+    match /pushChapterPublications/{id} { allow read, write: if false; }
+    match /pushRateLimits/{id} { allow read, write: if false; }
     match /notifications/{notifId} {
       allow read: if isSignedIn() && resource.data.recipientId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      allow update: if isSignedIn()
+      allow create: if accountIsActive() && request.resource.data.senderId == request.auth.uid;
+      allow update: if accountIsActive()
                     && resource.data.recipientId == request.auth.uid
                     && changedKeys().hasOnly(['read']);
-      allow delete: if isSignedIn() && resource.data.recipientId == request.auth.uid;
+      allow delete: if accountIsActive() && resource.data.recipientId == request.auth.uid;
     }
 
     // ─── BLOCKS ─────────────────────────────────────────────────────────────
@@ -252,17 +355,18 @@ service cloud.firestore {
                   && (resource == null
                       || resource.data.blockerId == request.auth.uid
                       || resource.data.blockedId == request.auth.uid);
-      allow create: if isSignedIn()
+      allow create: if accountIsActive()
                     && request.resource.data.blockerId == request.auth.uid;
-      allow delete: if isSignedIn()
+      allow delete: if accountIsActive()
                     && resource.data.blockerId == request.auth.uid;
     }
 
     // ─── REPORTS ────────────────────────────────────────────────────────────
     // Herkes şikayet oluşturabilir; yalnızca moderatörler okur ve günceller.
     match /reports/{reportId} {
-      allow create: if isSignedIn();
-      allow read, update: if isModerator();
+      allow create: if accountIsActive();
+      allow read: if isModerator();
+      allow update: if accountIsActive() && isModerator();
     }
 
     // ─── JETON İŞLEMLERİ ────────────────────────────────────────────────────
@@ -274,7 +378,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
       // İstemci tarafı harcama kaydı: yalnızca kendi UID'si, type "spend" veya "earn",
       // amount pozitif olmalı.
-      allow create: if isSignedIn()
+      allow create: if accountIsActive()
                     && request.resource.data.uid == request.auth.uid
                     && request.resource.data.amount > 0
                     && request.resource.data.type in ['spend', 'earn', 'refund'];
@@ -287,15 +391,33 @@ service cloud.firestore {
     // giriş yapmış kullanıcı kendi UID'sini ekleyerek güncelleyebilir.
     match /statuses/{statusId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn()
+      allow create: if accountIsActive()
                     && !isBanned()
                     && request.resource.data.uid == request.auth.uid;
-      allow update: if (isSignedIn() && resource.data.uid == request.auth.uid)
+      allow update: if accountIsActive() && ((isSignedIn() && resource.data.uid == request.auth.uid)
                     || (isSignedIn()
                         && changedKeys().hasOnly(['viewedBy'])
                         && request.resource.data.viewedBy.toSet().difference(resource.data.viewedBy.toSet())
-                             == [request.auth.uid].toSet());
-      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+                             == [request.auth.uid].toSet()));
+      allow delete: if accountIsActive() && resource.data.uid == request.auth.uid;
+    }
+
+    // Voting ballots (identity) and tallies are server-only. Public results use the API.
+    match /weeklyStoryBallots/{ballotId} {
+      allow read, write: if false;
+    }
+    match /weeklyStoryVotes/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reading-session telemetry is server-only; authors receive aggregate API reports.
+    match /readingAnalytics/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Ses sürümü ve özel Storage yolu yalnızca yetkili API tarafından yönetilir.
+    match /chapterAudio/{chapterId} {
+      allow read, write: if false;
     }
 
     // ─── DEFAULT DENY ───────────────────────────────────────────────────────

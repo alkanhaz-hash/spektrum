@@ -1,0 +1,8 @@
+{
+  "name": "@workspace/story-reactions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./press-gate": "./src/press-gate.ts" },
+  "dependencies": { "firebase": "^12.14.0" }
+}

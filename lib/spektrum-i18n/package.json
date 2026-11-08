@@ -1,0 +1,7 @@
+{
+  "name": "@workspace/spektrum-i18n",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" }
+}

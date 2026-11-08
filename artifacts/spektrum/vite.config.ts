@@ -3,33 +3,18 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { mobilePreviewProxy } from "./scripts/mobile-preview-proxy";
 
 const rawPort = process.env.PORT;
+const port = rawPort ? Number(rawPort) : 3000;
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,
   plugins: [
-    react(),
+    mobilePreviewProxy(),
+    react({ babel: { plugins: [path.resolve(import.meta.dirname, "../../lib/spektrum-i18n/babel.cjs")] } }),
     tailwindcss(),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
@@ -63,6 +48,15 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Local test infrastructure only; Vite's dev proxy is absent from builds.
+    proxy: {
+      "/identitytoolkit.googleapis.com": { target: "http://127.0.0.1:19099", changeOrigin: true },
+      "/securetoken.googleapis.com": { target: "http://127.0.0.1:19099", changeOrigin: true },
+      [`${basePath}__qa-firestore`]: {
+        target: "http://127.0.0.1:18081", changeOrigin: true,
+        rewrite: value => value.replace(`${basePath}__qa-firestore`, ""),
+      },
+    },
     fs: {
       strict: true,
     },

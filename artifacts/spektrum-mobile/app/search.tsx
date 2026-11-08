@@ -98,7 +98,10 @@ function UserRow({ user }: { user: UserSearchResult }) {
 
 // ─── Ana Ekran ────────────────────────────────────────────────────────────────
 
+import { useLocale } from "@/contexts/LocaleContext";
+
 export default function SearchScreen() {
+  const { t: ui } = useLocale();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
@@ -190,7 +193,7 @@ export default function SearchScreen() {
               color={tab === t.key ? colors.primary : colors.mutedForeground}
             />
             <Text style={[styles.tabLabel, { color: tab === t.key ? colors.primary : colors.mutedForeground }]}>
-              {t.label}
+              {ui(t.label)}
             </Text>
             {searched && (
               <View style={[styles.countBadge, { backgroundColor: colors.primary + "22" }]}>
