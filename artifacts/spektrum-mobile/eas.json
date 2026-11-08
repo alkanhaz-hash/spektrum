@@ -31,7 +31,7 @@
       "extends": "production",
       "env": {
         "SPEKTRUM_ANDROID_TARGET": "existing-play",
-        "SPEKTRUM_ANDROID_VERSION_CODE": "21"
+        "SPEKTRUM_ANDROID_VERSION_CODE": "22"
       }
     }
   },
