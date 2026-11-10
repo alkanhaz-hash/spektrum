@@ -62,6 +62,49 @@ router.patch("/users/:uid/role", async (req, res) => {
   }
 });
 
+// ─── POST /api/admin/users/emails ────────────────────────────────────────────
+// E-posta adresleri public Firestore profillerinde tutulmaz. Yalnızca admin,
+// ekranda görüntülediği kullanıcılar için Auth'tan toplu olarak isteyebilir.
+router.post("/users/emails", async (req, res) => {
+  const callerUid = await verifyCallerUid(req.headers.authorization);
+  if (!callerUid) {
+    res.status(401).json({ error: "Geçersiz veya eksik ID token" });
+    return;
+  }
+
+  try {
+    const callerRole = await getUserRole(callerUid);
+    if (callerRole !== "admin") {
+      res.status(403).json({ error: "Bu işlem için admin yetkisi gerekli." });
+      return;
+    }
+
+    const requestedUids: unknown = (req.body as { uids?: unknown } | undefined)?.uids;
+    if (
+      !Array.isArray(requestedUids)
+      || requestedUids.length > 100
+      || requestedUids.some(uid => typeof uid !== "string" || uid.length < 1 || uid.length > 128)
+    ) {
+      res.status(400).json({ error: "En fazla 100 geçerli kullanıcı kimliği gönderilebilir." });
+      return;
+    }
+
+    const uids = [...new Set(requestedUids as string[])];
+    const emails: Record<string, string> = Object.fromEntries(uids.map(uid => [uid, ""]));
+    if (uids.length > 0) {
+      const result = await adminAuth().getUsers(uids.map(uid => ({ uid })));
+      for (const user of result.users) {
+        emails[user.uid] = user.email ?? "";
+      }
+    }
+
+    res.json({ emails });
+  } catch (err) {
+    req.log.error({ err }, "Yönetici kullanıcı e-postaları alınamadı");
+    res.status(500).json({ error: "Sunucu hatası" });
+  }
+});
+
 // ─── GET /api/admin/users/search?q=<term> ────────────────────────────────────
 // displayName + e-posta araması. Admin SDK Auth + Firestore birleştirir.
 

@@ -26,6 +26,7 @@ import {
   unbanUser,
   searchUsersForMod,
   getAllUsersForMod,
+  getUserEmailsForMod,
   setUserRole,
   getUserById,
   getInlineCommentById,
@@ -829,9 +830,14 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   const [reload, setReload] = useState(0);
   const [visibleCount, setVisibleCount] = useState(50);
   const [saving, setSaving] = useState<string | null>(null);
+  const [emailByUid, setEmailByUid] = useState<Record<string, string>>({});
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [emailRetry, setEmailRetry] = useState(0);
 
   useEffect(() => {
     setLoading(true); setError(""); setResults([]); setVisibleCount(50);
+    setEmailByUid({}); setEmailError("");
     let cancelled = false;
     void (async () => {
       try {
@@ -849,6 +855,25 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   const needle = term.trim().toLocaleLowerCase("tr");
   const filtered = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
     || u.uid.toLocaleLowerCase("tr").includes(needle));
+  const visibleUidKey = filtered.slice(0, visibleCount).map(u => u.uid).join(",");
+
+  useEffect(() => {
+    const uids = visibleUidKey ? visibleUidKey.split(",") : [];
+    const missing = uids.filter(uid => !Object.prototype.hasOwnProperty.call(emailByUid, uid));
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    setEmailLoading(true);
+    setEmailError("");
+    void getUserEmailsForMod(missing).then(emails => {
+      if (!cancelled) setEmailByUid(prev => ({ ...prev, ...emails }));
+    }).catch(() => {
+      if (!cancelled) setEmailError("E-posta adresleri alınamadı. Yönetici bağlantısını kontrol edip yeniden dene.");
+    }).finally(() => {
+      if (!cancelled) setEmailLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [visibleUidKey, emailRetry]);
 
   const handleRole = async (u: UserSummary, newRole: "user" | "moderator" | "admin") => {
     if (u.uid === currentUid) { Alert.alert("Hata", "Kendi rolünü değiştiremezsin."); return; }
@@ -886,6 +911,11 @@ function UsersTab({ currentUid }: { currentUid: string }) {
       {loading && <ActivityIndicator color={colors.primary} />}
       {error ? <Text accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</Text> : null}
       {!loading && !error && <Text style={{ color: colors.mutedForeground }}>{filtered.length} / {results.length} kullanıcı</Text>}
+      {!loading && !error && emailError ? (
+        <TouchableOpacity onPress={() => setEmailRetry(n => n + 1)} accessibilityRole="button">
+          <Text style={{ color: colors.destructive }}>{emailError} Yeniden dene</Text>
+        </TouchableOpacity>
+      ) : null}
       {!loading && !error && filtered.length === 0 && (
         <Text style={[bn.noResult, { color: colors.mutedForeground }]}>{needle ? "Aramana uygun kullanıcı bulunamadı." : "Henüz kayıtlı kullanıcı yok."}</Text>
       )}
@@ -901,7 +931,11 @@ function UsersTab({ currentUid }: { currentUid: string }) {
             )}
             <View style={{ flex: 1 }}>
               <Text style={[bn.userName, { color: colors.foreground }]}>{u.displayName}</Text>
-              <Text selectable style={{ color: colors.mutedForeground, fontSize: 11 }}>{u.uid}</Text>
+              <Text selectable style={{ color: colors.mutedForeground, fontSize: 11 }}>
+                {Object.prototype.hasOwnProperty.call(emailByUid, u.uid)
+                  ? emailByUid[u.uid] || "E-posta bulunamadı"
+                  : emailError ? "E-posta alınamadı" : emailLoading ? "E-posta yükleniyor..." : "E-posta bekleniyor"}
+              </Text>
               <Text style={[bn.roleBadgeText, { color: colors.mutedForeground, marginTop: 2 }]}>{ROLE_LABELS[u.role] ?? u.role}</Text>
             </View>
             {saving === u.uid && <ActivityIndicator size="small" color={colors.primary} />}
@@ -934,7 +968,9 @@ function UsersTab({ currentUid }: { currentUid: string }) {
         </View>
       ))}
       {!loading && !error && visibleCount < filtered.length && <TouchableOpacity onPress={() => setVisibleCount(n => n + 50)} accessibilityRole="button">
-        <Text style={{ color: colors.primary, textAlign: "center", padding: 12 }}>Daha fazla göster ({filtered.length - visibleCount})</Text>
+        <Text style={{ color: colors.primary, textAlign: "center", padding: 12 }}>
+          Daha fazla göster ({filtered.length - visibleCount}){emailLoading ? " · E-postalar yükleniyor..." : ""}
+        </Text>
       </TouchableOpacity>}
     </View>
   );

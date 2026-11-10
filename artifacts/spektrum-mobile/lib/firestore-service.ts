@@ -19,7 +19,7 @@ import {
   arrayRemove,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import { hasStoryLike, setStoryLike } from "@workspace/story-reactions";
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
@@ -834,10 +834,37 @@ export async function unbanUser(uid: string): Promise<void> {
 export interface UserSummary {
   uid: string;
   displayName: string;
+  email?: string;
   avatarUrl: string;
   role: "user" | "moderator" | "admin";
   banned?: boolean;
   banReason?: string;
+}
+
+export async function getUserEmailsForMod(uids: string[]): Promise<Record<string, string>> {
+  if (uids.length === 0) return {};
+  if (uids.length > 100) throw new Error("Bir kerede en fazla 100 kullanıcı sorgulanabilir.");
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("Bu işlem için giriş yapmalısın.");
+
+  const apiBase = (process.env.EXPO_PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
+  if (!apiBase) throw new Error("Yönetici API adresi tanımlı değil.");
+
+  const response = await fetch(`${apiBase}/api/admin/users/emails`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await currentUser.getIdToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ uids }),
+  });
+  if (!response.ok) throw new Error("Kullanıcı e-postaları alınamadı.");
+
+  const data = await response.json() as { emails?: unknown };
+  if (!data.emails || typeof data.emails !== "object" || Array.isArray(data.emails)) {
+    throw new Error("Sunucudan geçersiz e-posta yanıtı alındı.");
+  }
+  return data.emails as Record<string, string>;
 }
 
 export async function getAllUsersForMod(): Promise<UserSummary[]> {
