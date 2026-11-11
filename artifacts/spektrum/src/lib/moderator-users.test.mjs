@@ -47,6 +47,7 @@ const { UsersTab } = await compile(`
   const useEffect = callback => globalThis.__directoryHooks.effects.push(callback);
   const useToast = () => ({toast() {}});
   const getAllUsersForMod = () => globalThis.__directoryHooks.load();
+  const getUserEmailsForMod = async uids => Object.fromEntries(uids.map(uid => [uid, uid + "@example.com"]));
   const setUserRole = async () => { throw new Error("Read-only test: role writes forbidden"); };
   const Skeleton = () => React.createElement("span", null, "Yükleniyor");
   const Search = () => null;
@@ -110,6 +111,27 @@ test("empty directory has a distinct empty state", async () => {
   assert.match(await f.mount(), /Henüz kayıtlı kullanıcı yok/);
 });
 
+test("directory filters show newest and today's registrations with Istanbul-local dates", async () => {
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const f = fixture({
+    users: [
+      { uid: "older", displayName: "Eski", avatarUrl: "", role: "user", createdAt: { toDate: () => yesterday } },
+      { uid: "newer", displayName: "Yeni", avatarUrl: "", role: "user", createdAt: { toDate: () => now } },
+    ],
+  });
+  await f.mount();
+  f.hooks.values[1] = "today";
+  const todayHtml = f.render();
+  assert.match(todayHtml, /Yeni/);
+  assert.doesNotMatch(todayHtml, /Eski/);
+  assert.match(todayHtml, /Kayıt:/);
+
+  f.hooks.values[1] = "latest";
+  const latestHtml = f.render();
+  assert.ok(latestHtml.indexOf("Yeni") < latestHtml.indexOf("Eski"));
+});
+
 const firestoreService = await readFile(new URL("./firestore-service.ts", import.meta.url), "utf8");
 const emailSearchSource = firestoreService.slice(
   firestoreService.indexOf("export async function findAdminUserByEmail("),
@@ -156,6 +178,31 @@ test("email lookup validates full addresses and refuses non-admin API responses"
   await assert.rejects(module.findAdminUserByEmail("reader@"), /adresin tamamını yaz/);
   assert.equal(globalThis.__adminEmailFetchCalls.length, 0);
   await assert.rejects(module.findAdminUserByEmail("reader@example.com"), /yalnızca yetkili adminlere/);
+});
+
+const directoryEmailSource = firestoreService.slice(
+  firestoreService.indexOf("export async function getUserEmailsForMod("),
+  firestoreService.indexOf("export async function searchUsersForMod("),
+);
+
+test("directory emails use the signed-in admin token and reject unauthorized access", async () => {
+  globalThis.__directoryEmailCalls = [];
+  globalThis.__directoryEmailFetch = async (url, options) => {
+    globalThis.__directoryEmailCalls.push({ url, options });
+    return { ok: true, json: async () => ({ emails: { member: "member@example.com" } }) };
+  };
+  const module = await compile(`
+    const auth = { currentUser: { getIdToken: async () => "admin-token" } };
+    const fetch = (...args) => globalThis.__directoryEmailFetch(...args);
+    ${directoryEmailSource}
+  `);
+  assert.deepEqual(await module.getUserEmailsForMod(["member"]), { member: "member@example.com" });
+  assert.equal(globalThis.__directoryEmailCalls[0].url, "/api/admin/users/emails");
+  assert.equal(globalThis.__directoryEmailCalls[0].options.headers.Authorization, "Bearer admin-token");
+  await assert.rejects(module.getUserEmailsForMod(Array.from({ length: 101 }, (_, i) => `uid-${i}`)), /en fazla 100/);
+
+  globalThis.__directoryEmailFetch = async () => ({ ok: false, status: 403, json: async () => ({}) });
+  await assert.rejects(module.getUserEmailsForMod(["member"]), /yalnızca yetkili adminlere/);
 });
 
 test("web user directory opens only through the admin user-count card", async () => {

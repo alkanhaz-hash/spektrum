@@ -50,6 +50,7 @@ export default defineConfig({
     allowedHosts: true,
     // Local test infrastructure only; Vite's dev proxy is absent from builds.
     proxy: {
+      "/api": { target: "http://127.0.0.1:8080", changeOrigin: true },
       "/identitytoolkit.googleapis.com": { target: "http://127.0.0.1:19099", changeOrigin: true },
       "/securetoken.googleapis.com": { target: "http://127.0.0.1:19099", changeOrigin: true },
       [`${basePath}__qa-firestore`]: {

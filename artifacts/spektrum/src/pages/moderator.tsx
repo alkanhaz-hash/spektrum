@@ -382,8 +382,10 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                   <p className="font-medium text-sm truncate">{u.displayName}</p>
                   {email
                     ? <p className="text-xs text-muted-foreground break-all">{email}</p>
-                    : <p className="text-xs text-muted-foreground">{directoryEmailLoading ? "E-posta yükleniyor..." : "E-posta bulunamadı"}</p>}
-                  {!emailMode && <p className="text-xs text-muted-foreground">{formatUserRegistrationDate(u)}</p>}
+                    : <p className="text-xs text-muted-foreground">
+                        {emailLoadError ? "E-posta alınamadı" : directoryEmailLoading ? "E-posta yükleniyor..." : "E-posta bulunamadı"}
+                      </p>}
+                  {!emailMode && <p className="text-xs text-muted-foreground">{formatUserRegistrationDate(u as UserProfile)}</p>}
                   <span className={`text-xs border rounded-full px-2 py-0.5 ${ROLE_COLORS[u.role] ?? ROLE_COLORS.user}`}>
                     {ROLE_LABELS[u.role] ?? u.role}
                   </span>

@@ -1,6 +1,6 @@
 import http from "node:http";
 import net from "node:net";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
 import type { Plugin } from "vite";
 
@@ -18,7 +18,12 @@ export function mobilePreviewProxy(): Plugin {
     configureServer(server) {
       const expoHost = hostname(process.env.REPLIT_EXPO_DEV_DOMAIN);
       if (!expoHost) return;
-      const manifest = readFileSync(new URL("../../spektrum-mobile/.replit-artifact/artifact.toml", import.meta.url), "utf8");
+      const manifestPath = new URL("../../spektrum-mobile/.replit-artifact/artifact.toml", import.meta.url);
+      if (!existsSync(manifestPath)) {
+        server.config.logger.warn("Mobil önizleme bildirimi bulunamadı; web önizlemesi mobil alan adı proxy'si olmadan başlatılıyor.");
+        return;
+      }
+      const manifest = readFileSync(manifestPath, "utf8");
       const port = Number(manifest.match(/^localPort\s*=\s*(\d+)\s*$/m)?.[1]);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error("Mobil önizleme servisinin portu okunamadı.");
