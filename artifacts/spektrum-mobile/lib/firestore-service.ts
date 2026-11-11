@@ -837,6 +837,7 @@ export interface UserSummary {
   email?: string;
   avatarUrl: string;
   role: "user" | "moderator" | "admin";
+  createdAt?: Timestamp;
   banned?: boolean;
   banReason?: string;
 }
@@ -874,6 +875,7 @@ export async function getAllUsersForMod(): Promise<UserSummary[]> {
     displayName: d.data().displayName || "İsimsiz kullanıcı",
     avatarUrl: d.data().avatarUrl ?? "",
     role: (d.data().role ?? "user") as UserSummary["role"],
+    createdAt: d.data().createdAt as Timestamp | undefined,
   })).sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
 }
 

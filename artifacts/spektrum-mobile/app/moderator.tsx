@@ -820,10 +820,47 @@ const bn = StyleSheet.create({
 // ─── Kullanıcı Yönetimi Sekmesi (Sadece Admin) ────────────────────────────────
 
 const ROLE_LABELS: Record<string, string> = { user: "Kullanıcı", moderator: "Moderatör", admin: "Admin" };
+type UserListFilter = "all" | "latest" | "today";
+
+function userRegistrationDate(user: UserSummary): Date | null {
+  const createdAt = user.createdAt;
+  if (!createdAt) return null;
+  try {
+    const date = createdAt.toDate();
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+function turkeyDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function formatUserRegistrationDate(user: UserSummary): string {
+  const date = userRegistrationDate(user);
+  if (!date) return "Kayıt tarihi bulunamadı";
+  return `Kayıt: ${new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)}`;
+}
 
 function UsersTab({ currentUid }: { currentUid: string }) {
   const colors = useColors();
   const [term, setTerm] = useState("");
+  const [listFilter, setListFilter] = useState<UserListFilter>("all");
   const [results, setResults] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -853,8 +890,17 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   }, [currentUid, reload]);
 
   const needle = term.trim().toLocaleLowerCase("tr");
-  const filtered = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
+  const matchingUsers = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
     || u.uid.toLocaleLowerCase("tr").includes(needle));
+  const todayKey = turkeyDateKey(new Date());
+  const filtered = matchingUsers
+    .filter(user => listFilter !== "today" || (
+      userRegistrationDate(user) !== null && turkeyDateKey(userRegistrationDate(user)!) === todayKey
+    ))
+    .sort((a, b) => {
+      if (listFilter === "all") return a.displayName.localeCompare(b.displayName, "tr");
+      return (userRegistrationDate(b)?.getTime() ?? 0) - (userRegistrationDate(a)?.getTime() ?? 0);
+    });
   const visibleUidKey = filtered.slice(0, visibleCount).map(u => u.uid).join(",");
 
   useEffect(() => {
@@ -908,6 +954,35 @@ function UsersTab({ currentUid }: { currentUid: string }) {
           autoCapitalize="none"
         />
       </View>
+      <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+        {([
+          ["all", "Tümü"],
+          ["latest", "Son kaydolanlar"],
+          ["today", "Bugün kaydolanlar"],
+        ] as const).map(([filter, label]) => {
+          const selected = listFilter === filter;
+          return (
+            <TouchableOpacity
+              key={filter}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => { setListFilter(filter); setVisibleCount(50); }}
+              style={{
+                borderWidth: 1,
+                borderColor: selected ? colors.primary : colors.border,
+                backgroundColor: selected ? colors.primary + "18" : colors.card,
+                borderRadius: 20,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+              }}
+            >
+              <Text style={{ color: selected ? colors.primary : colors.mutedForeground, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       {loading && <ActivityIndicator color={colors.primary} />}
       {error ? <Text accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</Text> : null}
       {!loading && !error && <Text style={{ color: colors.mutedForeground }}>{filtered.length} / {results.length} kullanıcı</Text>}
@@ -935,6 +1010,9 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                 {Object.prototype.hasOwnProperty.call(emailByUid, u.uid)
                   ? emailByUid[u.uid] || "E-posta bulunamadı"
                   : emailError ? "E-posta alınamadı" : emailLoading ? "E-posta yükleniyor..." : "E-posta bekleniyor"}
+              </Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
+                {formatUserRegistrationDate(u)}
               </Text>
               <Text style={[bn.roleBadgeText, { color: colors.mutedForeground, marginTop: 2 }]}>{ROLE_LABELS[u.role] ?? u.role}</Text>
             </View>

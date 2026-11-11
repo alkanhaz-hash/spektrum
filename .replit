@@ -18,3 +18,8 @@ externalPort = 3000
 [[ports]]
 localPort = 24812
 externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["pnpm", "--filter", "@workspace/api-server", "start"]
+build = ["pnpm", "--filter", "@workspace/api-server", "build"]
