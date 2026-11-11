@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   getPendingChapters, updateChapterStatus, updateStory, getStory, getChapter,
   Chapter, Story, InlineComment,
-  banUser, unbanUser, searchUsersForMod, getAllUsersForMod, findAdminUserByEmail, createNotification, setUserRole,
+  banUser, unbanUser, searchUsersForMod, getAllUsersForMod, getUserEmailsForMod, findAdminUserByEmail, createNotification, setUserRole,
   getReports, resolveReport, Report,
   getUserById, getInlineCommentById, deleteInlineComment,
   getPlatformStats, PlatformStats,
@@ -145,12 +145,61 @@ const ROLE_COLORS: Record<string, string> = {
   moderator: "text-primary border-primary/40",
   admin: "text-amber-400 border-amber-400/40",
 };
+type UserListFilter = "all" | "latest" | "today";
+
+function userRegistrationDate(user: { createdAt?: unknown }): Date | null {
+  const value = user.createdAt as { toDate?: () => Date; seconds?: number } | Date | string | null | undefined;
+  if (!value) return null;
+  try {
+    const date = value instanceof Date
+      ? value
+      : typeof value === "string"
+        ? new Date(value)
+        : typeof value === "object" && "toDate" in value && typeof value.toDate === "function"
+          ? value.toDate()
+          : typeof value === "object" && "seconds" in value && typeof value.seconds === "number"
+            ? new Date(value.seconds * 1000)
+            : null;
+    return date && !Number.isNaN(date.getTime()) ? date : null;
+  } catch {
+    return null;
+  }
+}
+
+function turkeyDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function formatUserRegistrationDate(user: { createdAt?: unknown }): string {
+  const date = userRegistrationDate(user);
+  if (!date) return "Kayıt tarihi bulunamadı";
+  return `Kayıt: ${new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)}`;
+}
 
 function UsersTab({ currentUid }: { currentUid: string }) {
   const { toast } = useToast();
   const [term, setTerm] = useState("");
+  const [listFilter, setListFilter] = useState<UserListFilter>("all");
   const [results, setResults] = useState<UserProfile[]>([]);
   const [emailResults, setEmailResults] = useState<AdminUserSearchResult[] | null>(null);
+  const [emailByUid, setEmailByUid] = useState<Record<string, string>>({});
+  const [directoryEmailLoading, setDirectoryEmailLoading] = useState(false);
+  const [emailLoadError, setEmailLoadError] = useState("");
+  const [emailRetry, setEmailRetry] = useState(0);
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailSearchError, setEmailSearchError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -206,10 +255,41 @@ function UsersTab({ currentUid }: { currentUid: string }) {
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [emailMode, queryText, currentUid]);
+  const matchingUsers = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
+    || u.uid.toLocaleLowerCase("tr").includes(needle));
+  const todayKey = turkeyDateKey(new Date());
+  const filteredDirectory = matchingUsers
+    .filter(user => listFilter !== "today" || (
+      userRegistrationDate(user) !== null && turkeyDateKey(userRegistrationDate(user)!) === todayKey
+    ))
+    .sort((a, b) => {
+      if (listFilter === "all") return a.displayName.localeCompare(b.displayName, "tr");
+      return (userRegistrationDate(b)?.getTime() ?? 0) - (userRegistrationDate(a)?.getTime() ?? 0);
+    });
   const filtered: Array<UserProfile | AdminUserSearchResult> = emailMode
     ? emailResults ?? []
-    : results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
-      || u.uid.toLocaleLowerCase("tr").includes(needle));
+    : filteredDirectory;
+  const visibleUidKey = !emailMode ? filteredDirectory.slice(0, visibleCount).map(u => u.uid).join(",") : "";
+
+  useEffect(() => {
+    const uids = visibleUidKey ? visibleUidKey.split(",") : [];
+    const missing = uids.filter(uid => !Object.prototype.hasOwnProperty.call(emailByUid, uid));
+    if (emailMode || missing.length === 0) {
+      setDirectoryEmailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDirectoryEmailLoading(true);
+    setEmailLoadError("");
+    void getUserEmailsForMod(missing).then(emails => {
+      if (!cancelled) setEmailByUid(prev => ({ ...prev, ...emails }));
+    }).catch((error: unknown) => {
+      if (!cancelled) setEmailLoadError(error instanceof Error ? error.message : "E-posta adresleri alınamadı.");
+    }).finally(() => {
+      if (!cancelled) setDirectoryEmailLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [visibleUidKey, emailRetry, emailMode]);
 
   const handleRoleChange = async (u: UserProfile | AdminUserSearchResult, newRole: "user" | "moderator") => {
     if (u.uid === currentUid) {
@@ -247,11 +327,39 @@ function UsersTab({ currentUid }: { currentUid: string }) {
         />
       </div>
 
+      {!emailMode && (
+        <div className="mb-4 flex flex-wrap gap-2" aria-label="Kullanıcı kayıt filtresi">
+          {([
+            ["all", "Tümü"],
+            ["latest", "Son kaydolanlar"],
+            ["today", "Bugün kaydolanlar"],
+          ] as const).map(([filter, label]) => (
+            <button
+              key={filter}
+              type="button"
+              aria-pressed={listFilter === filter}
+              onClick={() => { setListFilter(filter); setVisibleCount(50); }}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                listFilter === filter
+                  ? "border-primary/50 bg-primary/15 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted-foreground mb-3">İsimle arayabilir veya e-posta adresinin tamamını yazabilirsin.</p>
       {(loading || emailLoading) && <Skeleton className="h-16 rounded-xl" />}
 
       {error && <p role="alert" className="text-sm text-destructive py-4">{error}</p>}
       {emailSearchError && <p role="alert" className="text-sm text-destructive py-4">{emailSearchError}</p>}
+      {!emailMode && emailLoadError && (
+        <button type="button" onClick={() => setEmailRetry(n => n + 1)} className="mb-3 text-left text-sm text-destructive">
+          {emailLoadError} E-postaları yeniden dene
+        </button>
+      )}
       {!loading && !emailLoading && !error && !emailSearchError && <p className="text-xs text-muted-foreground mb-3" role="status">{emailMode ? `${filtered.length} kullanıcı bulundu` : `${filtered.length} / ${results.length} kullanıcı`}</p>}
       {!loading && !emailLoading && !error && !emailSearchError && filtered.length === 0 && (
         <p className="text-muted-foreground text-sm text-center py-8">{needle ? "Aramana uygun kullanıcı bulunamadı." : "Henüz kayıtlı kullanıcı yok."}</p>
@@ -259,7 +367,9 @@ function UsersTab({ currentUid }: { currentUid: string }) {
 
       {!loading && !emailLoading && !error && !emailSearchError && filtered.length > 0 && (
         <div className="space-y-2">
-          {filtered.slice(0, visibleCount).map(u => (
+          {filtered.slice(0, visibleCount).map(u => {
+            const email = "email" in u ? u.email : emailByUid[u.uid];
+            return (
             <div key={u.uid} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-9 h-9 rounded-full bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -270,8 +380,10 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{u.displayName}</p>
-                  {"email" in u && u.email && <p className="text-xs text-muted-foreground break-all">{u.email}</p>}
-                  <p className="text-xs text-muted-foreground truncate max-w-52" title={u.uid}>{u.uid}</p>
+                  {email
+                    ? <p className="text-xs text-muted-foreground break-all">{email}</p>
+                    : <p className="text-xs text-muted-foreground">{directoryEmailLoading ? "E-posta yükleniyor..." : "E-posta bulunamadı"}</p>}
+                  {!emailMode && <p className="text-xs text-muted-foreground">{formatUserRegistrationDate(u)}</p>}
                   <span className={`text-xs border rounded-full px-2 py-0.5 ${ROLE_COLORS[u.role] ?? ROLE_COLORS.user}`}>
                     {ROLE_LABELS[u.role] ?? u.role}
                   </span>
@@ -304,7 +416,8 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

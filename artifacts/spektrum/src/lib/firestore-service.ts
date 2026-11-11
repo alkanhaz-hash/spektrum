@@ -1019,6 +1019,34 @@ export async function getAllUsersForMod(): Promise<UserProfile[]> {
   } as UserProfile)).sort((a, b) => a.displayName.localeCompare(b.displayName, "tr"));
 }
 
+/** Fetch emails only for visible users through the admin-only API. */
+export async function getUserEmailsForMod(uids: string[]): Promise<Record<string, string>> {
+  if (uids.length === 0) return {};
+  if (uids.length > 100) throw new Error("Bir kerede en fazla 100 kullanıcı sorgulanabilir.");
+  const user = auth.currentUser;
+  if (!user) throw new Error("Bu işlem için yönetici olarak giriş yapmalısın.");
+  const response = await fetch("/api/admin/users/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await user.getIdToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ uids }),
+  });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Kullanıcı e-postaları yalnızca yetkili adminlere açıktır.");
+    }
+    throw new Error("Kullanıcı e-postaları alınamadı.");
+  }
+  const payload: unknown = await response.json();
+  if (!payload || typeof payload !== "object" || !("emails" in payload) ||
+      !payload.emails || typeof payload.emails !== "object" || Array.isArray(payload.emails)) {
+    throw new Error("E-posta sunucusundan geçersiz yanıt alındı.");
+  }
+  return payload.emails as Record<string, string>;
+}
+
 export async function searchUsersForMod(term: string): Promise<UserProfile[]> {
   if (!term.trim()) return [];
   const lower = term.trim().toLowerCase();
