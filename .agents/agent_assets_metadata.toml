@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "iJPLfdYnfuK6ZoLW4tN-z"
+uri = "file://generated-artifacts/spektrum-web-desktop.jpg"
+type = "image"
+title = "Spektrum — geniş ekran web önizlemesi"
+description = "Çalışan Spektrum sitesinin geniş ekran ana sayfası."
+logical_id = "e7a3ecab-38b2-45e9-bb87-4f5103645b31"
+content_hash = "sha256:34db0baea4b94f88ba91a00727168b71bd05a58058bd197e52a577f48217ecc5"
+size = 53542
+mtime_ms = 1795469338517
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/e7a3ecab-38b2-45e9-bb87-4f5103645b31/0da431e6-927e-427f-b107-9d72ded6bb85"
+storage_version_token = "1795469382979303"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "HS9MWT9-8kox7RKHP12fo"
+uri = "file://generated-artifacts/spektrum-phone-layout.jpg"
+type = "image"
+title = "Spektrum — telefon boyutunda önizleme"
+description = "Aynı web sitesinin telefon genişliğindeki görünümü; bu native Android uygulama ekranı değildir."
+logical_id = "a78304da-ebd0-4180-bedb-afd090f8904d"
+content_hash = "sha256:ecf867f91b3858c17d2509a6ec9606c031c68a8c372acd0f4c9537aef7c8c9be"
+size = 36940
+mtime_ms = 1795469338529
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/a78304da-ebd0-4180-bedb-afd090f8904d/a81f9a9a-8d31-4f52-8125-655f750db898"
+storage_version_token = "1795469384389878"
+content_type = "image/jpeg"
