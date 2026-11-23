@@ -1,5 +1,11 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
+import {
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  getAuth,
+  initializeAuth,
+  connectAuthEmulator,
+} from "firebase/auth";
 import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -25,6 +31,18 @@ const firebaseConfig = qaEmulatorEnabled ? {
 };
 
 export const app = initializeApp(firebaseConfig);
+let authInstance;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: browserLocalPersistence,
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch {
+  // Reuse the existing instance during hot reload or when the QA fixture initialized it first.
+  authInstance = getAuth(app);
+}
+export const auth = authInstance;
+
 export function configureQaGuestApp(guestApp: FirebaseApp) {
   if (!qaEmulatorEnabled) return;
   const guestAuth = getAuth(guestApp);
@@ -38,6 +56,5 @@ export function configureQaGuestApp(guestApp: FirebaseApp) {
   });
 }
 configureQaGuestApp(app);
-export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);

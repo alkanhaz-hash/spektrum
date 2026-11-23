@@ -1,10 +1,12 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   initializeAuth,
   getAuth,
-  inMemoryPersistence,
   connectAuthEmulator,
+  type Persistence,
 } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
@@ -32,6 +34,11 @@ let app: any = null;
 let authInstance: any = null;
 let dbInstance: any = null;
 let storageInstance: any = null;
+// Firebase's React Native runtime exports this factory through Metro's RN condition,
+// although the shared web-facing declaration does not include it.
+const firebaseAuthWithReactNativePersistence = firebaseAuth as typeof firebaseAuth & {
+  getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
+};
 
 // InitializeApp
 if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
@@ -48,9 +55,14 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
 // Auth
 if (app && !initError) {
   try {
-    authInstance = initializeAuth(app, { persistence: inMemoryPersistence });
+    authInstance = Platform.OS === "web"
+      ? getAuth(app)
+      : initializeAuth(app, {
+          persistence: firebaseAuthWithReactNativePersistence.getReactNativePersistence(AsyncStorage),
+        });
   } catch (e: any) {
     try {
+      // Reuse an already initialized auth instance during hot reload.
       authInstance = getAuth(app);
     } catch (e2: any) {
       initError = "Auth init hatasi: " + (e2?.message || String(e2));
