@@ -12,10 +12,13 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { View, Text } from "react-native";
+import { StatusBar } from "expo-status-bar";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
+import { ThemeProvider, useThemeMode } from "@/contexts/ThemeContext";
+import { useColors } from "@/hooks/useColors";
 import { firebaseInitError } from "@/lib/firebase";
 import { PushRuntime } from "@/components/PushRuntime";
 
@@ -45,6 +48,19 @@ function RootLayoutNav() {
       <Stack.Screen name="terms" options={{ headerShown: false }} />
       <Stack.Screen name="odeme" options={{ headerShown: false }} />
     </Stack>
+  );
+}
+
+function AppShell() {
+  const colors = useColors();
+  const { mode } = useThemeMode();
+
+  return (
+    <>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} backgroundColor={colors.background} />
+      <PushRuntime />
+      <RootLayoutNav />
+    </>
   );
 }
 
@@ -81,18 +97,19 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <LocaleProvider>
-              <AuthProvider>
-                <PushRuntime />
-                <RootLayoutNav />
-              </AuthProvider>
-            </LocaleProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </ErrorBoundary>
+      <LocaleProvider>
+        <ThemeProvider>
+          <ErrorBoundary>
+            <QueryClientProvider client={queryClient}>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <AuthProvider>
+                  <AppShell />
+                </AuthProvider>
+              </GestureHandlerRootView>
+            </QueryClientProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </LocaleProvider>
     </SafeAreaProvider>
   );
 }

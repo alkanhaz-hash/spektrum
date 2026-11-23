@@ -44,6 +44,8 @@ const english: Record<string, string> = {
   "İngilizce": "English",
   "Tercih ettiğin dili seç.": "Choose your preferred language.",
   "Dil tercihi bu cihazda saklanır.": "Your language preference is saved on this device.",
+  "Gece Modu": "Dark mode",
+  "Koyu görünümü aç veya kapat.": "Turn the dark appearance on or off.",
   "Tümünü gör": "See all",
   "Henüz bildirim yok.": "No notifications yet.",
   "Jetonlarım": "My tokens",

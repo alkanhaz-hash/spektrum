@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View, Text } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useThemeMode } from "@/contexts/ThemeContext";
 import { listenUnreadNotificationCount } from "@/lib/firestore-service";
 import { useLocale } from "@/contexts/LocaleContext";
 
@@ -48,6 +49,7 @@ function useUnreadCount(): number {
 
 export default function TabLayout() {
   const colors = useColors();
+  const { mode } = useThemeMode();
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const unreadCount = useUnreadCount();
@@ -71,7 +73,7 @@ export default function TabLayout() {
           isIOS ? (
             <BlurView
               intensity={80}
-              tint="dark"
+              tint={mode === "dark" ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
           ) : isWeb ? (

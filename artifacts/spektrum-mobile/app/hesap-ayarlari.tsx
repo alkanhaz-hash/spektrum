@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { ActivityIndicator, Alert, Modal, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, SafeAreaView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
 import { deleteAccount, freezeAccount } from "@/lib/auth-service";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useThemeMode } from "@/contexts/ThemeContext";
 import { LanguagePicker } from "@/components/LanguagePicker";
 
 type Action = "freeze" | "delete" | null;
 
 export default function HesapAyarlariScreen() {
   const colors = useColors();
+  const { mode, setMode } = useThemeMode();
   const { t } = useLocale();
   const { user } = useAuth();
   const [action, setAction] = useState<Action>(null);
@@ -71,6 +73,23 @@ export default function HesapAyarlariScreen() {
         <Text style={[styles.description, { color: colors.mutedForeground }]}>{t("Hesabını geçici olarak dondurabilir veya kalıcı olarak silebilirsin.")}</Text>
         <LanguagePicker />
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.row, { borderBottomColor: colors.border }]}>
+            <View style={[styles.icon, { backgroundColor: colors.muted }]}>
+              <Feather name={mode === "dark" ? "moon" : "sun"} size={20} color={colors.primary} />
+            </View>
+            <View style={styles.rowText}>
+              <Text style={[styles.label, { color: colors.foreground }]}>{t("Gece Modu")}</Text>
+              <Text style={[styles.subLabel, { color: colors.mutedForeground }]}>{t("Koyu görünümü aç veya kapat.")}</Text>
+            </View>
+            <Switch
+              testID="switch-theme-mode"
+              accessibilityLabel={t("Gece Modu")}
+              value={mode === "dark"}
+              onValueChange={(enabled) => { void setMode(enabled ? "dark" : "light"); }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.cardForeground}
+            />
+          </View>
           <TouchableOpacity style={[styles.row, { borderBottomColor: colors.border }]} onPress={() => router.push("/push-settings" as any)} testID="open-push-settings">
             <View style={[styles.icon, { backgroundColor: colors.muted }]}>
               <Feather name="bell" size={20} color={colors.primary} />

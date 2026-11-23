@@ -1,10 +1,8 @@
 import colors from "@/constants/colors";
+import { useThemeMode } from "@/contexts/ThemeContext";
 
-/**
- * SPEKTRUM her zaman LIGHT mode kullanir.
- * Web sitesi aydinlik tema, mobile de ayni.
- */
 export function useColors() {
-  const palette = colors.light;
+  const { mode } = useThemeMode();
+  const palette = colors[mode];
   return { ...palette, radius: colors.radius };
 }
