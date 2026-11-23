@@ -36,6 +36,11 @@
     }
   },
   "submit": {
+    "alpha": {
+      "android": {
+        "track": "alpha"
+      }
+    },
     "production": {
       "android": {
         "track": "internal"

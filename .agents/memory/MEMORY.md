@@ -1,0 +1,2 @@
+- [Kalıcı oturum kapsamı](persistent-sessions.md) — kullanıcı normal kullanımda girişte kalmalı; güvenlik nedeniyle oturum kapatmalar korunur.
+- [Mevcut Play uygulamasına gönderim](existing-play-submit.md) — EAS submit, build profilinin ortam seçimlerini otomatik devralmaz.
