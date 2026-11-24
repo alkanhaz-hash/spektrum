@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
+import { usePathname } from "expo-router";
 import {
   Modal,
   Pressable,
@@ -15,6 +16,7 @@ import { useLocale } from "@/contexts/LocaleContext";
 import { useColors } from "@/hooks/useColors";
 
 const STORAGE_KEY = "spektrum:first-run-tour:complete";
+const NEW_ACCOUNT_TOUR_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const COPY = {
   tr: {
@@ -89,6 +91,11 @@ export default function FirstRunTour() {
   const colors = useColors();
   const { locale } = useLocale();
   const { user, loading: authLoading } = useAuth();
+  const pathname = usePathname();
+  const accountAge = user?.metadata.creationTime
+    ? Date.now() - Date.parse(user.metadata.creationTime)
+    : Number.POSITIVE_INFINITY;
+  const isNewAccount = accountAge >= 0 && accountAge < NEW_ACCOUNT_TOUR_WINDOW_MS;
   const insets = useSafeAreaInsets();
   const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -130,12 +137,12 @@ export default function FirstRunTour() {
   };
 
   useEffect(() => {
-    if (!ready || authLoading || !user || completed) return;
+    if (!ready || authLoading || !user || isNewAccount || completed) return;
     setCompleted(true);
     AsyncStorage.setItem(STORAGE_KEY, "true").catch((error) => {
       console.warn("[tour] Could not save existing-user preference", error);
     });
-  }, [authLoading, completed, ready, user]);
+  }, [authLoading, completed, isNewAccount, ready, user]);
 
   const advance = () => {
     if (step < copy.steps.length - 1) {
@@ -147,7 +154,13 @@ export default function FirstRunTour() {
 
   return (
     <Modal
-      visible={ready && !authLoading && !user && !completed}
+      visible={
+        ready &&
+        !authLoading &&
+        (!user || isNewAccount) &&
+        !completed &&
+        (pathname === "/" || pathname === "/(tabs)")
+      }
       transparent
       animationType="fade"
       statusBarTranslucent

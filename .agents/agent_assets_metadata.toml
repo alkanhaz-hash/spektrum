@@ -28,3 +28,87 @@ mtime_ms = 1795469338529
 storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/a78304da-ebd0-4180-bedb-afd090f8904d/a81f9a9a-8d31-4f52-8125-655f750db898"
 storage_version_token = "1795469384389878"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "7zDZkFylgwcIXyi3EBKoM"
+uri = "file://generated-artifacts/spektrum-play-store/listing-preview.html"
+type = "html"
+title = "Google Play mağaza metni"
+description = "Türkçe kısa ve tam açıklama taslağı, anahtar kelimeler ve beş görselin listesi. Console’a gönderilmedi."
+logical_id = "41dc2da8-4f71-4c1f-a26f-1c990ae30543"
+content_hash = "sha256:5519e4f34aac9374eba38a5fa248e0b59070bdb6d2d836615aa2f9ae81035a62"
+size = 4057
+mtime_ms = 1795518657520
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/41dc2da8-4f71-4c1f-a26f-1c990ae30543/8f9a7717-2064-4978-b9f1-80879fea2dfa"
+storage_version_token = "1795518659349486"
+content_type = "text/html"
+
+[[outputs]]
+id = "hGKCysq0xDEbXmopzBuMM"
+uri = "file://generated-artifacts/spektrum-play-store/01-yeni-hikayeler.png"
+type = "image"
+title = "Mağaza görseli 1 — Hikâyeleri keşfet"
+description = "Ana sayfadaki gerçek hikâye akışından hazırlanmış 9:16 Play Store görseli."
+logical_id = "5b5aefdb-9796-43b5-b1a2-073c4eef425a"
+content_hash = "sha256:efaa5cf64326bd4b4e782c44fcce28d872b3f0fb45c2f412657fbdbf13c3a7d1"
+size = 809471
+mtime_ms = 1795517247210
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/5b5aefdb-9796-43b5-b1a2-073c4eef425a/6964b811-40a4-4f53-92ff-c559b48acec1"
+storage_version_token = "1795518660770369"
+content_type = "image/png"
+
+[[outputs]]
+id = "1nfsFSkDObR2CdmjBwI_p"
+uri = "file://generated-artifacts/spektrum-play-store/02-turune-gore-kesfet.png"
+type = "image"
+title = "Mağaza görseli 2 — Türlere göre keşfet"
+description = "Gerçek Keşfet ekranından hazırlanmış 9:16 Play Store görseli."
+logical_id = "078dec0b-8f20-4c7e-9776-47bb9ec98121"
+content_hash = "sha256:4fa6fa32ba3d5e35cf1e0441fef8a620c655ea0a3272c55a5fb201d9784b2f60"
+size = 345003
+mtime_ms = 1795517250232
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/078dec0b-8f20-4c7e-9776-47bb9ec98121/0b4bec94-1989-435f-b505-dc5168155091"
+storage_version_token = "1795518662134028"
+content_type = "image/png"
+
+[[outputs]]
+id = "_bvA1Kjs_jBsDoFx82tC3"
+uri = "file://generated-artifacts/spektrum-play-store/03-paragraf-yorumlari.png"
+type = "image"
+title = "Mağaza görseli 3 — Paragraf yorumları"
+description = "Gerçek okuma ekranından hazırlanmış 9:16 Play Store görseli."
+logical_id = "faf76296-1425-4567-b473-cd099b0c3492"
+content_hash = "sha256:227071140397605338074396351460497dd7a8646f0accaee40f0f094cbde8a3"
+size = 655988
+mtime_ms = 1795518228252
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/faf76296-1425-4567-b473-cd099b0c3492/add3e74f-9d13-4105-8f6d-cea84734dbdd"
+storage_version_token = "1795518663492977"
+content_type = "image/png"
+
+[[outputs]]
+id = "zeeqZ7OVwBGwphLY0h8di"
+uri = "file://generated-artifacts/spektrum-play-store/04-geri-bildirim.png"
+type = "image"
+title = "Mağaza görseli 4 — Geri bildirim"
+description = "Gerçek iletişim ekranından hazırlanmış 9:16 Play Store görseli."
+logical_id = "3940b3df-55e1-4fe3-a7e8-60a130f1da23"
+content_hash = "sha256:72580034b8c6e59f2d4681f44902fc87934a46f7438a58abe04eb6acc1cfcc9d"
+size = 537511
+mtime_ms = 1795518229822
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/3940b3df-55e1-4fe3-a7e8-60a130f1da23/1fb00f48-35d6-49b2-bccd-a93bddbb589d"
+storage_version_token = "1795518664799236"
+content_type = "image/png"
+
+[[outputs]]
+id = "uDsGT0A7c8WT0Qu_3kb97"
+uri = "file://generated-artifacts/spektrum-play-store/05-yazar-profili.png"
+type = "image"
+title = "Mağaza görseli 5 — Yazar profili"
+description = "Gerçek yazar profili ve takip düğmesinden hazırlanmış 9:16 Play Store görseli."
+logical_id = "f4889064-6a1f-442b-b996-9c7d007da055"
+content_hash = "sha256:cf81d088cd894fade6e9f8eb49d802f88ab92bf83d06af38aa90a0d2b233183f"
+size = 324038
+mtime_ms = 1795518574568
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:b4daaf7c-898e-4f14-b630-1fba06ded765/f4889064-6a1f-442b-b996-9c7d007da055/f1529170-2ced-4eed-b296-648828597c37"
+storage_version_token = "1795518666092086"
+content_type = "image/png"

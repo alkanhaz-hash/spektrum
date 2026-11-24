@@ -17,6 +17,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale } from "@/contexts/LocaleContext";
 import {
   getPendingChapters,
   updateChapterStatus,
@@ -859,6 +860,7 @@ function formatUserRegistrationDate(user: UserSummary): string {
 
 function UsersTab({ currentUid }: { currentUid: string }) {
   const colors = useColors();
+  const { t } = useLocale();
   const [term, setTerm] = useState("");
   const [listFilter, setListFilter] = useState<UserListFilter>("all");
   const [results, setResults] = useState<UserSummary[]>([]);
@@ -881,13 +883,13 @@ function UsersTab({ currentUid }: { currentUid: string }) {
         const users = await getAllUsersForMod();
         if (!cancelled) setResults(users);
       } catch {
-        if (!cancelled) setError("Kullanıcılar yüklenemedi. Bağlantını ve yönetici izinlerini kontrol edip yeniden dene.");
+        if (!cancelled) setError(t("Kullanıcılar yüklenemedi. Bağlantını ve yönetici izinlerini kontrol edip yeniden dene."));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [currentUid, reload]);
+  }, [currentUid, reload, t]);
 
   const needle = term.trim().toLocaleLowerCase("tr");
   const matchingUsers = results.filter(u => u.displayName.toLocaleLowerCase("tr").includes(needle)
@@ -914,12 +916,12 @@ function UsersTab({ currentUid }: { currentUid: string }) {
     void getUserEmailsForMod(missing).then(emails => {
       if (!cancelled) setEmailByUid(prev => ({ ...prev, ...emails }));
     }).catch(() => {
-      if (!cancelled) setEmailError("E-posta adresleri alınamadı. Yönetici bağlantısını kontrol edip yeniden dene.");
+      if (!cancelled) setEmailError(t("E-posta adresleri alınamadı. Yönetici bağlantısını kontrol edip yeniden dene."));
     }).finally(() => {
       if (!cancelled) setEmailLoading(false);
     });
     return () => { cancelled = true; };
-  }, [visibleUidKey, emailRetry]);
+  }, [visibleUidKey, emailRetry, t]);
 
   const handleRole = async (u: UserSummary, newRole: "user" | "moderator" | "admin") => {
     if (u.uid === currentUid) { Alert.alert("Hata", "Kendi rolünü değiştiremezsin."); return; }
@@ -937,18 +939,18 @@ function UsersTab({ currentUid }: { currentUid: string }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={[bn.hint, { color: colors.mutedForeground }]}>
-        Kayıtlı kullanıcıları görüntüle, profillerini aç ve rollerini yönet.
+        {t("Kayıtlı kullanıcıları görüntüle, profillerini aç ve rollerini yönet.")}
       </Text>
       <TouchableOpacity disabled={loading} onPress={() => setReload(n => n + 1)} accessibilityRole="button">
-        <Text style={{ color: colors.primary }}>Yenile</Text>
+        <Text style={{ color: colors.primary }}>{t("Yenile")}</Text>
       </TouchableOpacity>
       <View style={[bn.searchWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="search" size={16} color={colors.mutedForeground} />
         <TextInput
           value={term}
           onChangeText={value => { setTerm(value); setVisibleCount(50); }}
-          placeholder="Ad veya kullanıcı kimliği ara..."
-          accessibilityLabel="Kullanıcı ara"
+          placeholder={t("Ad veya kullanıcı kimliği ara...")}
+          accessibilityLabel={t("Kullanıcı ara")}
           placeholderTextColor={colors.mutedForeground}
           style={[bn.searchInput, { color: colors.foreground }]}
           autoCapitalize="none"
@@ -977,7 +979,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
               }}
             >
               <Text style={{ color: selected ? colors.primary : colors.mutedForeground, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>
-                {label}
+                 {t(label)}
               </Text>
             </TouchableOpacity>
           );
@@ -988,7 +990,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
       {!loading && !error && <Text style={{ color: colors.mutedForeground }}>{filtered.length} / {results.length} kullanıcı</Text>}
       {!loading && !error && emailError ? (
         <TouchableOpacity onPress={() => setEmailRetry(n => n + 1)} accessibilityRole="button">
-          <Text style={{ color: colors.destructive }}>{emailError} Yeniden dene</Text>
+          <Text style={{ color: colors.destructive }}>{emailError} {t("E-postaları yeniden dene")}</Text>
         </TouchableOpacity>
       ) : null}
       {!loading && !error && filtered.length === 0 && (
@@ -1008,8 +1010,8 @@ function UsersTab({ currentUid }: { currentUid: string }) {
               <Text style={[bn.userName, { color: colors.foreground }]}>{u.displayName}</Text>
               <Text selectable style={{ color: colors.mutedForeground, fontSize: 11 }}>
                 {Object.prototype.hasOwnProperty.call(emailByUid, u.uid)
-                  ? emailByUid[u.uid] || "E-posta bulunamadı"
-                  : emailError ? "E-posta alınamadı" : emailLoading ? "E-posta yükleniyor..." : "E-posta bekleniyor"}
+                  ? emailByUid[u.uid] || t("E-posta bulunamadı")
+                  : emailError ? t("E-posta alınamadı") : emailLoading ? t("E-posta yükleniyor...") : t("E-posta bekleniyor")}
               </Text>
               <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
                 {formatUserRegistrationDate(u)}
@@ -1047,7 +1049,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
       ))}
       {!loading && !error && visibleCount < filtered.length && <TouchableOpacity onPress={() => setVisibleCount(n => n + 50)} accessibilityRole="button">
         <Text style={{ color: colors.primary, textAlign: "center", padding: 12 }}>
-          Daha fazla göster ({filtered.length - visibleCount}){emailLoading ? " · E-postalar yükleniyor..." : ""}
+          Daha fazla göster ({filtered.length - visibleCount}){emailLoading ? ` · ${t("E-postalar yükleniyor...")}` : ""}
         </Text>
       </TouchableOpacity>}
     </View>

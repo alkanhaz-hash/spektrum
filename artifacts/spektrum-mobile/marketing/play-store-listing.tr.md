@@ -41,6 +41,7 @@ Türkçe hikâye, hikâye oku, hikâye yaz, online roman, dijital hikâyeler, fa
 1. Ana sayfa ve öne çıkan hikâyeler — “Yeni hikâyeler keşfet”
 2. Keşfet ekranındaki türler — “Sevdiğin türü seç”
 3. Okuma ekranı ve paragraf etkileşimi — “Her paragrafta sohbete katıl”
-4. İletişim ve geri bildirim formu — “Fikrini bizimle paylaş”
+4. Yazar profili ve takip — “Yazarları keşfet”
+5. İletişim ve geri bildirim formu — “Fikrini bizimle paylaş”
 
 Görseller mevcut uygulama ekranlarından hazırlandı. Play Console'a yükleme ve mağaza metnini yayımlama bu çalışmanın dışında bırakıldı.

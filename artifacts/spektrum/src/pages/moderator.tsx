@@ -19,6 +19,7 @@ import type { AdminUserSearchResult } from "@/lib/firestore-service";
 import type { UserProfile } from "@/lib/auth-service";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { useLocale } from "@/contexts/LocaleContext";
 
 interface PendingItem extends Chapter {
   storyTitle?: string;
@@ -192,6 +193,7 @@ function formatUserRegistrationDate(user: { createdAt?: unknown }): string {
 
 function UsersTab({ currentUid }: { currentUid: string }) {
   const { toast } = useToast();
+  const { t } = useLocale();
   const [term, setTerm] = useState("");
   const [listFilter, setListFilter] = useState<UserListFilter>("all");
   const [results, setResults] = useState<UserProfile[]>([]);
@@ -328,7 +330,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
       </div>
 
       {!emailMode && (
-        <div className="mb-4 flex flex-wrap gap-2" aria-label="Kullanıcı kayıt filtresi">
+      <div className="mb-4 flex flex-wrap gap-2" aria-label={t("Kullanıcı kayıt filtresi")}>
           {([
             ["all", "Tümü"],
             ["latest", "Son kaydolanlar"],
@@ -345,7 +347,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                   : "border-border bg-card text-muted-foreground hover:text-foreground"
               }`}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -357,7 +359,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
       {emailSearchError && <p role="alert" className="text-sm text-destructive py-4">{emailSearchError}</p>}
       {!emailMode && emailLoadError && (
         <button type="button" onClick={() => setEmailRetry(n => n + 1)} className="mb-3 text-left text-sm text-destructive">
-          {emailLoadError} E-postaları yeniden dene
+          {emailLoadError} {t("E-postaları yeniden dene")}
         </button>
       )}
       {!loading && !emailLoading && !error && !emailSearchError && <p className="text-xs text-muted-foreground mb-3" role="status">{emailMode ? `${filtered.length} kullanıcı bulundu` : `${filtered.length} / ${results.length} kullanıcı`}</p>}
@@ -383,7 +385,7 @@ function UsersTab({ currentUid }: { currentUid: string }) {
                   {email
                     ? <p className="text-xs text-muted-foreground break-all">{email}</p>
                     : <p className="text-xs text-muted-foreground">
-                        {emailLoadError ? "E-posta alınamadı" : directoryEmailLoading ? "E-posta yükleniyor..." : "E-posta bulunamadı"}
+                        {emailLoadError ? t("E-posta alınamadı") : directoryEmailLoading ? t("E-posta yükleniyor...") : t("E-posta bulunamadı")}
                       </p>}
                   {!emailMode && <p className="text-xs text-muted-foreground">{formatUserRegistrationDate(u as UserProfile)}</p>}
                   <span className={`text-xs border rounded-full px-2 py-0.5 ${ROLE_COLORS[u.role] ?? ROLE_COLORS.user}`}>
