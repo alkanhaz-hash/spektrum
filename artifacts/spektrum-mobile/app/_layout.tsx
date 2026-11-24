@@ -6,18 +6,20 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { View, Text } from "react-native";
+import { Alert, BackHandler, Platform, View, Text } from "react-native";
 import { StatusBar } from "expo-status-bar";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import FirstRunTour from "@/components/FirstRunTour";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { ThemeProvider, useThemeMode } from "@/contexts/ThemeContext";
+import { useLocale } from "@/contexts/LocaleContext";
 import { useColors } from "@/hooks/useColors";
 import { firebaseInitError } from "@/lib/firebase";
 import { PushRuntime } from "@/components/PushRuntime";
@@ -27,6 +29,30 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const pathname = usePathname();
+  const { t } = useLocale();
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      const isHome = pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/index";
+      if (!isHome) return false;
+
+      Alert.alert(
+        t("Uygulamadan çıkılsın mı?"),
+        t("Uygulamayı kapatırsan hesabından çıkış yapmazsın."),
+        [
+          { text: t("Vazgeç"), style: "cancel" },
+          { text: t("Uygulamayı Kapat"), style: "destructive", onPress: () => BackHandler.exitApp() },
+        ],
+      );
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [pathname, t]);
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -60,6 +86,7 @@ function AppShell() {
       <StatusBar style={mode === "dark" ? "light" : "dark"} backgroundColor={colors.background} />
       <PushRuntime />
       <RootLayoutNav />
+      <FirstRunTour />
     </>
   );
 }

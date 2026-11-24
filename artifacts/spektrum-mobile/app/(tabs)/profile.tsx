@@ -351,18 +351,32 @@ const epm = StyleSheet.create({
 // ─── GİRİŞ YAP İSTEĞİ ────────────────────────────────────────────────────────
 
 function LoginPrompt() {
+  const { t } = useLocale();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   return (
     <View style={[lp.container, { backgroundColor: colors.background, paddingTop: insets.top + 16 }]}>
       <LinearGradient colors={["#A07FE622", "#E6A54522", colors.background]} locations={[0, 0.4, 1]} style={StyleSheet.absoluteFill} />
       <Feather name="user" size={64} color={colors.mutedForeground + "60"} />
-      <Text style={[lp.title, { color: colors.foreground }]}>Profilini Oluştur</Text>
+      <Text style={[lp.title, { color: colors.foreground }]}>{t("Profilini Oluştur")}</Text>
       <Text style={[lp.sub, { color: colors.mutedForeground }]}>
-        Hikayelerini paylaş, yazarları takip et ve topluluğa katıl.
+        {t("Hikayelerini paylaş, yazarları takip et ve topluluğa katıl.")}
       </Text>
-      <TouchableOpacity style={[lp.btn, { backgroundColor: colors.primary }]} onPress={() => router.push("/auth")}>
-        <Text style={lp.btnText}>Giriş Yap / Kayıt Ol</Text>
+      <TouchableOpacity
+        style={[lp.btn, { backgroundColor: colors.primary }]}
+        onPress={() => router.push("/auth")}
+        accessibilityRole="button"
+        accessibilityLabel={t("Giriş Yap / Kayıt Ol")}
+      >
+        <Text style={lp.btnText}>{t("Giriş Yap / Kayıt Ol")}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[lp.feedbackBtn, { borderColor: colors.border }]}
+        onPress={() => router.push("/iletisim")}
+        accessibilityRole="button"
+        accessibilityLabel={t("Geri Bildirim ve Destek")}
+      >
+        <Text style={[lp.feedbackBtnText, { color: colors.foreground }]}>{t("Geri Bildirim ve Destek")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -374,6 +388,8 @@ const lp = StyleSheet.create({
   sub: { fontSize: 14, textAlign: "center", fontFamily: "Inter_400Regular", lineHeight: 22 },
   btn: { marginTop: 8, paddingHorizontal: 36, paddingVertical: 14, borderRadius: 14 },
   btnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  feedbackBtn: { minHeight: 44, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  feedbackBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });
 
 // ─── ANA EKRAN ────────────────────────────────────────────────────────────────
@@ -720,13 +736,15 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={[s.menuRow, { borderColor: colors.border }]}
               onPress={() => router.push("/iletisim")}
+              accessibilityRole="button"
+              accessibilityLabel={t("Geri Bildirim ve Destek")}
             >
               <View style={[s.menuIconWrap, { backgroundColor: "#E6A54518" }]}>
                 <Feather name="mail" size={17} color="#E6A545" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.menuLabel, { color: colors.foreground }]}>İletişim</Text>
-                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>Bize ulaş · Destek</Text>
+                <Text style={[s.menuLabel, { color: colors.foreground }]}>{t("Geri Bildirim ve Destek")}</Text>
+                <Text style={[s.menuSub, { color: colors.mutedForeground }]}>{t("Öneri, sorun veya soru gönder")}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>

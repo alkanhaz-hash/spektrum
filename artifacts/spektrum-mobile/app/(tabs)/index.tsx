@@ -53,6 +53,8 @@ function HeroSection() {
           style={[styles.heroBtnPrimary, { backgroundColor: colors.primary }]}
           onPress={() => router.push("/(tabs)/discover")}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={t("Hikâyeleri ve türleri keşfet")}
         >
           <Text style={[styles.heroBtnPrimaryText, { color: colors.primaryForeground }]}>
             {t("Keşfetmeye Başla")}
@@ -63,6 +65,8 @@ function HeroSection() {
           style={[styles.heroBtnSecondary, { borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.05)" }]}
           onPress={() => router.push("/(tabs)/write")}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={t("Hikâye yazmaya başla")}
         >
           <Text style={[styles.heroBtnSecondaryText, { color: colors.foreground }]}>
             {t("Hikayeni Yaz")}
@@ -82,6 +86,9 @@ function TrendCard({ story, rank }: { story: Story; rank: number }) {
       style={[styles.trendCard, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={() => router.push({ pathname: "/story/[id]", params: { id: story.id } })}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${story.title}, ${translateGenre(locale, story.genre)}, ${story.authorName}`}
+      accessibilityHint={t("Hikâye ayrıntılarını aç")}
     >
       <View style={styles.trendCardTop}>
         <View style={[styles.genreBadge, { backgroundColor: colors.secondary + "15", borderColor: colors.secondary + "30" }]}>
@@ -119,12 +126,15 @@ function TrendCard({ story, rank }: { story: Story; rank: number }) {
 /* ── Yeni Eklenen Kartı — Web sitesindeki gibi —───────────────────── */
 function NewCard({ story }: { story: Story }) {
   const colors = useColors();
-  const { locale } = useLocale();
+  const { locale, t } = useLocale();
   return (
     <TouchableOpacity
       style={[styles.newCard, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={() => router.push({ pathname: "/story/[id]", params: { id: story.id } })}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${story.title}, ${story.authorName}`}
+      accessibilityHint={t("Hikâyeyi aç")}
     >
       {story.coverUrl ? (
         <Image source={{ uri: story.coverUrl }} style={styles.newCover} resizeMode="cover" />
@@ -227,6 +237,8 @@ export default function HomeScreen() {
         <TouchableOpacity
           onPress={() => user ? router.push("/(tabs)/profile") : router.push("/auth")}
           activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel={user ? t("Profilini aç") : t("Giriş yap veya kayıt ol")}
         >
           <View style={[styles.avatar, { backgroundColor: colors.muted, borderColor: colors.primary + "40" }]}>
             {user && profile?.avatarUrl ? (
@@ -290,6 +302,8 @@ export default function HomeScreen() {
                 style={[styles.genreChip, { borderColor: colors.border }]}
                 onPress={() => router.push({ pathname: "/(tabs)/discover", params: { genre } })}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${translateGenre(locale, genre)} ${t("hikâyeleri keşfet")}`}
               >
                 <Text style={[styles.genreChipText, { color: colors.foreground }]}>{translateGenre(locale, genre)}</Text>
               </TouchableOpacity>

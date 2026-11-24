@@ -15,9 +15,9 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 
 const CONTACT_ITEMS = [
-  { icon: "mail", label: "E-posta", value: "destek@spektrum.app", action: () => Linking.openURL("mailto:destek@spektrum.app") },
-  { icon: "instagram", label: "Instagram", value: "@spektrum.app", action: () => Linking.openURL("https://instagram.com/spektrum.app") },
-  { icon: "twitter", label: "X / Twitter", value: "@spektrumapp", action: () => Linking.openURL("https://twitter.com/spektrumapp") },
+  { icon: "mail", label: "E-posta", value: "destek@spektrum.app", url: "mailto:destek@spektrum.app" },
+  { icon: "instagram", label: "Instagram", value: "@spektrum.app", url: "https://instagram.com/spektrum.app" },
+  { icon: "twitter", label: "X / Twitter", value: "@spektrumapp", url: "https://twitter.com/spektrumapp" },
 ];
 
 import { useLocale } from "@/contexts/LocaleContext";
@@ -30,21 +30,41 @@ export default function IletisimScreen() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
+  const openLink = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(t("Bağlantı açılamadı"), t("Bu bağlantıyı açacak bir uygulama bulunamadı."));
+    }
+  };
+
+  const handleSend = async () => {
     if (!subject.trim() || !message.trim()) {
-      Alert.alert("Uyarı", "Konu ve mesaj alanları boş olamaz.");
+      Alert.alert(t("Eksik bilgi"), t("Konu ve mesaj alanları boş olamaz."));
       return;
     }
     const mailBody = encodeURIComponent(message.trim());
     const mailSubject = encodeURIComponent(subject.trim());
-    Linking.openURL(`mailto:destek@spektrum.app?subject=${mailSubject}&body=${mailBody}`);
+    setSending(true);
+    try {
+      await Linking.openURL(`mailto:destek@spektrum.app?subject=${mailSubject}&body=${mailBody}`);
+    } catch {
+      Alert.alert(t("E-posta açılamadı"), t("Mesajın gönderilmedi. E-posta uygulamasını açıp destek adresine yazabilirsin."));
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <View style={[s.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={s.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("Geri dön")}
+        >
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[s.headerTitle, { color: colors.foreground }]}>İletişim</Text>
@@ -62,8 +82,10 @@ export default function IletisimScreen() {
           <TouchableOpacity
             key={item.label}
             style={[s.contactRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={item.action}
+            onPress={() => openLink(item.url)}
             activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`${t(item.label)}: ${item.value}`}
           >
             <View style={[s.iconWrap, { backgroundColor: colors.primary + "18" }]}>
               <Feather name={item.icon as React.ComponentProps<typeof Feather>["name"]} size={18} color={colors.primary} />
@@ -86,6 +108,7 @@ export default function IletisimScreen() {
             placeholder="Mesajının konusu..."
             placeholderTextColor={colors.mutedForeground}
             style={[s.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+            accessibilityLabel={t("Konu")}
           />
           <Text style={[s.label, { color: colors.mutedForeground }]}>Mesaj</Text>
           <TextInput
@@ -96,15 +119,22 @@ export default function IletisimScreen() {
             multiline
             numberOfLines={5}
             style={[s.textarea, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
+            accessibilityLabel={t("Mesaj")}
           />
           <TouchableOpacity
             style={[s.sendBtn, { backgroundColor: colors.primary }]}
             onPress={handleSend}
             activeOpacity={0.8}
+            disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel={t("E-posta uygulamasını aç")}
           >
             <Feather name="send" size={16} color="#fff" />
-            <Text style={s.sendBtnText}>Gönder</Text>
+            <Text style={s.sendBtnText}>{sending ? t("Açılıyor...") : t("E-posta uygulamasını aç")}</Text>
           </TouchableOpacity>
+          <Text style={[s.formHint, { color: colors.mutedForeground }]}>
+            {t("Mesajın e-posta uygulamanda taslak olarak açılır; göndermek için orada Gönder'e dokun.")}
+          </Text>
         </View>
 
         <View style={[s.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -173,6 +203,7 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   sendBtnText: { color: "#fff", fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  formHint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18, marginTop: 2 },
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",

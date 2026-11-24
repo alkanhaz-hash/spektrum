@@ -14,10 +14,10 @@ import { Feather } from "@expo/vector-icons";
 import { useColors } from "@/hooks/useColors";
 
 const FEATURES = [
-  { icon: "book-open", title: "Zengin Hikaye Dünyası", desc: "Fantastikten romance'a, gerilimden şiire on dört farklı türde binlerce Türkçe hikaye." },
+  { icon: "book-open", title: "Hikâye Keşfi", desc: "Roman, fantazi, gerilim, bilim kurgu ve diğer türlerde yeni hikâyeler keşfet." },
   { icon: "users", title: "Canlı Topluluk", desc: "Yazarlara yorum yap, takip et, mesaj at. Gerçek bağlar kur." },
-  { icon: "star", title: "Paragraf Yorumları", desc: "Her paragrafın altına fikrlerini ekle. Okuma deneyimini diyaloğa dönüştür." },
-  { icon: "shield", title: "Güvenli Alan", desc: "AI destekli moderasyon sistemi ile zararlı içeriklerden arınmış bir platform." },
+  { icon: "message-circle", title: "Paragraf Yorumları", desc: "Okuduğun paragrafın altına yorum ekle; hikâye üzerinden diyaloğa katıl." },
+  { icon: "type", title: "Okuma Konforu", desc: "Okuma ekranında yazı boyutunu kendine göre ayarla." },
 ];
 
 export default function HakkimizdaScreen() {

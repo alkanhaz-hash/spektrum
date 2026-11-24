@@ -51,6 +51,9 @@ function StoryGridCard({ story }: { story: Story }) {
       style={[styles.gridCard, { backgroundColor: colors.card, borderColor: colors.border }]}
       onPress={() => router.push({ pathname: "/story/[id]", params: { id: story.id } })}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${story.title}, ${translateGenre(locale, story.genre)}, ${story.authorName}`}
+      accessibilityHint={locale === "en" ? "Open story details" : "Hikâye ayrıntılarını aç"}
     >
       {story.coverUrl ? (
         <View>
@@ -230,6 +233,8 @@ export default function DiscoverScreen() {
           <TouchableOpacity
             onPress={() => router.push("/search")}
             style={[styles.searchIconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel={t("Hikâye, yazar veya etiket ara")}
           >
             <Feather name="search" size={18} color={colors.foreground} />
           </TouchableOpacity>
@@ -246,9 +251,14 @@ export default function DiscoverScreen() {
           value={query}
           onChangeText={handleSearch}
           returnKeyType="search"
+          accessibilityLabel={t("Hikâye, yazar veya etiket ara")}
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => handleSearch("")}>
+          <TouchableOpacity
+            onPress={() => handleSearch("")}
+            accessibilityRole="button"
+            accessibilityLabel={t("Aramayı temizle")}
+          >
             <Feather name="x" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         )}
@@ -298,6 +308,9 @@ export default function DiscoverScreen() {
                     borderWidth: isSelected ? 1.5 : 1,
                   },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={t(item.key === "all" ? "Tüm türler" : item.label)}
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => handleGenre(item.key === "all" ? null : item.key)}
                 activeOpacity={0.75}
               >
