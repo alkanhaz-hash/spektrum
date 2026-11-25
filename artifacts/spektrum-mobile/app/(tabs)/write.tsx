@@ -118,10 +118,13 @@ export default function WriteScreen() {
   }, [user, loadStories]);
 
   const pickCover = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert(t("İzin Gerekli"), t("Fotoğraf seçmek için galeri iznine ihtiyaç var."));
-      return;
+    // Android's system photo picker does not require broad library access.
+    if (Platform.OS !== "android") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(t("İzin Gerekli"), t("Fotoğraf seçmek için galeri iznine ihtiyaç var."));
+        return;
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",

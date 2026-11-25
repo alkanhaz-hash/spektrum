@@ -122,10 +122,13 @@ export default function ChatScreen() {
     if (!user || !profile || !convId) return;
     if (await checkSendBlocked()) return;
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("İzin Gerekli", "Fotoğraf göndermek için galeri iznine ihtiyaç var.");
-      return;
+    // Android's system photo picker does not require broad library access.
+    if (Platform.OS !== "android") {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("İzin Gerekli", "Fotoğraf göndermek için galeri iznine ihtiyaç var.");
+        return;
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,

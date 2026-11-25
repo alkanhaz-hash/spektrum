@@ -218,10 +218,13 @@ export default function MobileStatusBar() {
   };
 
   const handlePickImage = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("İzin gerekli", "Fotoğraf seçmek için galeri izni gerekiyor.");
-      return;
+    // Android's system photo picker grants access only to the selected image.
+    if (Platform.OS !== "android") {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("İzin gerekli", "Fotoğraf seçmek için galeri izni gerekiyor.");
+        return;
+      }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
