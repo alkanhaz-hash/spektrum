@@ -71,6 +71,10 @@ function xmlNode(data) {
 }
 const manifests = names.filter(n => n.endsWith("/manifest/AndroidManifest.xml")).map(n => ({ name: n, root: xmlNode(extract(n)) }));
 assert(manifests.length, "No Android manifests in AAB");
+if (process.argv.includes("--manifest-only")) {
+  console.log(JSON.stringify(manifests, null, 2));
+  process.exit(0);
+}
 const base = manifests.find(m => m.name === "base/manifest/AndroidManifest.xml")?.root;
 assert.equal(base?.name, "manifest", "Compiled protobuf manifest must decode");
 assert.equal(base.attributes.package, "com.alkanhaz.spektrum");
@@ -93,7 +97,7 @@ assert(!actions.some(a => /BOOT_COMPLETED|QUICKBOOT_POWERON|\.REBOOT$/.test(a)),
 const services = elements.filter(e => e.name === "service");
 assert(!services.some(s => s.attributes["android:name"].endsWith(".AudioRecordingService")), "Unused recording service remains");
 assert(services.some(s => s.attributes["android:name"] === "expo.modules.audio.service.AudioControlsService"
-  && s.attributes["android:foregroundServiceType"] === "mediaPlayback"), "Media playback service must remain");
+  && ["mediaPlayback", "2", "0x00000002"].includes(s.attributes["android:foregroundServiceType"])), "Media playback service must remain");
 assert(services.some(s => s.attributes["android:name"] === "expo.modules.notifications.service.ExpoFirebaseMessagingService"), "FCM service must remain");
 assert(actions.includes("com.google.firebase.MESSAGING_EVENT"), "Push delivery action must remain");
 assert(actions.includes("expo.modules.notifications.NOTIFICATION_EVENT"), "Notification handling must remain");
@@ -107,6 +111,8 @@ const classMappings = [...mapping.matchAll(/^(\S+) -> (\S+):$/gm)];
 assert(classMappings.length, "Empty R8 mapping");
 const renamedClasses = classMappings.filter(([, original, renamed]) => original !== renamed).length;
 assert(renamedClasses > 100, "Expected meaningful native code obfuscation");
+const renamedClassRatio = renamedClasses / classMappings.length;
+assert(renamedClassRatio >= 0.25, "Too many package-wide keep rules: less than 25% of mapped native classes renamed");
 const dexNames = names.filter(n => /\/dex\/classes\d*\.dex$/.test(n));
 assert(dexNames.length, "No native DEX code");
 let dexBytes = 0;
@@ -152,6 +158,7 @@ console.log(JSON.stringify({
   r8Mapping: mappingName,
   renamedClasses,
   totalMappedClasses: classMappings.length,
+  renamedClassPercent: Math.round(renamedClassRatio * 10000) / 100,
   dexBytes,
   startupClassDefinitions: Object.fromEntries(critical),
   limitation: "Play Console scores, device startup, gallery selection, push delivery and background audio still require runtime/store verification.",
