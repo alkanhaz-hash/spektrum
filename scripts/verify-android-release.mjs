@@ -111,7 +111,7 @@ const dexNames = names.filter(n => /\/dex\/classes\d*\.dex$/.test(n));
 assert(dexNames.length, "No native DEX code");
 let dexBytes = 0;
 const critical = new Map([
-  ["Lexpo/modules/kotlin/types/AnyTypeCache;", false],
+  ["Lexpo/modules/kotlin/types/AnyType;", false],
   ["Lexpo/modules/kotlin/AppContext;", false],
   ["Lexpo/modules/audio/AudioModule;", false],
   ["Lexpo/modules/notifications/NotificationsPackage;", false],

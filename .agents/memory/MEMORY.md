@@ -1,3 +1,4 @@
 - [Kalıcı oturum kapsamı](persistent-sessions.md) — kullanıcı normal kullanımda girişte kalmalı; güvenlik nedeniyle oturum kapatmalar korunur.
 - [Mevcut Play uygulamasına gönderim](existing-play-submit.md) — EAS submit, build profilinin ortam seçimlerini otomatik devralmaz.
 - [Android fotoğraf erişimi](android-photo-access.md) — Play üretim kontrolü geniş galeri izinlerini engelledi; tekil görsel seçimi sistem seçicisiyle kalmalı.
+- [Android yayın kısıtları](android-release-constraints.md) — bildirim/ses açılış bileşenlerini dar tut; optimizasyonda Expo/JNI açılış sözleşmelerini koru.
